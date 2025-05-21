@@ -84,10 +84,20 @@ bool DiskManager::is_dir(const std::string &path) {
 
 void DiskManager::create_dir(const std::string &path) {
     // Create a subdirectory
-    std::string cmd = "mkdir " + path;
-    if (system(cmd.c_str()) < 0) {  // 创建一个名为path的目录
+    // std::string cmd = "mkdir " + path;
+    // if (system(cmd.c_str()) < 0) {  // 创建一个名为path的目录
+    //     throw UnixError();
+    // }
+
+    if (mkdir(path.c_str(), 0755) != 0) {
         throw UnixError();
     }
+}
+
+// 文件删除回调函数
+static int remove_callback(const char *path, const struct stat *sb,
+                           int typeflag, struct FTW *ftwbuf) {
+    return remove(path);
 }
 
 void DiskManager::destroy_dir(const std::string &path) {
@@ -218,10 +228,16 @@ int DiskManager::get_file_size(const std::string &file_name) {
  * @param {int} fd 文件句柄
  */
 std::string DiskManager::get_file_name(int fd) {
-    if (!fd2path_.count(fd)) {
+    // if (!fd2path_.count(fd)) {
+    //     throw FileNotOpenError(fd);
+    // }
+    // return fd2path_[fd];
+
+    auto it = fd2path_.find(fd);
+    if (it == fd2path_.end()) {
         throw FileNotOpenError(fd);
     }
-    return fd2path_[fd];
+    return it->second;
 }
 
 /**
@@ -230,10 +246,16 @@ std::string DiskManager::get_file_name(int fd) {
  * @param {string} &file_name 文件名
  */
 int DiskManager::get_file_fd(const std::string &file_name) {
-    if (!path2fd_.count(file_name)) {
+    // if (!path2fd_.count(file_name)) {
+    //     return open_file(file_name);
+    // }
+    // return path2fd_[file_name];
+
+    auto it = path2fd_.find(file_name);
+    if (it == path2fd_.end()) {
         return open_file(file_name);
     }
-    return path2fd_[file_name];
+    return it->second;
 }
 
 /**
