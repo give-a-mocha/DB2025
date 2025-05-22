@@ -41,7 +41,8 @@ void RmScan::next() {
         rid_.slot_no = Bitmap::next_bit(
             true, page_handle.bitmap,
             file_handle_->file_hdr_.num_records_per_page, rid_.slot_no);
-
+        // fetch完别忘了unpin
+        file_handle_->buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         if (rid_.slot_no < file_handle_->file_hdr_.num_records_per_page) {
             // 在当前页面找到了非空slot
             return;

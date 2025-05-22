@@ -93,6 +93,7 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
 
     // 检查slot是否已被占用
     if (Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
     // 复制数据到指定slot
@@ -130,6 +131,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
 
     // 检查record是否存在
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
 
@@ -166,6 +168,7 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
 
     // 检查record是否存在
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
 
