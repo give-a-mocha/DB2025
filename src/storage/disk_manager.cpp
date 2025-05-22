@@ -14,12 +14,17 @@ See the Mulan PSL v2 for more details. */
 #include <string.h>    // for memset
 #include <sys/stat.h>  // for stat
 #include <unistd.h>    // for lseek
+#include <dirent.h>    // for DIR, opendir, readdir, closedir
+#include <errno.h>     // for errno
+#include <fcntl.h>     // for open flags
 
 #include "defs.h"
 
 DiskManager::DiskManager() {
-    memset(fd2pageno_, 0,
-           MAX_FD * (sizeof(std::atomic<page_id_t>) / sizeof(char)));
+    // 初始化fd2pageno_数组
+    for (int i = 0; i < MAX_FD; i++) {
+        fd2pageno_[i].store(0);
+    }
 }
 
 /**
@@ -29,17 +34,20 @@ DiskManager::DiskManager() {
  * @param {char} *offset 要写入磁盘的数据
  * @param {int} num_bytes 要写入磁盘的数据大小
  */
-void DiskManager::write_page(int fd, page_id_t page_no, const char *offset,
-                             int num_bytes) {
-    // 1.lseek()定位到文件头，通过(fd,page_no)可以定位指定页面及其在磁盘文件中的偏移量
-    // 2.调用write()函数
-    // 注意write返回值与num_bytes不等时 throw
-    // InternalError("DiskManager::write_page Error");
+void DiskManager::write_page(int fd, page_id_t page_no, const char *offset, int num_bytes) {
+    if (fd < 0) {
+        throw InternalError("Invalid file descriptor in write_page");
+    }
 
-    lseek(fd, page_no * PAGE_SIZE, SEEK_SET);
-    ssize_t bytes = write(fd, offset, num_bytes);
-    if (bytes != num_bytes) {
-        throw InternalError("DiskManager::write_page Error");
+    off_t write_offset = static_cast<off_t>(page_no) * PAGE_SIZE;
+
+    ssize_t bytes_written = pwrite(fd, offset, num_bytes, write_offset);
+    
+    if (bytes_written != num_bytes) {
+        if (errno == ENOSPC || errno == EDQUOT) {
+             throw InternalError("Failed to write page due to no space");
+        }
+        throw InternalError("Failed to write page");
     }
 }
 
@@ -50,17 +58,21 @@ void DiskManager::write_page(int fd, page_id_t page_no, const char *offset,
  * @param {char} *offset 读取的内容写入到offset中
  * @param {int} num_bytes 读取的数据量大小
  */
-void DiskManager::read_page(int fd, page_id_t page_no, char *offset,
-                            int num_bytes) {
-    // 1.lseek()定位到文件头，通过(fd,page_no)可以定位指定页面及其在磁盘文件中的偏移量
-    // 2.调用read()函数
-    // 注意read返回值与num_bytes不等时，throw
-    // InternalError("DiskManager::read_page Error");
+void DiskManager::read_page(int fd, page_id_t page_no, char *offset, int num_bytes) {
+    if (fd < 0) {
+        throw InternalError("Invalid file descriptor in read_page");
+    }
 
-    lseek(fd, page_no * PAGE_SIZE, SEEK_SET);
-    ssize_t bytes = read(fd, offset, num_bytes);
-    if (bytes != num_bytes) {
-        throw InternalError("DiskManager::read_page Error");
+    off_t offset_in_file = static_cast<off_t>(page_no) * PAGE_SIZE;
+    
+    // 使用pread避免竞争条件，无需使用lseek
+    ssize_t bytes_read = pread(fd, offset, num_bytes, offset_in_file);
+
+    if (bytes_read == 0) {
+        // 如果读取到文件末尾，返回一个全0的页面
+        memset(offset, 0, num_bytes);
+    } else if (bytes_read != num_bytes) {
+        throw InternalError("Failed to read page");
     }
 }
 
@@ -70,12 +82,19 @@ void DiskManager::read_page(int fd, page_id_t page_no, char *offset,
  * @param {int} fd 指定文件的文件句柄
  */
 page_id_t DiskManager::allocate_page(int fd) {
-    // 简单的自增分配策略，指定文件的页面编号加1
-    assert(fd >= 0 && fd < MAX_FD);
-    return fd2pageno_[fd]++;
+    if (fd < 0 || fd >= MAX_FD) {
+        throw InternalError("Invalid file descriptor in allocate_page");
+    }
+    // 文件已在创建时预分配，这里只增加逻辑页面计数
+    page_id_t page_no = fd2pageno_[fd].fetch_add(1, std::memory_order_relaxed);
+
+    return page_no;
 }
 
-void DiskManager::deallocate_page(__attribute__((unused)) page_id_t page_id) {}
+void DiskManager::deallocate_page(__attribute__((unused)) page_id_t page_id) {
+    // 由于文件系统的限制，我们不实际收缩文件
+    // 只在重新分配时覆盖这些页面
+}
 
 bool DiskManager::is_dir(const std::string &path) {
     struct stat st;
@@ -83,14 +102,22 @@ bool DiskManager::is_dir(const std::string &path) {
 }
 
 void DiskManager::create_dir(const std::string &path) {
-    // Create a subdirectory
-    // std::string cmd = "mkdir " + path;
-    // if (system(cmd.c_str()) < 0) {  // 创建一个名为path的目录
-    //     throw UnixError();
-    // }
-
-    if (mkdir(path.c_str(), 0755) != 0) {
-        throw UnixError();
+    // 递归创建父目录
+    size_t pos = 0;
+    while ((pos = path.find('/', pos + 1)) != std::string::npos) {
+        std::string parent = path.substr(0, pos);
+        if (!parent.empty() && !is_dir(parent)) {
+            if (mkdir(parent.c_str(), 0755) != 0 && errno != EEXIST) {
+                throw UnixError();
+            }
+        }
+    }
+    
+    // 创建目标目录
+    if (!path.empty() && !is_dir(path)) {
+        if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST) {
+            throw UnixError();
+        }
     }
 }
 
@@ -101,8 +128,43 @@ static int remove_callback(const char *path, const struct stat *sb,
 }
 
 void DiskManager::destroy_dir(const std::string &path) {
-    std::string cmd = "rm -r " + path;
-    if (system(cmd.c_str()) < 0) {
+    if (!is_dir(path)) {
+        throw UnixError();
+    }
+
+    // 获取目录下的所有文件和子目录
+    DIR* dir = opendir(path.c_str());
+    if (dir == nullptr) {
+        throw UnixError();
+    }
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+
+        std::string full_path = path + "/" + entry->d_name;
+        struct stat st;
+        if (lstat(full_path.c_str(), &st) == -1) {
+            closedir(dir);
+            throw UnixError();
+        }
+
+        if (S_ISDIR(st.st_mode)) {
+            destroy_dir(full_path);  // 递归删除子目录
+        } else {
+            if (unlink(full_path.c_str()) == -1) {
+                closedir(dir);
+                throw UnixError();
+            }
+        }
+    }
+    
+    closedir(dir);
+    
+    // 删除空目录
+    if (rmdir(path.c_str()) == -1) {
         throw UnixError();
     }
 }
@@ -124,24 +186,38 @@ bool DiskManager::is_file(const std::string &path) {
  * @param {string} &path
  */
 void DiskManager::create_file(const std::string &path) {
-    // 调用open()函数，使用O_CREAT模式
-    // 注意不能重复创建相同文件
-
-    // 检查文件是否已存在，如果存在则抛出错误，防止重复创建
+    // 检查文件是否已存在
     if (is_file(path)) {
         throw FileExistsError(path);
     }
-    // 创建并打开文件
-    // O_CREAT: 如果文件不存在则创建文件
-    // O_RDWR: 以读写模式打开
-    // S_IRUSR | S_IWUSR: 设置文件权限，只允许文件所有者读写
-    int fd = open(path.c_str(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-    // 检查文件创建是否成功，负值表示出错
+
+    // 检查并创建父目录
+    size_t last_slash = path.find_last_of('/');
+    if (last_slash != std::string::npos) {
+        std::string dir_path = path.substr(0, last_slash);
+        if (!dir_path.empty() && !is_dir(dir_path)) {
+            create_dir(dir_path);
+        }
+    }
+
+    // 创建文件
+    int fd = open(path.c_str(), O_CREAT | O_RDWR, 0644);
     if (fd < 0) {
         throw UnixError();
     }
-    // 关闭文件描述符
-    close(fd);
+
+    // 预分配文件大小
+    off_t preallocate_size = static_cast<off_t>(4) * PAGE_SIZE;
+    if (ftruncate(fd, preallocate_size) < 0) {
+        close(fd);
+        unlink(path.c_str()); // 创建失败，删除文件
+        throw UnixError();
+    }
+
+    if (close(fd) < 0) {
+        // 即使关闭失败，文件也可能已创建并截断
+        throw UnixError();
+    }
 }
 
 /**
@@ -175,22 +251,30 @@ void DiskManager::destroy_file(const std::string &path) {
  * @param {string} &path 文件所在路径
  */
 int DiskManager::open_file(const std::string &path) {
-    // 调用open()函数，使用O_RDWR模式
-    // 注意不能重复打开相同文件，并且需要更新文件打开列表
-
+    // 检查是否已经打开
     auto it = path2fd_.find(path);
-    if (it != path2fd_.end()) return it->second;
+    if (it != path2fd_.end()) {
+        return it->second;
+    }
 
-    // 文件未打开，调用系统的open函数以读写模式打开文件
-    // O_RDWR表示以读写方式打开文件
+    // 检查文件是否存在
+    if (!is_file(path)) {
+        throw FileNotFoundError(path);
+    }
+
+    // 打开文件
     int fd = open(path.c_str(), O_RDWR);
-    if (fd < 0) throw UnixError();
+    if (fd < 0) {
+        throw UnixError();
+    }
 
-    // 文件打开成功，更新文件打开列表
-    path2fd_.emplace(path, fd);
-    fd2path_.emplace(fd, path);
+    // 将文件描述符加入到映射中
+    path2fd_[path] = fd;
+    fd2path_[fd] = path;
+    
+    // 初始化页面计数为0
+    fd2pageno_[fd].store(0);
 
-    // 返回成功打开的文件描述符
     return fd;
 }
 
@@ -199,16 +283,18 @@ int DiskManager::open_file(const std::string &path) {
  * @param {int} fd 打开的文件的文件句柄
  */
 void DiskManager::close_file(int fd) {
-    // 调用close()函数
-    // 注意不能关闭未打开的文件，并且需要更新文件打开列表
-
     auto it = fd2path_.find(fd);
-    if (it == fd2path_.end()) throw FileNotOpenError(fd);
+    if (it == fd2path_.end()) {
+        throw FileNotOpenError(fd);
+    }
+
+    // 文件大小在创建时已固定，关闭时不需要再调整
     if (close(fd) < 0) {
         throw UnixError();
     }
     path2fd_.erase(it->second);
     fd2path_.erase(it);
+    fd2pageno_[fd].store(0, std::memory_order_relaxed); // 重置计数器
 }
 
 /**
@@ -293,9 +379,14 @@ void DiskManager::write_log(char *log_data, int size) {
         log_fd_ = open_file(LOG_FILE_NAME);
     }
 
-    // write from the file_end
-    lseek(log_fd_, 0, SEEK_END);
-    ssize_t bytes_write = write(log_fd_, log_data, size);
+    // 获取当前文件大小
+    struct stat st;
+    if (fstat(log_fd_, &st) < 0) {
+        throw UnixError();
+    }
+
+    // 从文件末尾写入，使用pwrite避免竞争
+    ssize_t bytes_write = pwrite(log_fd_, log_data, size, st.st_size);
     if (bytes_write != size) {
         throw UnixError();
     }
