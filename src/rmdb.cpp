@@ -228,9 +228,9 @@ void start_server() {
     while (!should_exit) {
         std::cout << "Waiting for new connection..." << std::endl;
         pthread_t thread_id;
-        struct sockaddr_in s_addr_client {};
+       
+ struct sockaddr_in s_addr_client {};
         int client_length = sizeof(s_addr_client);
-
         if (setjmp(jmpbuf)) {
             std::cout << "Break from Server Listen Loop\n";
             break;
