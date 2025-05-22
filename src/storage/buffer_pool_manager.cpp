@@ -21,9 +21,8 @@ bool BufferPoolManager::find_victim_page(frame_id_t* frame_id) {
     // 1.1 未满获得frame
     // 1.2 已满使用lru_replacer中的方法选择淘汰页面
     
-    std::scoped_lock lock{latch_};  // 加锁保护并发
-
     // 如果有空闲帧,直接使用
+    // Caller must hold the latch_ if free_list_ access needs protection.
     if (!free_list_.empty()) {
         *frame_id = free_list_.front();
         free_list_.pop_front();
@@ -99,6 +98,8 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     
     // 页面不在缓冲池中,寻找可用frame
     frame_id_t frame_id;
+    // find_victim_page now expects latch_ to be held by caller,
+    // and find_victim_page itself does not lock latch_ for BPM state.
     if (!find_victim_page(&frame_id)) {
         return nullptr;  // 没有可用frame
     }
@@ -106,9 +107,11 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     // 获取victim frame对应的页面
     Page* page = &pages_[frame_id];
     
-    // 如果是脏页需要写回磁盘并更新页表
+    // 如果是脏页需要写回磁盘
     if (page->is_dirty_) {
         disk_manager_->write_page(page->id_.fd, page->id_.page_no, page->data_, PAGE_SIZE);
+        // The old page's dirty status is now written.
+        // page->is_dirty_ will be set to false for the new page data later.
     }
     
     // 从页表中删除旧页面的映射
@@ -122,7 +125,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     // 更新页面元数据
     page->id_ = page_id;
     page->pin_count_ = 1;
-    page->is_dirty_ = false;
+    page->is_dirty_ = false; // New page content is not dirty yet
     
     // 更新页表
     page_table_[page_id] = frame_id;
