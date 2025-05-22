@@ -189,12 +189,12 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
  */
 RmPageHandle RmFileHandle::fetch_page_handle(int page_no) const {
     if (page_no >= file_hdr_.num_pages) {
-        throw PageNotExistError("Page not exist", page_no);
+        throw PageNotExistError(disk_manager_->get_file_name(fd_), page_no);
     }
     // 使用缓冲池获取指定页面
     Page* page = buffer_pool_manager_->fetch_page(PageId{fd_, page_no});
     if (page == nullptr) {
-        throw PageNotExistError("Failed to fetch page", page_no);
+        throw PageNotExistError(disk_manager_->get_file_name(fd_), page_no);
     }
     return RmPageHandle(&file_hdr_, page);
 }
