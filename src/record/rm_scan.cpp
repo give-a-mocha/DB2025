@@ -51,16 +51,13 @@ void RmScan::next() {
         rid_.page_no++;
         rid_.slot_no = RM_NO_PAGE;  // 重置slot_no为-1
     }
-    rid_.page_no = RM_NO_PAGE;  // 未找到空闲位置
+    rid_.page_no = RM_NO_PAGE;
 }
 
 /**
  * @brief ​ 判断是否到达文件末尾
  */
-bool RmScan::is_end() const {
-    // 如果page_no超出文件范围,说明已到达文件末尾
-    return rid_.page_no >= file_handle_->file_hdr_.num_pages;
-}
+bool RmScan::is_end() const { return rid_.page_no == RM_NO_PAGE; }
 
 /**
  * @brief RmScan内部存放的rid
