@@ -49,7 +49,7 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     // !2. 在page handle中找到空闲slot位置
     // !3. 将buf复制到空闲slot位置
     // !4. 更新page_handle.page_hdr中的数据结构
-    // 注意考虑插入一条记录后页面已满的情况，需要更新file_hdr_.first_free_page_no
+    // !注意考虑插入一条记录后页面已满的情况，需要更新file_hdr_.first_free_page_no
 
     if (context != nullptr) {
         context->lock_mgr_->lock_shared_on_table(context->txn_, fd_);
@@ -111,9 +111,9 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
  */
 void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     // Todo:
-    // 1. 获取指定记录所在的page handle
-    // 2. 更新page_handle.page_hdr中的数据结构
-    // 注意考虑删除一条记录后页面未满的情况，需要调用release_page_handle()
+    // !1. 获取指定记录所在的page handle
+    // !2. 更新page_handle.page_hdr中的数据结构
+    // !注意考虑删除一条记录后页面未满的情况，需要调用release_page_handle()
 
     if (context != nullptr) {
         context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
@@ -146,8 +146,8 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
  */
 void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
     // Todo:
-    // 1. 获取指定记录所在的page handle
-    // 2. 更新记录
+    // !1. 获取指定记录所在的page handle
+    // !2. 更新记录
 
     if (context != nullptr) {
         context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
