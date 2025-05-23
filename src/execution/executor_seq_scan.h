@@ -46,16 +46,114 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     void beginTuple() override {
-        
+        // Todo:
+        // !需要自己实现
+        scan_ = std::make_unique<RmScan>(fh_);
+        // 移动到第一个满足条件的记录
+        while (!scan_->is_end()) {
+            rid_ = scan_->rid();
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            scan_->next();
+        }
     }
 
     void nextTuple() override {
-        
+        // Todo:
+        // !需要自己实现
+        if(scan_ == nullptr){
+            throw InternalError("Scan not initialized");
+        }
+        scan_->next();
+        // 移动到下一个满足条件的记录
+        while (!scan_->is_end()) {
+            rid_ = scan_->rid();
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            scan_->next();
+        }
+    }
+
+    bool is_end() const override {
+        return scan_ == nullptr || scan_->is_end();
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        return nullptr;
+        return fh_->get_record(rid_, context_);
+    }
+
+    size_t tupleLen() const override {
+        return len_;
+    }
+
+    const std::vector<ColMeta> &cols() const override {
+        return cols_;
     }
 
     Rid &rid() override { return rid_; }
+
+private:
+    /**
+     * @brief 检查记录是否满足所有条件
+     */
+    bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds, const RmRecord *rec) {
+        // Todo:
+        // !需要自己实现
+        for (const auto &cond : conds) {
+            if (!eval_cond(rec_cols, cond, rec)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @brief 检查记录是否满足单个条件
+     */
+    bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
+        // Todo:
+        // !需要自己实现
+        auto lhs_col = get_col(rec_cols, cond.lhs_col);
+        char *lhs_data = rec->data + lhs_col->offset;
+        char *rhs_data;
+        ColType rhs_type;
+
+        if (cond.is_rhs_val) {
+            rhs_data = cond.rhs_val.raw->data;
+            rhs_type = cond.rhs_val.type;
+        } else {
+            auto rhs_col = get_col(rec_cols, cond.rhs_col);
+            rhs_data = rec->data + rhs_col->offset;
+            rhs_type = rhs_col->type;
+        }
+
+        // 类型应该一致
+        if(lhs_col->type != rhs_type){
+            throw IncompatibleTypeError(coltype2str(lhs_col->type), coltype2str(rhs_type));
+        }
+
+        int cmp;
+        if (lhs_col->type == TYPE_INT) {
+            cmp = *(int*)lhs_data - *(int*)rhs_data;
+        } else if (lhs_col->type == TYPE_FLOAT) {
+            float diff = *(float*)lhs_data - *(float*)rhs_data;
+            cmp = (diff > 0) ? 1 : (diff < 0) ? -1 : 0;
+        } else if (lhs_col->type == TYPE_STRING) {
+            cmp = memcmp(lhs_data, rhs_data, lhs_col->len);
+        }
+
+        switch (cond.op) {
+            case OP_EQ: return cmp == 0;
+            case OP_NE: return cmp != 0;
+            case OP_LT: return cmp < 0;
+            case OP_GT: return cmp > 0;
+            case OP_LE: return cmp <= 0;
+            case OP_GE: return cmp >= 0;
+            default: return false;
+        }
+    }
 };

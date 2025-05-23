@@ -1,7 +1,7 @@
 /* Copyright (c) 2023 Renmin University of China
 RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
+You can use this software according to the terms and conditions of the Mulan PSL
+v2. You may obtain a copy of Mulan PSL v2 at:
         http://license.coscl.org.cn/MulanPSL2
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
@@ -17,13 +17,14 @@ See the Mulan PSL v2 for more details. */
 
 class ProjectionExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;        // 投影节点的儿子节点
-    std::vector<ColMeta> cols_;                     // 需要投影的字段
-    size_t len_;                                    // 字段总长度
-    std::vector<size_t> sel_idxs_;                  
+    std::unique_ptr<AbstractExecutor> prev_;  // 投影节点的儿子节点
+    std::vector<ColMeta> cols_;               // 需要投影的字段
+    size_t len_;                              // 字段总长度
+    std::vector<size_t> sel_idxs_;
 
    public:
-    ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol> &sel_cols) {
+    ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev,
+                       const std::vector<TabCol> &sel_cols) {
         prev_ = std::move(prev);
 
         size_t curr_offset = 0;
@@ -39,13 +40,37 @@ class ProjectionExecutor : public AbstractExecutor {
         len_ = curr_offset;
     }
 
-    void beginTuple() override {}
+    void beginTuple() override { prev_->beginTuple(); }
 
-    void nextTuple() override {}
+    void nextTuple() override { prev_->nextTuple(); }
+
+    bool is_end() const override { return prev_->is_end(); }
 
     std::unique_ptr<RmRecord> Next() override {
-        return nullptr;
+        // Todo:
+        // !需要自己实现
+        auto prev_rec = prev_->Next();
+        if (!prev_rec) return nullptr;
+
+        // 创建新的记录，只包含选中的列
+        auto proj_rec = std::make_unique<RmRecord>(len_);
+        auto &prev_cols = prev_->cols();
+
+        for (size_t i = 0; i < sel_idxs_.size(); ++i) {
+            size_t prev_idx = sel_idxs_[i];
+            auto &prev_col = prev_cols[prev_idx];
+            auto &proj_col = cols_[i];
+
+            memcpy(proj_rec->data + proj_col.offset,
+                   prev_rec->data + prev_col.offset, proj_col.len);
+        }
+
+        return proj_rec;
     }
+
+    size_t tupleLen() const override { return len_; }
+
+    const std::vector<ColMeta> &cols() const override { return cols_; }
 
     Rid &rid() override { return _abstract_rid; }
 };
