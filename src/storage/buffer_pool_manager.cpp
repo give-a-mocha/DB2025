@@ -95,8 +95,12 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
         // 页面在缓冲池中,增加pin_count并返回
         frame_id_t frame_id = iter->second;
         Page* page = &pages_[frame_id];
+        if(page->pin_count_ == 0){
+            // 如果pin_count为0说明是新取出的页
+            // 需要在replacer中固定该页
+            replacer_->pin(frame_id);
+        }
         page->pin_count_++;
-        replacer_->pin(frame_id);
         return page;
     }
 
@@ -112,8 +116,8 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     disk_manager_->read_page(page_id.fd, page_id.page_no, page->data_,
                              PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
-    replacer_->pin(frame_id);
-
+    // 本来就是新页不在缓存中
+    // replacer_->pin(frame_id);
     return page;
 }
 
@@ -229,7 +233,8 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
     page_id->page_no = disk_manager_->allocate_page(page_id->fd);
     update_page(page, *page_id, frame_id);
     page->pin_count_ = 1;  // 固定该页
-    replacer_->pin(frame_id);
+    // 本来就是新页不在缓存中
+    // replacer_->pin(frame_id);
 
     return page;
 }
