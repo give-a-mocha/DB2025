@@ -66,7 +66,9 @@ class SeqScanExecutor : public AbstractExecutor {
         if(scan_ == nullptr){
             throw InternalError("Scan not initialized");
         }
-        scan_->next();
+        if (!scan_->is_end()) {
+            scan_->next();
+        }
         // 移动到下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
@@ -83,6 +85,9 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
+        if (is_end()){
+            return nullptr;
+        }
         return fh_->get_record(rid_, context_);
     }
 
@@ -121,14 +126,17 @@ private:
         char *lhs_data = rec->data + lhs_col->offset;
         char *rhs_data;
         ColType rhs_type;
+        int rhs_len = 0;
 
         if (cond.is_rhs_val) {
             rhs_data = cond.rhs_val.raw->data;
             rhs_type = cond.rhs_val.type;
+            rhs_len = cond.rhs_val.raw->size;
         } else {
             auto rhs_col = get_col(rec_cols, cond.rhs_col);
             rhs_data = rec->data + rhs_col->offset;
             rhs_type = rhs_col->type;
+            rhs_len = rhs_col->len;
         }
 
         // 类型应该一致
@@ -143,7 +151,13 @@ private:
             float diff = *(float*)lhs_data - *(float*)rhs_data;
             cmp = (diff > 0) ? 1 : (diff < 0) ? -1 : 0;
         } else if (lhs_col->type == TYPE_STRING) {
-            cmp = memcmp(lhs_data, rhs_data, lhs_col->len);
+            // 使用两个字符串长度的最小值进行比较，避免越界访问
+            int cmp_len = std::min(lhs_col->len, rhs_len);
+            cmp = memcmp(lhs_data, rhs_data, cmp_len);
+            // 如果前缀相同但长度不同，较短的字符串小于较长的字符串
+            if (cmp == 0 && lhs_col->len != rhs_len) {
+                cmp = lhs_col->len - rhs_len;
+            }
         }
 
         switch (cond.op) {
@@ -153,7 +167,7 @@ private:
             case OP_GT: return cmp > 0;
             case OP_LE: return cmp <= 0;
             case OP_GE: return cmp >= 0;
-            default: return false;
+            default: throw InternalError("eval_cond::Unexpected op type");
         }
     }
 };

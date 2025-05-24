@@ -49,7 +49,12 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         left_->beginTuple();
         if (!left_->is_end()) {
             right_->beginTuple();
-            isend = false;
+            // 检查右表是否也为空，如果为空则直接设置结束状态
+            if (right_->is_end()) {
+                isend = true;
+            } else {
+                isend = false;
+            }
         } else {
             isend = true;
         }
@@ -133,6 +138,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
         char *lhs_data, *rhs_data;
         ColType lhs_type, rhs_type;
+        int lhs_len = 0, rhs_len = 0;
 
         // 获取左操作数
         auto lhs_col_it = std::find_if(
@@ -144,6 +150,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         if (lhs_col_it != left_cols.end()) {
             lhs_data = left_rec->data + lhs_col_it->offset;
             lhs_type = lhs_col_it->type;
+            lhs_len = lhs_col_it->len;
         } else {
             auto lhs_col_it_right = std::find_if(
                 right_cols.begin(), right_cols.end(), [&](const ColMeta &col) {
@@ -154,6 +161,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                 lhs_data = right_rec->data +
                            (lhs_col_it_right->offset - left_->tupleLen());
                 lhs_type = lhs_col_it_right->type;
+                lhs_len = lhs_col_it_right->len;
             } else {
                 return false;
             }
@@ -163,6 +171,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         if (cond.is_rhs_val) {
             rhs_data = cond.rhs_val.raw->data;
             rhs_type = cond.rhs_val.type;
+            rhs_len = cond.rhs_val.raw->size;
         } else {
             auto rhs_col_it = std::find_if(
                 left_cols.begin(), left_cols.end(), [&](const ColMeta &col) {
@@ -173,6 +182,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             if (rhs_col_it != left_cols.end()) {
                 rhs_data = left_rec->data + rhs_col_it->offset;
                 rhs_type = rhs_col_it->type;
+                rhs_len = rhs_col_it->len;
             } else {
                 auto rhs_col_it_right = std::find_if(
                     right_cols.begin(), right_cols.end(),
@@ -184,6 +194,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                     rhs_data = right_rec->data +
                                (rhs_col_it_right->offset - left_->tupleLen());
                     rhs_type = rhs_col_it_right->type;
+                    rhs_len = rhs_col_it_right->len;
                 } else {
                     return false;
                 }
@@ -203,9 +214,13 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             float diff = *(float *)lhs_data - *(float *)rhs_data;
             cmp = (diff > 0) ? 1 : (diff < 0) ? -1 : 0;
         } else if (lhs_type == TYPE_STRING) {
-            cmp = memcmp(lhs_data, rhs_data,
-                         std::min(lhs_col_it->len,
-                                  static_cast<int>(cond.rhs_val.raw->size)));
+            // 使用两个字符串长度的最小值进行比较，避免越界访问
+            int cmp_len = std::min(lhs_len, rhs_len);
+            cmp = memcmp(lhs_data, rhs_data, cmp_len);
+            // 如果前缀相同但长度不同，较短的字符串小于较长的字符串
+            if (cmp == 0 && lhs_len != rhs_len) {
+                cmp = lhs_len - rhs_len;
+            }
         }
 
         switch (cond.op) {
@@ -222,7 +237,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             case OP_GE:
                 return cmp >= 0;
             default:
-                return false;
+                throw InternalError("eval_join_cond::Unexpected op type");
         }
     }
 };
