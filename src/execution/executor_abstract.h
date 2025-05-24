@@ -14,6 +14,8 @@ See the Mulan PSL v2 for more details. */
 #include "execution_defs.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include <string>
+#include <cstring>
 
 class AbstractExecutor {
    public:
@@ -109,12 +111,21 @@ class AbstractExecutor {
             float diff = *(float *)lhs_data - *(float *)rhs_data;
             cmp = (diff > 0) ? 1 : (diff < 0) ? -1 : 0;
         } else if (lhs_col->type == TYPE_STRING) {
-            // 使用两个字符串长度的最小值进行比较，避免越界访问
-            int cmp_len = std::min(lhs_col->len, rhs_len);
-            cmp = memcmp(lhs_data, rhs_data, cmp_len);
-            // 如果前缀相同但长度不同，较短的字符串小于较长的字符串
-            if (cmp == 0 && lhs_col->len != rhs_len) {
-                cmp = lhs_col->len - rhs_len;
+            // 将字符数据转换为字符串进行比较
+            std::string lhs_str(lhs_data, lhs_col->len);
+            std::string rhs_str(rhs_data, rhs_len);
+            
+            // 去除尾部的空字符
+            lhs_str.resize(strlen(lhs_str.c_str()));
+            rhs_str.resize(strlen(rhs_str.c_str()));
+            
+            // 使用字符串比较
+            if (lhs_str < rhs_str) {
+                cmp = -1;
+            } else if (lhs_str > rhs_str) {
+                cmp = 1;
+            } else {
+                cmp = 0;
             }
         }
 
