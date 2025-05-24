@@ -16,7 +16,48 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
-class SeqScanExecutor : public AbstractExecutor {
+/**
+     * @brief 初始化顺序扫描，定位到第一个满足条件的记录。
+     *
+     * 创建表记录的顺序扫描迭代器，并跳过不满足过滤条件的记录，直到找到第一个符合条件的记录或扫描结束。
+     */
+     
+    /**
+     * @brief 移动到下一个满足条件的记录。
+     *
+     * 将扫描器前进到下一个符合所有过滤条件的记录。如果扫描尚未初始化，则抛出异常。
+     */
+     
+    /**
+     * @brief 判断扫描是否结束。
+     *
+     * @return 若扫描器未初始化或已到达末尾，返回 true；否则返回 false。
+     */
+     
+    /**
+     * @brief 获取当前记录。
+     *
+     * @return 指向当前记录的唯一指针。
+     */
+     
+    /**
+     * @brief 获取每条记录的长度。
+     *
+     * @return 记录长度（字节数）。
+     */
+     
+    /**
+     * @brief 获取表的字段元数据。
+     *
+     * @return 字段元数据的常量引用。
+     */
+     
+    /**
+     * @brief 获取当前记录的标识符。
+     *
+     * @return 当前记录的标识符引用。
+     */
+    class SeqScanExecutor : public AbstractExecutor {
    private:
     std::string tab_name_;              // 表的名称
     std::vector<Condition> conds_;      // scan的条件
@@ -112,7 +153,16 @@ private:
     }
 
     /**
-     * @brief 检查记录是否满足单个条件
+     * @brief 判断指定记录是否满足给定的单个条件。
+     *
+     * 根据条件描述，比较记录中指定列与常量值或另一列的值，支持整数、浮点数和字符串类型。若类型不一致则抛出类型不兼容异常。根据条件操作符返回比较结果。
+     *
+     * @param rec_cols 记录的列元数据集合。
+     * @param cond 需要判断的条件。
+     * @param rec 待判断的记录指针。
+     * @return 若记录满足条件返回 true，否则返回 false。
+     *
+     * @throws IncompatibleTypeError 当左右操作数类型不一致时抛出。
      */
     bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
         // Todo:

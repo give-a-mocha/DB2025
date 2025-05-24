@@ -15,7 +15,18 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
-class UpdateExecutor : public AbstractExecutor {
+/**
+             * @brief 构造一个用于执行表更新操作的执行器。
+             *
+             * 初始化 UpdateExecutor 实例，设置目标表名、更新子句、过滤条件、待更新记录的 RID 列表以及执行上下文。会从系统管理器中获取表元数据和文件句柄，为后续的更新操作做准备。
+             *
+             * @param tab_name 目标表名。
+             * @param set_clauses 指定需要更新的列及其新值。
+             * @param conds 用于筛选待更新记录的条件。
+             * @param rids 需要被更新的记录的 RID 列表。
+             * @param context 执行上下文。
+             */
+            class UpdateExecutor : public AbstractExecutor {
    private:
     TabMeta tab_;
     std::vector<Condition> conds_;

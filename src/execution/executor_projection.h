@@ -15,6 +15,15 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+/**
+ * @brief 实现查询执行管道中的投影操作，仅输出指定的列。
+ *
+ * 构造函数接收一个子执行器和需要投影的列集合，初始化投影列的元数据和偏移。各方法用于控制和获取投影后的元组：`beginTuple()` 和 `nextTuple()` 分别初始化和推进子执行器的元组迭代，`is_end()` 判断是否遍历结束，`Next()` 返回仅包含选中列的新元组（无可用元组时返回 `nullptr`），`tupleLen()` 返回投影后元组的总字节长度，`cols()` 返回投影列的元数据，`rid()` 返回内部记录标识符。
+ *
+ * @param prev 子执行器，作为投影操作的数据来源。
+ * @param sel_cols 需要投影的列集合。
+ * @return `Next()` 返回包含投影列的新元组指针，无可用元组时返回 `nullptr`。
+ */
 class ProjectionExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  // 投影节点的儿子节点

@@ -30,8 +30,11 @@ bool SmManager::is_dir(const std::string& db_name) {
 }
 
 /**
- * @description: 创建数据库，所有的数据库相关文件都放在数据库同名文件夹下
- * @param {string&} db_name 数据库名称
+ * @brief 创建一个新的数据库目录并初始化元数据和日志文件。
+ *
+ * 如果指定名称的数据库目录已存在，则抛出 DatabaseExistsError。成功时会在新目录下生成数据库元数据文件和日志文件，最后返回上级目录。系统调用失败时抛出 UnixError。
+ *
+ * @param db_name 数据库名称。
  */
 void SmManager::create_db(const std::string& db_name) {
     if (is_dir(db_name)) {
@@ -67,8 +70,11 @@ void SmManager::create_db(const std::string& db_name) {
 }
 
 /**
- * @description: 删除数据库，同时需要清空相关文件以及数据库同名文件夹
- * @param {string&} db_name 数据库名称，与文件夹同名
+ * @brief 删除指定数据库及其所有相关文件和目录。
+ *
+ * 如果数据库目录不存在，则抛出 DatabaseNotFoundError。删除过程中如遇系统调用失败，则抛出 UnixError。
+ *
+ * @param db_name 数据库名称（对应文件夹名）。
  */
 void SmManager::drop_db(const std::string& db_name) {
     if (!is_dir(db_name)) {
@@ -81,9 +87,14 @@ void SmManager::drop_db(const std::string& db_name) {
 }
 
 /**
- * @description:
- * 打开数据库，找到数据库对应的文件夹，并加载数据库元数据和相关文件
- * @param {string&} db_name 数据库名称，与文件夹同名
+ * @brief 打开指定数据库，加载其元数据并初始化所有表和索引的文件句柄。
+ *
+ * @param db_name 数据库名称，应与数据库文件夹同名。
+ *
+ * @throws DatabaseNotFoundError 如果数据库目录不存在。
+ * @throws UnixError 如果切换目录失败。
+ *
+ * 此方法会进入数据库目录，读取数据库元数据文件，并为所有表和索引（索引功能为占位）打开文件句柄，准备后续操作。
  */
 void SmManager::open_db(const std::string& db_name) {
     if (!is_dir(db_name)) {
@@ -122,7 +133,10 @@ void SmManager::flush_meta() {
 }
 
 /**
- * @description: 关闭数据库并把数据落盘
+ * @brief 关闭当前数据库并将元数据写入磁盘。
+ *
+ * 刷新数据库元数据，关闭所有表和索引的文件句柄，清理内部状态，并切换回上级目录。
+ * 若切换目录失败则抛出 UnixError 异常。
  */
 void SmManager::close_db() {
     // 刷新元数据到磁盘
@@ -148,9 +162,9 @@ void SmManager::close_db() {
 }
 
 /**
- * @description:
- * 显示所有的表,通过测试需要将其结果写入到output.txt,详情看题目文档
- * @param {Context*} context
+ * @brief 显示当前数据库中的所有表名，并将结果追加写入 output.txt 文件。
+ *
+ * 结果以表格形式输出到控制台，并同步写入 output.txt，便于测试和结果验证。
  */
 void SmManager::show_tables(Context* context) {
     std::fstream outfile;
@@ -170,9 +184,9 @@ void SmManager::show_tables(Context* context) {
 }
 
 /**
- * @description: 显示表的元数据
- * @param {string&} tab_name 表名称
- * @param {Context*} context
+ * @brief 显示指定数据表的字段元数据信息。
+ *
+ * 展示表的所有字段名称、类型及是否存在索引，并以表格形式输出到指定上下文。
  */
 void SmManager::desc_table(const std::string& tab_name, Context* context) {
     TabMeta& tab = db_.get_table(tab_name);
@@ -194,10 +208,12 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
 }
 
 /**
- * @description: 创建表
- * @param {string&} tab_name 表的名称
- * @param {vector<ColDef>&} col_defs 表的字段
- * @param {Context*} context
+ * @brief 创建一个新表，并在数据库中注册其元数据。
+ *
+ * 如果指定表名已存在，则抛出 TableExistsError。根据字段定义生成表元数据，创建对应的记录文件，并将表信息写入数据库元数据。
+ *
+ * @param tab_name 新建表的名称。
+ * @param col_defs 表字段定义列表。
  */
 void SmManager::create_table(const std::string& tab_name,
                              const std::vector<ColDef>& col_defs,
@@ -231,9 +247,12 @@ void SmManager::create_table(const std::string& tab_name,
 }
 
 /**
- * @description: 删除表
- * @param {string&} tab_name 表的名称
- * @param {Context*} context
+ * @brief 删除指定的表及其所有相关索引和元数据。
+ *
+ * 如果表存在，先删除其所有索引，再关闭并删除表文件，最后从数据库元数据中移除该表并刷新元数据到磁盘。若 context 不为空，将在删除前对表加排他锁。若表不存在则抛出 TableNotFoundError 异常。
+ *
+ * @param tab_name 要删除的表名。
+ * @param context 可选的上下文对象，用于加锁等操作。
  */
 void SmManager::drop_table(const std::string& tab_name, Context* context) {
     // 检查表是否存在
@@ -270,30 +289,36 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
 }
 
 /**
- * @description: 创建索引
- * @param {string&} tab_name 表的名称
- * @param {vector<string>&} col_names 索引包含的字段名称
- * @param {Context*} context
- */
+                              * @brief 为指定表创建索引（占位方法，当前未实现）。
+                              *
+                              * @param tab_name 目标表名。
+                              * @param col_names 组成索引的字段名列表。
+                              * @param context 操作上下文。
+                              */
 void SmManager::create_index(const std::string& tab_name,
                              const std::vector<std::string>& col_names,
                              Context* context) {}
 
 /**
- * @description: 删除索引
- * @param {string&} tab_name 表名称
- * @param {vector<string>&} col_names 索引包含的字段名称
- * @param {Context*} context
- */
+                            * @brief 删除指定表上由字段名列表定义的索引（占位实现）。
+                            *
+                            * @param tab_name 目标表名。
+                            * @param col_names 索引涉及的字段名列表。
+                            * @param context 操作上下文。
+                            *
+                            * @note 当前方法为占位符，未实现实际索引删除逻辑。
+                            */
 void SmManager::drop_index(const std::string& tab_name,
                            const std::vector<std::string>& col_names,
                            Context* context) {}
 
 /**
- * @description: 删除索引
- * @param {string&} tab_name 表名称
- * @param {vector<ColMeta>&} 索引包含的字段元数据
- * @param {Context*} context
+ * @brief 删除指定表上由给定字段组成的索引（占位实现）。
+ *
+ * 当前方法为占位符，尚未实现实际的索引删除逻辑。
+ *
+ * @param tab_name 目标表名。
+ * @param cols 组成索引的字段元数据列表。
  */
 void SmManager::drop_index(const std::string& tab_name,
                            const std::vector<ColMeta>& cols, Context* context) {

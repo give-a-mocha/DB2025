@@ -15,7 +15,20 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
-class NestedLoopJoinExecutor : public AbstractExecutor {
+/**
+     * @brief 实现嵌套循环连接操作符，对左右子执行器的元组进行连接并返回满足条件的结果。
+     *
+     * 构造函数初始化左右子执行器、连接条件，并合并字段元数据。`beginTuple()`和`nextTuple()`分别用于初始化和推进连接过程。`Next()`方法返回下一个满足连接条件的合并元组，直到所有组合遍历完毕。`tupleLen()`和`cols()`分别返回连接后元组的长度和字段信息。`eval_join_conds()`和`eval_join_cond()`用于判断当前元组对是否满足所有连接条件，支持整数、浮点数和字符串类型的比较，类型不兼容时抛出异常。
+     *
+     * @param left 左子执行器，提供左表的元组。
+     * @param right 右子执行器，提供右表的元组。
+     * @param conds 连接条件列表。
+     *
+     * @return Next() 返回下一个满足连接条件的合并元组指针，若无更多结果则返回 nullptr。
+     *
+     * @throws IncompatibleTypeError 当连接条件两侧类型不一致时抛出。
+     */
+    class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;   // 左儿子节点（需要join的表）
     std::unique_ptr<AbstractExecutor> right_;  // 右儿子节点（需要join的表）
