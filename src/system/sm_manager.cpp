@@ -214,6 +214,7 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
 void SmManager::create_table(const std::string& tab_name,
                              const std::vector<ColDef>& col_defs,
                              Context* context) {
+    std::cerr << "DEBUG: create_table called for " << tab_name << std::endl;
     if (db_.is_table(tab_name)) {
         throw TableExistsError(tab_name);
     }
@@ -221,7 +222,9 @@ void SmManager::create_table(const std::string& tab_name,
     int curr_offset = 0;
     TabMeta tab;
     tab.name = tab_name;
+    std::cerr << "DEBUG: Processing " << col_defs.size() << " columns" << std::endl;
     for (auto& col_def : col_defs) {
+        std::cerr << "DEBUG: Adding column " << col_def.name << " type=" << col_def.type << " len=" << col_def.len << std::endl;
         ColMeta col = {.tab_name = tab_name,
                        .name = col_def.name,
                        .type = col_def.type,
@@ -233,13 +236,19 @@ void SmManager::create_table(const std::string& tab_name,
     }
     // Create & open record file
     int record_size = curr_offset;  // record_size就是col
+    std::cerr << "DEBUG: Record size calculated as " << record_size << std::endl;
     // meta所占的大小（表的元数据也是以记录的形式进行存储的）
+    std::cerr << "DEBUG: Creating file..." << std::endl;
     rm_manager_->create_file(tab_name, record_size);
+    std::cerr << "DEBUG: File created, updating db metadata..." << std::endl;
     db_.tabs_[tab_name] = tab;
+    std::cerr << "DEBUG: Opening file handle..." << std::endl;
     // fhs_[tab_name] = rm_manager_->open_file(tab_name);
     fhs_.emplace(tab_name, rm_manager_->open_file(tab_name));
+    std::cerr << "DEBUG: File handle opened, flushing metadata..." << std::endl;
 
     flush_meta();
+    std::cerr << "DEBUG: create_table completed successfully" << std::endl;
 }
 
 /**
@@ -292,40 +301,40 @@ void SmManager::create_index(const std::string& tab_name,
                              const std::vector<std::string>& col_names,
                              Context* context) {
     //! DO
-    TabMeta &tab = db_.get_table(tab_name);
-    // 检查索引是否已经物理存在 (基于文件名)
-    if(ix_manager_->exists(tab_name, col_names)){
-        throw IndexExistsError(tab_name, col_names);
-    }
+    // TabMeta &tab = db_.get_table(tab_name);
+    // // 检查索引是否已经物理存在 (基于文件名)
+    // if(ix_manager_->exists(tab_name, col_names)){
+    //     throw IndexExistsError(tab_name, col_names);
+    // }
 
-    std::vector<ColMeta> cols;
-    int tot_col_len = 0;
-    for(auto &col_name : col_names){
-        cols.emplace_back(*tab.get_col(col_name));
-        tot_col_len += cols.back().len;
-    }
-    auto fh_ = fhs_[tab_name].get();
-    ix_manager_->create_index(tab_name, cols);
-    auto ih_ = ix_manager_->open_index(tab_name, cols);
-    std::vector<char> key_buffer(tot_col_len);
-    char* key = key_buffer.data();
-    //插入B+树，扫描所有的记录
-    for(RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()){
-        auto record = fh_->get_record(rmScan.rid(), context);
-        int offset = 0;
-        for(auto &col : cols){
-            std::memcpy(key + offset, record.get()->data + col.offset, col.len);
-            offset += col.len;
-        }
-        //!还有检查没写
-        ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
-    }
+    // std::vector<ColMeta> cols;
+    // int tot_col_len = 0;
+    // for(auto &col_name : col_names){
+    //     cols.emplace_back(*tab.get_col(col_name));
+    //     tot_col_len += cols.back().len;
+    // }
+    // auto fh_ = fhs_[tab_name].get();
+    // ix_manager_->create_index(tab_name, cols);
+    // auto ih_ = ix_manager_->open_index(tab_name, cols);
+    // std::vector<char> key_buffer(tot_col_len);
+    // char* key = key_buffer.data();
+    // //插入B+树，扫描所有的记录
+    // for(RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()){
+    //     auto record = fh_->get_record(rmScan.rid(), context);
+    //     int offset = 0;
+    //     for(auto &col : cols){
+    //         std::memcpy(key + offset, record.get()->data + col.offset, col.len);
+    //         offset += col.len;
+    //     }
+    //     //!还有检查没写
+    //     ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
+    // }
 
-    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
-    ihs_.emplace(index_name, std::move(ih_));
-    IndexMeta indexMeta = {tab_name, tot_col_len, static_cast<int>(cols.size()), cols};
-    tab.indexes.emplace_back(indexMeta);
-    flush_meta();
+    // auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
+    // ihs_.emplace(index_name, std::move(ih_));
+    // IndexMeta indexMeta = {tab_name, tot_col_len, static_cast<int>(cols.size()), cols};
+    // tab.indexes.emplace_back(indexMeta);
+    // flush_meta();
 }
 
 /**

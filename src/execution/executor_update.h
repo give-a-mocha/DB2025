@@ -40,7 +40,7 @@ class UpdateExecutor : public AbstractExecutor {
         context_ = context;
     }
 
-    void delete_index(RmRecord* rec, Rid rid_) {
+    void delete_index(RmRecord *rec, Rid rid_) {
         // 从索引中删除
         for (auto &index : tab_.indexes) {
             auto ih = sm_manager_->ihs_
@@ -59,7 +59,7 @@ class UpdateExecutor : public AbstractExecutor {
         }
     }
 
-    void insert_index(RmRecord* rec, Rid rid_) {
+    void insert_index(RmRecord *rec, Rid rid_) {
         // 插入索引
         for (auto &index : tab_.indexes) {
             auto ih = sm_manager_->ihs_
@@ -79,33 +79,36 @@ class UpdateExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        // Todo:
-        // !需要自己实现
-        
-        // 预先为所有 set_clause 初始化 raw 数据，避免在循环中重复初始化导致内存泄漏
-        for (auto &set_clause : set_clauses_) {
-            auto col = tab_.get_col(set_clause.lhs.col_name);
-            if (col->type != set_clause.rhs.type) {
-                throw IncompatibleTypeError(
-                    coltype2str(col->type),
-                    coltype2str(set_clause.rhs.type));
-            }
-            set_clause.rhs.init_raw(col->len);
-        }
-        
         for (auto &rid : rids_) {
             // 获取旧记录
             auto old_rec = fh_->get_record(rid, context_);
-            auto new_rec = std::make_unique<RmRecord>(*old_rec);
+            auto new_rec = fh_->get_record(rid, context_);
 
             // 更新索引：先删除旧的索引项
             delete_index(old_rec.get(), rid);
 
-            // 应用更新
-            for (auto &set_clause : set_clauses_) {
+            for (const auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
-                memcpy(new_rec->data + col->offset, set_clause.rhs.raw->data,
-                       col->len);
+                // 一定要拷贝
+                auto value = set_clause.rhs;
+                value.raw = nullptr;
+                if (col->type != set_clause.rhs.type) {
+                    // 类型不匹配，值类型尝试转换为列类型
+                    if (col->type == TYPE_INT && value.type == TYPE_FLOAT) {
+                        value.set_int(static_cast<int>(value.float_val));
+                    } else if (col->type == TYPE_FLOAT &&
+                               value.type == TYPE_INT) {
+                        value.set_float(static_cast<float>(value.int_val));
+                    } else {
+                        throw IncompatibleTypeError(coltype2str(col->type),
+                                                    coltype2str(value.type));
+                    }
+                }
+
+                // 设置新记录的对应列
+                value.init_raw(col->len);
+
+                memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
             // 插入新的索引项

@@ -25,21 +25,20 @@ See the Mulan PSL v2 for more details. */
 class SortExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
-    std::vector<ColMeta> cols_;  // 支持多个键排序的数据结构
+    ColMeta col_;  // 单键排序的数据结构
     size_t tuple_num;
-    std::vector<bool> is_desc_;
+    bool is_desc_;
     std::vector<size_t> used_tuple;
     std::unique_ptr<RmRecord> current_tuple;
 
    public:
     SortExecutor(std::unique_ptr<AbstractExecutor> prev,
-                 const std::vector<TabCol>& sel_cols,
-                 std::vector<bool> is_desc) {
+                 const TabCol& sel_col,
+                 bool is_desc) {
         prev_ = std::move(prev);
-        for (const auto& sel_col : sel_cols) {
-            cols_.push_back(*prev_->get_col(prev_->cols(), sel_col));
-        }
-        is_desc_ = std::move(is_desc);
+        auto pos = get_col(prev_->cols(), sel_col);
+        col_ = *pos;
+        is_desc_ = is_desc;
         tuple_num = 0;
         used_tuple.clear();
         current_tuple = nullptr;
@@ -93,49 +92,35 @@ class SortExecutor : public AbstractExecutor {
         if (b == nullptr) {
             return true;
         }
-        int cnt = 0;
-        for (auto& col : cols_) {
-            char* rec_buf_a = a->data + col.offset;
-            char* rec_buf_b = b->data + col.offset;
-            if (col.type == TYPE_INT) {
-                int value_a = *(int*)rec_buf_a;
-                int value_b = *(int*)rec_buf_b;
-                if (value_a == value_b) {
-                    cnt++;
-                    continue;
-                }
-                if (is_desc_[cnt]) return value_a > value_b;
-                else return value_a < value_b;
-            } else if (col.type == TYPE_FLOAT) {
-                double value_a = *(double*)rec_buf_a;
-                double value_b = *(double*)rec_buf_b;
-                if (value_a == value_b) {
-                    cnt++;
-                    continue;
-                }
-                if (is_desc_[cnt]) return value_a > value_b;
-                else return value_a < value_b;
-            } else if (col.type == TYPE_STRING) {
-                // 使用 string_view 进行更安全的字符串比较
-                // 先找到实际的字符串长度（去除尾部空字符）
-                size_t a_actual_len = std::min(static_cast<size_t>(col.len),
-                                               std::strlen(rec_buf_a));
-                size_t b_actual_len = std::min(static_cast<size_t>(col.len),
-                                               std::strlen(rec_buf_b));
+        
+        char* rec_buf_a = a->data + col_.offset;
+        char* rec_buf_b = b->data + col_.offset;
+        
+        if (col_.type == TYPE_INT) {
+            int value_a = *(int*)rec_buf_a;
+            int value_b = *(int*)rec_buf_b;
+            if (is_desc_) return value_a > value_b;
+            else return value_a < value_b;
+        } else if (col_.type == TYPE_FLOAT) {
+            double value_a = *(double*)rec_buf_a;
+            double value_b = *(double*)rec_buf_b;
+            if (is_desc_) return value_a > value_b;
+            else return value_a < value_b;
+        } else if (col_.type == TYPE_STRING) {
+            // 使用 string_view 进行更安全的字符串比较
+            // 先找到实际的字符串长度（去除尾部空字符）
+            size_t a_actual_len = std::min(static_cast<size_t>(col_.len),
+                                           std::strlen(rec_buf_a));
+            size_t b_actual_len = std::min(static_cast<size_t>(col_.len),
+                                           std::strlen(rec_buf_b));
 
-                // 创建 string_view 进行比较，避免不必要的拷贝
-                std::string_view value_a(rec_buf_a, a_actual_len);
-                std::string_view value_b(rec_buf_b, b_actual_len);
+            // 创建 string_view 进行比较，避免不必要的拷贝
+            std::string_view value_a(rec_buf_a, a_actual_len);
+            std::string_view value_b(rec_buf_b, b_actual_len);
 
-                if (value_a == value_b) {
-                    cnt++;
-                    continue;
-                }
-                if (is_desc_[cnt]) return value_a > value_b;
-                else return value_a < value_b;
-            }
-            cnt++;
+            if (is_desc_) return value_a > value_b;
+            else return value_a < value_b;
         }
-        return true;
+        return false;
     }
 };

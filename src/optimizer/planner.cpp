@@ -121,7 +121,27 @@ std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> quer
 {
     
     //TODO 实现逻辑优化规则
-
+    
+    // 1. 条件下推优化：将单表条件尽早执行
+    // 这里已经在make_one_rel中通过pop_conds实现了条件下推
+    
+    // 2. 常量折叠：预计算常量表达式
+    // 暂时跳过，因为当前系统不支持复杂表达式
+    
+    // 3. 谓词简化：去除恒真或恒假条件
+    auto it = query->conds.begin();
+    while (it != query->conds.end()) {
+        // 检查是否是恒真或恒假条件（如 1=1 或 1=0）
+        if (it->is_rhs_val && it->lhs_col.tab_name.empty() && it->lhs_col.col_name.empty()) {
+            // 这是一个常量比较，应该在语法分析阶段就处理了
+            it = query->conds.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // 4. 连接重排序：将小表放在外层（暂时跳过，需要统计信息）
+    
     return query;
 }
 
@@ -130,9 +150,19 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     std::shared_ptr<Plan> plan = make_one_rel(query);
     
     // 其他物理优化
+    
+    // 1. 索引选择优化：在make_one_rel中已经通过get_index_cols实现
+    
+    // 2. 连接算法选择：已经在make_one_rel中通过enable_nestedloop_join和enable_sortmerge_join实现
+    
+    // 3. 投影下推：尽早减少数据传输量（这里可以在未来实现）
+    // 目前投影在最顶层进行，可以考虑将投影下推到扫描算子中
+    
+    // 4. 连接顺序优化：基于成本的连接顺序选择（需要统计信息支持）
+    // 当前使用启发式规则：按照条件中出现的表的顺序进行连接
 
     // 处理orderby
-    plan = generate_sort_plan(query, std::move(plan)); 
+    plan = generate_sort_plan(query, std::move(plan));
 
     return plan;
 }
@@ -314,9 +344,27 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
         std::vector<ColDef> col_defs;
         for (auto &field : x->fields) {
             if (auto sv_col_def = std::dynamic_pointer_cast<ast::ColDef>(field)) {
+                ColType col_type = interp_sv_type(sv_col_def->type_len->type);
+                int col_len;
+                
+                // 根据类型设置正确的长度
+                switch (col_type) {
+                    case TYPE_INT:
+                        col_len = sizeof(int);
+                        break;
+                    case TYPE_FLOAT:
+                        col_len = sizeof(float);
+                        break;
+                    case TYPE_STRING:
+                        col_len = sv_col_def->type_len->len;
+                        break;
+                    default:
+                        throw InternalError("Unknown column type");
+                }
+                
                 ColDef col_def = {.name = sv_col_def->col_name,
-                                  .type = interp_sv_type(sv_col_def->type_len->type),
-                                  .len = sv_col_def->type_len->len};
+                                  .type = col_type,
+                                  .len = col_len};
                 col_defs.push_back(col_def);
             } else {
                 throw InternalError("Unexpected field type");
