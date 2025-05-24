@@ -111,13 +111,15 @@ void *client_handler(void *sock_fd) {
         }
 
         std::cout << "Read from client " << fd << ": " << data_recv << std::endl;
-
+        
         memset(data_send, '\0', BUFFER_LENGTH);
         offset = 0;
 
-        // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
+        // // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
         Context *context = new Context(lock_manager.get(), log_manager.get(), nullptr, data_send, &offset);
-        SetTransaction(&txn_id, context);
+        // std::cerr << "DEBUG: Context created, setting transaction..." << std::endl;
+        // SetTransaction(&txn_id, context);
+        // std::cerr << "DEBUG: Transaction set, starting parse..." << std::endl;
 
         // 用于判断是否已经调用了yy_delete_buffer来删除buf
         bool finish_analyze = false;
@@ -139,19 +141,19 @@ void *client_handler(void *sock_fd) {
                     portal->drop();
                 } catch (TransactionAbortException &e) {
                     // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
-                    std::string str = "abort\n";
-                    memcpy(data_send, str.c_str(), str.length());
-                    data_send[str.length()] = '\0';
-                    offset = str.length();
+                    // std::string str = "abort\n";
+                    // memcpy(data_send, str.c_str(), str.length());
+                    // data_send[str.length()] = '\0';
+                    // offset = str.length();
 
-                    // 回滚事务
-                    txn_manager->abort(context->txn_, log_manager.get());
-                    std::cout << e.GetInfo() << std::endl;
+                    // // 回滚事务
+                    // txn_manager->abort(context->txn_, log_manager.get());
+                    // std::cout << e.GetInfo() << std::endl;
 
-                    std::fstream outfile;
-                    outfile.open("output.txt", std::ios::out | std::ios::app);
-                    outfile << str;
-                    outfile.close();
+                    // std::fstream outfile;
+                    // outfile.open("output.txt", std::ios::out | std::ios::app);
+                    // outfile << str;
+                    // outfile.close();
                 } catch (RMDBError &e) {
                     // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
                     std::cerr << e.what() << std::endl;
@@ -178,11 +180,11 @@ void *client_handler(void *sock_fd) {
         if (write(fd, data_send, offset + 1) == -1) {
             break;
         }
-        // 如果是单挑语句，需要按照一个完整的事务来执行，所以执行完当前语句后，自动提交事务
-        if(context->txn_->get_txn_mode() == false)
-        {
-            txn_manager->commit(context->txn_, context->log_mgr_);
-        }
+        // // 如果是单挑语句，需要按照一个完整的事务来执行，所以执行完当前语句后，自动提交事务
+        // if(context->txn_->get_txn_mode() == false)
+        // {
+        //     txn_manager->commit(context->txn_, context->log_mgr_);
+        // }
     }
 
     // Clear
