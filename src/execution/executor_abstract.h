@@ -1,7 +1,7 @@
 /* Copyright (c) 2023 Renmin University of China
 RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL
-v2. You may obtain a copy of Mulan PSL v2 at:
+You can use this software according to the terms and conditions of the Mulan PSL v2.
+You may obtain a copy of Mulan PSL v2 at:
         http://license.coscl.org.cn/MulanPSL2
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 #include <string>
+#include <string_view>
 #include <cstring>
 
 class AbstractExecutor {
@@ -111,18 +112,21 @@ class AbstractExecutor {
             float diff = *(float *)lhs_data - *(float *)rhs_data;
             cmp = (diff > 0) ? 1 : (diff < 0) ? -1 : 0;
         } else if (lhs_col->type == TYPE_STRING) {
-            // 将字符数据转换为字符串进行比较
-            std::string lhs_str(lhs_data, lhs_col->len);
-            std::string rhs_str(rhs_data, rhs_len);
+            // 使用 string_view 进行更安全的字符串比较
+            // 先找到实际的字符串长度（去除尾部空字符）
+            size_t lhs_actual_len = std::min(static_cast<size_t>(lhs_col->len), 
+                                           std::strlen(lhs_data));
+            size_t rhs_actual_len = std::min(static_cast<size_t>(rhs_len), 
+                                           std::strlen(rhs_data));
             
-            // 去除尾部的空字符
-            lhs_str.resize(strlen(lhs_str.c_str()));
-            rhs_str.resize(strlen(rhs_str.c_str()));
+            // 创建 string_view 进行比较，避免不必要的拷贝
+            std::string_view lhs_view(lhs_data, lhs_actual_len);
+            std::string_view rhs_view(rhs_data, rhs_actual_len);
             
-            // 使用字符串比较
-            if (lhs_str < rhs_str) {
+            // 使用 string_view 比较
+            if (lhs_view < rhs_view) {
                 cmp = -1;
-            } else if (lhs_str > rhs_str) {
+            } else if (lhs_view > rhs_view) {
                 cmp = 1;
             } else {
                 cmp = 0;
