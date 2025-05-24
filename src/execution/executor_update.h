@@ -39,6 +39,45 @@ class UpdateExecutor : public AbstractExecutor {
         rids_ = rids;
         context_ = context;
     }
+
+    void delete_index(RmRecord* rec, Rid rid_) {
+        // 从索引中删除
+        for (auto &index : tab_.indexes) {
+            auto ih = sm_manager_->ihs_
+                          .at(sm_manager_->get_ix_manager()->get_index_name(
+                              tab_name_, index.cols))
+                          .get();
+            char *key = new char[index.col_tot_len];
+            int offset = 0;
+            for (size_t i = 0; i < index.col_num; ++i) {
+                memcpy(key + offset, rec->data + index.cols[i].offset,
+                       index.cols[i].len);
+                offset += index.cols[i].len;
+            }
+            ih->delete_entry(key, context_->txn_);
+            delete[] key;
+        }
+    }
+
+    void insert_index(RmRecord* rec, Rid rid_) {
+        // 插入索引
+        for (auto &index : tab_.indexes) {
+            auto ih = sm_manager_->ihs_
+                          .at(sm_manager_->get_ix_manager()->get_index_name(
+                              tab_name_, index.cols))
+                          .get();
+            char *key = new char[index.col_tot_len];
+            int offset = 0;
+            for (size_t i = 0; i < index.col_num; ++i) {
+                memcpy(key + offset, rec->data + index.cols[i].offset,
+                       index.cols[i].len);
+                offset += index.cols[i].len;
+            }
+            ih->insert_entry(key, rid_, context_->txn_);
+            delete[] key;
+        }
+    }
+
     std::unique_ptr<RmRecord> Next() override {
         // Todo:
         // !需要自己实现
@@ -60,22 +99,7 @@ class UpdateExecutor : public AbstractExecutor {
             auto new_rec = std::make_unique<RmRecord>(*old_rec);
 
             // 更新索引：先删除旧的索引项
-            for (auto &index : tab_.indexes) {
-                auto ih = sm_manager_->ihs_
-                              .at(sm_manager_->get_ix_manager()->get_index_name(
-                                  tab_name_, index.cols))
-                              .get();
-                char *old_key = new char[index.col_tot_len];
-                int offset = 0;
-                for (size_t i = 0; i < index.col_num; ++i) {
-                    memcpy(old_key + offset,
-                           old_rec->data + index.cols[i].offset,
-                           index.cols[i].len);
-                    offset += index.cols[i].len;
-                }
-                ih->delete_entry(old_key, context_->txn_);
-                delete[] old_key;
-            }
+            delete_index(old_rec.get(), rid);
 
             // 应用更新
             for (auto &set_clause : set_clauses_) {
@@ -84,26 +108,11 @@ class UpdateExecutor : public AbstractExecutor {
                        col->len);
             }
 
+            // 插入新的索引项
+            insert_index(new_rec.get(), rid);
+
             // 更新记录
             fh_->update_record(rid, new_rec->data, context_);
-
-            // 插入新的索引项
-            for (auto &index : tab_.indexes) {
-                auto ih = sm_manager_->ihs_
-                              .at(sm_manager_->get_ix_manager()->get_index_name(
-                                  tab_name_, index.cols))
-                              .get();
-                char *new_key = new char[index.col_tot_len];
-                int offset = 0;
-                for (size_t i = 0; i < index.col_num; ++i) {
-                    memcpy(new_key + offset,
-                           new_rec->data + index.cols[i].offset,
-                           index.cols[i].len);
-                    offset += index.cols[i].len;
-                }
-                ih->insert_entry(new_key, rid, context_->txn_);
-                delete[] new_key;
-            }
         }
         return nullptr;
     }

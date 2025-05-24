@@ -47,33 +47,24 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         // Todo:
         // !需要自己实现
         left_->beginTuple();
-        if (!left_->is_end()) {
-            right_->beginTuple();
-            // 检查右表是否也为空，如果为空则直接设置结束状态
-            if (right_->is_end()) {
-                isend = true;
-            } else {
-                isend = false;
-            }
-        } else {
+        right_->beginTuple();
+        if (left_->is_end() || right_->is_end()) {
             isend = true;
+            return;
         }
+        find_record();
     }
 
     void nextTuple() override {
         // Todo:
         // !需要自己实现
-        if (isend) return;
-
-        right_->nextTuple();
-        if (right_->is_end()) {
-            left_->nextTuple();
-            if (left_->is_end()) {
-                isend = true;
-                return;
-            }
-            right_->beginTuple();
+        if (is_end()) return;
+        left_->nextTuple();
+        if (left_->is_end()) {
+            right_->nextTuple();
+            left_->beginTuple();
         }
+        find_record();
     }
 
     bool is_end() const override { return isend; }
@@ -81,28 +72,18 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> Next() override {
         // Todo:
         // !需要自己实现
-        while (!isend) {
-            auto left_rec = left_->Next();
-            auto right_rec = right_->Next();
+        auto left_rec = left_->Next();
+        auto right_rec = right_->Next();
 
-            if (!left_rec || !right_rec) {
-                nextTuple();
-                continue;
-            }
-
-            // 检查连接条件
-            if (eval_join_conds(left_rec.get(), right_rec.get())) {
-                // 合并左右记录
-                auto join_rec = std::make_unique<RmRecord>(len_);
-                memcpy(join_rec->data, left_rec->data, left_->tupleLen());
-                memcpy(join_rec->data + left_->tupleLen(), right_rec->data,
-                       right_->tupleLen());
-                return join_rec;
-            }
-
+        if (!left_rec || !right_rec) {
             nextTuple();
         }
-        return nullptr;
+
+        auto join_rec = std::make_unique<RmRecord>(len_);
+        memcpy(join_rec->data, left_rec->data, left_->tupleLen());
+        memcpy(join_rec->data + left_->tupleLen(), right_rec->data,
+               right_->tupleLen());
+        return join_rec;
     }
 
     size_t tupleLen() const override { return len_; }
@@ -112,132 +93,23 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     Rid &rid() override { return _abstract_rid; }
 
    private:
-    /**
-     * @brief 检查连接条件
-     */
-    bool eval_join_conds(const RmRecord *left_rec, const RmRecord *right_rec) {
-        // Todo:
-        // !需要自己实现
-        for (const auto &cond : fed_conds_) {
-            if (!eval_join_cond(left_rec, right_rec, cond)) {
-                return false;
+    void find_record() {
+        while (!is_end()) {
+            auto left_rec = left_->Next();
+            auto right_rec = right_->Next();
+            auto rec = std::make_unique<RmRecord>(len_);
+            memcpy(rec->data, left_rec->data, left_->tupleLen());
+            memcpy(rec->data + left_->tupleLen(), right_rec->data,
+                    right_->tupleLen());
+            if(eval_conds(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            left_ -> nextTuple();
+            if(left_->is_end()) {
+                right_->nextTuple();
+                left_->beginTuple();
             }
         }
-        return true;
-    }
-
-    /**
-     * @brief 检查单个连接条件
-     */
-    bool eval_join_cond(const RmRecord *left_rec, const RmRecord *right_rec,
-                        const Condition &cond) {
-        // Todo:
-        // !需要自己实现
-        auto &left_cols = left_->cols();
-        auto &right_cols = right_->cols();
-
-        char *lhs_data, *rhs_data;
-        ColType lhs_type, rhs_type;
-        int lhs_len = 0, rhs_len = 0;
-
-        // 获取左操作数
-        auto lhs_col_it = std::find_if(
-            left_cols.begin(), left_cols.end(), [&](const ColMeta &col) {
-                return col.tab_name == cond.lhs_col.tab_name &&
-                       col.name == cond.lhs_col.col_name;
-            });
-
-        if (lhs_col_it != left_cols.end()) {
-            lhs_data = left_rec->data + lhs_col_it->offset;
-            lhs_type = lhs_col_it->type;
-            lhs_len = lhs_col_it->len;
-        } else {
-            auto lhs_col_it_right = std::find_if(
-                right_cols.begin(), right_cols.end(), [&](const ColMeta &col) {
-                    return col.tab_name == cond.lhs_col.tab_name &&
-                           col.name == cond.lhs_col.col_name;
-                });
-            if (lhs_col_it_right != right_cols.end()) {
-                lhs_data = right_rec->data +
-                           (lhs_col_it_right->offset - left_->tupleLen());
-                lhs_type = lhs_col_it_right->type;
-                lhs_len = lhs_col_it_right->len;
-            } else {
-                return false;
-            }
-        }
-
-        // 获取右操作数
-        if (cond.is_rhs_val) {
-            rhs_data = cond.rhs_val.raw->data;
-            rhs_type = cond.rhs_val.type;
-            rhs_len = cond.rhs_val.raw->size;
-        } else {
-            auto rhs_col_it = std::find_if(
-                left_cols.begin(), left_cols.end(), [&](const ColMeta &col) {
-                    return col.tab_name == cond.rhs_col.tab_name &&
-                           col.name == cond.rhs_col.col_name;
-                });
-
-            if (rhs_col_it != left_cols.end()) {
-                rhs_data = left_rec->data + rhs_col_it->offset;
-                rhs_type = rhs_col_it->type;
-                rhs_len = rhs_col_it->len;
-            } else {
-                auto rhs_col_it_right = std::find_if(
-                    right_cols.begin(), right_cols.end(),
-                    [&](const ColMeta &col) {
-                        return col.tab_name == cond.rhs_col.tab_name &&
-                               col.name == cond.rhs_col.col_name;
-                    });
-                if (rhs_col_it_right != right_cols.end()) {
-                    rhs_data = right_rec->data +
-                               (rhs_col_it_right->offset - left_->tupleLen());
-                    rhs_type = rhs_col_it_right->type;
-                    rhs_len = rhs_col_it_right->len;
-                } else {
-                    return false;
-                }
-            }
-        }
-
-        // 类型检查
-        if (lhs_type != rhs_type) {
-            throw IncompatibleTypeError(coltype2str(lhs_type),
-                                        coltype2str(rhs_type));
-        }
-
-        int cmp;
-        if (lhs_type == TYPE_INT) {
-            cmp = *(int *)lhs_data - *(int *)rhs_data;
-        } else if (lhs_type == TYPE_FLOAT) {
-            float diff = *(float *)lhs_data - *(float *)rhs_data;
-            cmp = (diff > 0) ? 1 : (diff < 0) ? -1 : 0;
-        } else if (lhs_type == TYPE_STRING) {
-            // 使用两个字符串长度的最小值进行比较，避免越界访问
-            int cmp_len = std::min(lhs_len, rhs_len);
-            cmp = memcmp(lhs_data, rhs_data, cmp_len);
-            // 如果前缀相同但长度不同，较短的字符串小于较长的字符串
-            if (cmp == 0 && lhs_len != rhs_len) {
-                cmp = lhs_len - rhs_len;
-            }
-        }
-
-        switch (cond.op) {
-            case OP_EQ:
-                return cmp == 0;
-            case OP_NE:
-                return cmp != 0;
-            case OP_LT:
-                return cmp < 0;
-            case OP_GT:
-                return cmp > 0;
-            case OP_LE:
-                return cmp <= 0;
-            case OP_GE:
-                return cmp >= 0;
-            default:
-                throw InternalError("eval_join_cond::Unexpected op type");
-        }
+        isend = true;
     }
 };
