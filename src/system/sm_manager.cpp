@@ -292,6 +292,40 @@ void SmManager::create_index(const std::string& tab_name,
                              const std::vector<std::string>& col_names,
                              Context* context) {
     //! DO
+    TabMeta &tab = db_.get_table(tab_name);
+    // 检查索引是否已经物理存在 (基于文件名)
+    if(ix_manager_->exists(tab_name, col_names)){
+        throw IndexExistsError(tab_name, col_names);
+    }
+
+    std::vector<ColMeta> cols;
+    int tot_col_len = 0;
+    for(auto &col_name : col_names){
+        cols.emplace_back(*tab.get_col(col_name));
+        tot_col_len += cols.back().len;
+    }
+    auto fh_ = fhs_[tab_name].get();
+    ix_manager_->create_index(tab_name, cols);
+    auto ih_ = ix_manager_->open_index(tab_name, cols);
+    std::vector<char> key_buffer(tot_col_len);
+    char* key = key_buffer.data();
+    //插入B+树，扫描所有的记录
+    for(RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()){
+        auto record = fh_->get_record(rmScan.rid(), context);
+        int offset = 0;
+        for(auto &col : cols){
+            std::memcpy(key + offset, record.get()->data + col.offset, col.len);
+            offset += col.len;
+        }
+        //!还有检查没写
+        ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
+    }
+
+    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
+    ihs_.emplace(index_name, std::move(ih_));
+    IndexMeta indexMeta = {tab_name, tot_col_len, static_cast<int>(cols.size()), cols};
+    tab.indexes.emplace_back(indexMeta);
+    flush_meta();
 }
 
 /**
