@@ -42,6 +42,18 @@ class UpdateExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> Next() override {
         // Todo:
         // !需要自己实现
+        
+        // 预先为所有 set_clause 初始化 raw 数据，避免在循环中重复初始化导致内存泄漏
+        for (auto &set_clause : set_clauses_) {
+            auto col = tab_.get_col(set_clause.lhs.col_name);
+            if (col->type != set_clause.rhs.type) {
+                throw IncompatibleTypeError(
+                    coltype2str(col->type),
+                    coltype2str(set_clause.rhs.type));
+            }
+            set_clause.rhs.init_raw(col->len);
+        }
+        
         for (auto &rid : rids_) {
             // 获取旧记录
             auto old_rec = fh_->get_record(rid, context_);
@@ -68,12 +80,6 @@ class UpdateExecutor : public AbstractExecutor {
             // 应用更新
             for (auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
-                if (col->type != set_clause.rhs.type) {
-                    throw IncompatibleTypeError(
-                        coltype2str(col->type),
-                        coltype2str(set_clause.rhs.type));
-                }
-                set_clause.rhs.init_raw(col->len);
                 memcpy(new_rec->data + col->offset, set_clause.rhs.raw->data,
                        col->len);
             }
