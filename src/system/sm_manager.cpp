@@ -86,6 +86,7 @@ void SmManager::drop_db(const std::string& db_name) {
  * @param {string&} db_name 数据库名称，与文件夹同名
  */
 void SmManager::open_db(const std::string& db_name) {
+    //! DO
     if (!is_dir(db_name)) {
         throw DatabaseNotFoundError(db_name);
     }
@@ -125,22 +126,33 @@ void SmManager::flush_meta() {
  * @description: 关闭数据库并把数据落盘
  */
 void SmManager::close_db() {
+    //! DO
+    auto&& db_name = db_.name_;
+    if (!is_dir(db_name))
+    {
+        throw DatabaseNotFoundError(db_name);
+    }
+    if (chdir(db_name.c_str()) < 0)
+    {
+        throw UnixError();
+    }
+
     // 刷新元数据到磁盘
     flush_meta();
-
+    //! 表文件和索引文件交给lru丢弃
     // 关闭所有的文件句柄
-    for (auto& fh : fhs_) {
-        rm_manager_->close_file(fh.second.get());
-    }
+    // for (auto& fh : fhs_) {
+    //     rm_manager_->close_file(fh.second.get());
+    // }
 
-    // !关闭索引文件句柄，索引暂未实现，只是作为占位
-    for (auto& ih : ihs_) {
-        ix_manager_->close_index(ih.second.get());
-    }
-
+    // // !关闭索引文件句柄，索引暂未实现，只是作为占位
+    // for (auto& ih : ihs_) {
+    //     ix_manager_->close_index(ih.second.get());
+    // }
     db_.name_.clear();
     db_.tabs_.clear();
     fhs_.clear();
+    ihs_.clear();
 
     if (chdir("..") < 0) {
         throw UnixError();
@@ -236,6 +248,7 @@ void SmManager::create_table(const std::string& tab_name,
  * @param {Context*} context
  */
 void SmManager::drop_table(const std::string& tab_name, Context* context) {
+    //! DO
     // 检查表是否存在
     if (!db_.is_table(tab_name)) {
         throw TableNotFoundError(tab_name);
@@ -277,7 +290,9 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
  */
 void SmManager::create_index(const std::string& tab_name,
                              const std::vector<std::string>& col_names,
-                             Context* context) {}
+                             Context* context) {
+    //! DO
+}
 
 /**
  * @description: 删除索引
@@ -287,7 +302,9 @@ void SmManager::create_index(const std::string& tab_name,
  */
 void SmManager::drop_index(const std::string& tab_name,
                            const std::vector<std::string>& col_names,
-                           Context* context) {}
+                           Context* context) {
+    //! DO
+}
 
 /**
  * @description: 删除索引
@@ -297,5 +314,5 @@ void SmManager::drop_index(const std::string& tab_name,
  */
 void SmManager::drop_index(const std::string& tab_name,
                            const std::vector<ColMeta>& cols, Context* context) {
-
+    //! DO
 }
