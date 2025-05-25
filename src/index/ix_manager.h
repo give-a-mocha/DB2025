@@ -26,6 +26,9 @@ class IxManager {
     IxManager(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager)
         : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager) {}
 
+    /*
+    * @description: 获取索引文件名通过表名和索引列
+    */
     std::string get_index_name(const std::string &filename, const std::vector<std::string>& index_cols) {
         std::string index_name = filename;
         for(size_t i = 0; i < index_cols.size(); ++i) 
@@ -34,7 +37,9 @@ class IxManager {
 
         return index_name;
     }
-
+    /*
+    * @description: 获取索引文件名通过表名和索引列元数据
+    */
     std::string get_index_name(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         std::string index_name = filename;
         for(size_t i = 0; i < index_cols.size(); ++i) 
@@ -44,16 +49,25 @@ class IxManager {
         return index_name;
     }
 
+    /*
+    * @description: 检查索引文件是否存在通过表名和索引列元数据
+    */
     bool exists(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
         return disk_manager_->is_file(ix_name);
     }
 
+    /*
+    * @description: 检查索引文件是否存在通过表名和索引列
+    */
     bool exists(const std::string &filename, const std::vector<std::string>& index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
         return disk_manager_->is_file(ix_name);
     }
 
+    /*
+    * @description: 创建索引文件
+    */
     void create_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         // Create index file
