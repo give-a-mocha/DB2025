@@ -23,7 +23,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> cols_;                // join后获得的记录的字段
 
     std::vector<Condition> fed_conds_;  // join条件
-    bool isend;
+    bool _is_end;
 
    public:
     NestedLoopJoinExecutor(std::unique_ptr<AbstractExecutor> left,
@@ -39,25 +39,21 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         }
 
         cols_.insert(cols_.end(), right_cols.begin(), right_cols.end());
-        isend = false;
+        _is_end = false;
         fed_conds_ = std::move(conds);
     }
 
     void beginTuple() override {
-        // Todo:
-        // !需要自己实现
         left_->beginTuple();
         right_->beginTuple();
         if (left_->is_end() || right_->is_end()) {
-            isend = true;
+            _is_end = true;
             return;
         }
         find_record();
     }
 
     void nextTuple() override {
-        // Todo:
-        // !需要自己实现
         if (is_end()) return;
         left_->nextTuple();
         if (left_->is_end()) {
@@ -67,23 +63,22 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         find_record();
     }
 
-    bool is_end() const override { return isend; }
+    bool is_end() const override { return _is_end; }
 
     std::unique_ptr<RmRecord> Next() override {
-        // Todo:
-        // !需要自己实现
+        auto rec = std::make_unique<RmRecord>(len_);
         auto left_rec = left_->Next();
         auto right_rec = right_->Next();
-
+        
+        // 检查空指针，如果任一记录为空则返回空指针
         if (!left_rec || !right_rec) {
-            nextTuple();
+            return nullptr;
         }
-
-        auto join_rec = std::make_unique<RmRecord>(len_);
-        memcpy(join_rec->data, left_rec->data, left_->tupleLen());
-        memcpy(join_rec->data + left_->tupleLen(), right_rec->data,
+        
+        memcpy(rec->data, left_rec->data, left_->tupleLen());
+        memcpy(rec->data + left_->tupleLen(), right_rec->data,
                right_->tupleLen());
-        return join_rec;
+        return rec;
     }
 
     size_t tupleLen() const override { return len_; }
@@ -97,19 +92,38 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         while (!is_end()) {
             auto left_rec = left_->Next();
             auto right_rec = right_->Next();
+            
+            // 检查空指针，如果任一记录为空则移动游标继续查找
+            if (!left_rec || !right_rec) {
+                left_->nextTuple();
+                if (left_->is_end()) {
+                    right_->nextTuple();
+                    left_->beginTuple();
+                    if (right_->is_end()) {
+                        _is_end = true;
+                        return;
+                    }
+                }
+                continue;
+            }
+            
             auto rec = std::make_unique<RmRecord>(len_);
             memcpy(rec->data, left_rec->data, left_->tupleLen());
             memcpy(rec->data + left_->tupleLen(), right_rec->data,
-                    right_->tupleLen());
-            if(eval_conds(cols_, fed_conds_, rec.get())) {
+                   right_->tupleLen());
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
-            left_ -> nextTuple();
-            if(left_->is_end()) {
+            left_->nextTuple();
+            if (left_->is_end()) {
                 right_->nextTuple();
                 left_->beginTuple();
+                if (right_->is_end()) {
+                    _is_end = true;
+                    return;
+                }
             }
         }
-        isend = true;
+        _is_end = true;
     }
 };
