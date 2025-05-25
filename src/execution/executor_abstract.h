@@ -65,20 +65,20 @@ class AbstractExecutor {
     Value get_value(ColType p, const char *a) {
         Value res;
         switch (p) {
-            case TYPE_INT: {
+            case TYPE_INT:
                 int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
                 res.set_int(ia);
                 break;
-            }
-            case TYPE_FLOAT: {
+
+            case TYPE_FLOAT:
                 float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
                 res.set_float(fa);
                 break;
-            }
+
             case TYPE_STRING:
-                std::string str = a;
-                res.set_str(str);
-                break;
+            default:
+                // 需要手动处理string类型的获取
+                throw InternalError("get_value::Unexpected string value type at " + getType());
         }
         return res;
     }
