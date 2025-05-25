@@ -26,7 +26,7 @@ class SeqScanExecutor : public AbstractExecutor {
     std::vector<Condition> fed_conds_;  // 同conds_，两个字段相同
 
     Rid rid_;
-    std::unique_ptr<RecScan> scan_;     // table_iterator
+    std::unique_ptr<RecScan> scan_;  // table_iterator
 
     SmManager *sm_manager_;
 
@@ -46,16 +46,50 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     void beginTuple() override {
-        
+        scan_ = std::make_unique<RmScan>(fh_);
+        // 移动到第一个满足条件的记录
+        while (!scan_->is_end()) {
+            rid_ = scan_->rid();
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            scan_->next();
+        }
     }
 
     void nextTuple() override {
-        
+        if (scan_ == nullptr) {
+            throw InternalError("Scan not initialized at " + getType());
+        }
+        if (!scan_->is_end()) {
+            scan_->next();
+        }
+        // 移动到下一个满足条件的记录
+        while (!scan_->is_end()) {
+            rid_ = scan_->rid();
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            scan_->next();
+        }
     }
+
+    bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
 
     std::unique_ptr<RmRecord> Next() override {
-        return nullptr;
+        if (is_end()) {
+            return nullptr;
+        }
+        return fh_->get_record(rid_, context_);
     }
 
+    size_t tupleLen() const override { return len_; }
+
+    const std::vector<ColMeta> &cols() const override { return cols_; }
+
     Rid &rid() override { return rid_; }
+
+    std::string getType() override { return "SeqScanExecutor"; }
 };
