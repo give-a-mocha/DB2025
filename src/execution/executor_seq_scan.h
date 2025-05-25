@@ -46,8 +46,6 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     void beginTuple() override {
-        // Todo:
-        // !需要自己实现
         scan_ = std::make_unique<RmScan>(fh_);
         // 移动到第一个满足条件的记录
         while (!scan_->is_end()) {
@@ -61,8 +59,6 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     void nextTuple() override {
-        // Todo:
-        // !需要自己实现
         if(scan_ == nullptr){
             throw InternalError("Scan not initialized");
         }

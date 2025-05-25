@@ -165,9 +165,6 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
-            return nullptr;
-        }
         return fh_->get_record(rid_, context_);
     }
 
