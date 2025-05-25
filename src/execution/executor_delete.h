@@ -1,7 +1,7 @@
 /* Copyright (c) 2023 Renmin University of China
 RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
+You can use this software according to the terms and conditions of the Mulan PSL
+v2. You may obtain a copy of Mulan PSL v2 at:
         http://license.coscl.org.cn/MulanPSL2
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
@@ -52,8 +52,21 @@ class DeleteExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
+        // Todo:
+        // !需要自己实现
+        for (auto &rid : rids_) {
+            // 获取要删除的记录
+            auto rec = fh_->get_record(rid, context_);
+
+            delete_index(rec.get(), rid);
+
+            // 从表中删除记录
+            fh_->delete_record(rid, context_);
+        }
         return nullptr;
     }
 
     Rid &rid() override { return _abstract_rid; }
+
+    std::string getType() override { return "DeleteExecutor"; }
 };
