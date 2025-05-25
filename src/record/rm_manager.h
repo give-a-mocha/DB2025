@@ -81,4 +81,18 @@ class RmManager {
         buffer_pool_manager_->flush_all_pages(file_handle->fd_);
         disk_manager_->close_file(file_handle->fd_);
     }
+
+    /**
+     * @description: 关闭表的数据文件并删除缓冲池中的相关页面
+     * @param {RmFileHandle*} file_handle 要关闭文件的句柄
+     */
+    void close_file_and_clear_buffer(const RmFileHandle* file_handle) {
+        disk_manager_->write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
+                                  sizeof(file_handle->file_hdr_));
+        // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
+        buffer_pool_manager_->flush_all_pages(file_handle->fd_);
+        // 删除缓冲池中该文件的所有页面
+        buffer_pool_manager_->delete_all_pages(file_handle->fd_);
+        disk_manager_->close_file(file_handle->fd_);
+    }
 };
