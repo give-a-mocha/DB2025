@@ -42,49 +42,60 @@ public:
         tot_len_ = col_num_ = 0;
     }
 
+    /*
+    * @description: IxFileHdr的构造函数, 把vertor类型扩容，不使用push_back
+    */
     IxFileHdr(page_id_t first_free_page_no, int num_pages, page_id_t root_page, int col_num,
                 int col_tot_len, int btree_order, int keys_size, page_id_t first_leaf, page_id_t last_leaf)
                 : first_free_page_no_(first_free_page_no), num_pages_(num_pages), root_page_(root_page), col_num_(col_num),
                 col_tot_len_(col_tot_len), btree_order_(btree_order), keys_size_(keys_size), first_leaf_(first_leaf), last_leaf_(last_leaf) {
-                    tot_len_ = 0;
+                    update_tot_len();
+                    col_types_.reserve(col_num);
+                    col_lens_.reserve(col_num);
                 } 
-
-    void update_tot_len() {
-        tot_len_ = 0;
-        tot_len_ += sizeof(page_id_t) * 4 + sizeof(int) * 6;
-        tot_len_ += sizeof(ColType) * col_num_ + sizeof(int) * col_num_;
-    }
-
     void serialize(char* dest) {
-        int offset = 0;
+        int offset = 0; // 初始化偏移量，用于在目标缓冲区中定位写入位置
+        // 将tot_len_（结构体总长度）序列化到dest缓冲区
         memcpy(dest + offset, &tot_len_, sizeof(int));
-        offset += sizeof(int);
+        offset += sizeof(int); // 更新偏移量
+        // 将first_free_page_no_（第一个空闲页号）序列化到dest缓冲区
         memcpy(dest + offset, &first_free_page_no_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);
+        offset += sizeof(page_id_t); // 更新偏移量
+        // 将num_pages_（页面数量）序列化到dest缓冲区
         memcpy(dest + offset, &num_pages_, sizeof(int));
-        offset += sizeof(int);
+        offset += sizeof(int); // 更新偏移量
+        // 将root_page_（根页号）序列化到dest缓冲区
         memcpy(dest + offset, &root_page_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);
+        offset += sizeof(page_id_t); // 更新偏移量
+        // 将col_num_（列数量）序列化到dest缓冲区
         memcpy(dest + offset, &col_num_, sizeof(int));
-        offset += sizeof(int);
+        offset += sizeof(int); // 更新偏移量
+        // 循环序列化每个列的类型 (col_types_)
         for(int i = 0; i < col_num_; ++i) {
             memcpy(dest + offset, &col_types_[i], sizeof(ColType));
-            offset += sizeof(ColType);
+            offset += sizeof(ColType); // 更新偏移量
         }
+        // 循环序列化每个列的长度 (col_lens_)
         for(int i = 0; i < col_num_; ++i) {
             memcpy(dest + offset, &col_lens_[i], sizeof(int));
-            offset += sizeof(int);
+            offset += sizeof(int); // 更新偏移量
         }
+        // 将col_tot_len_（列总长度）序列化到dest缓冲区
         memcpy(dest + offset, &col_tot_len_, sizeof(int));
-        offset += sizeof(int);
+        offset += sizeof(int); // 更新偏移量
+        // 将btree_order_（B+树的阶）序列化到dest缓冲区
         memcpy(dest + offset, &btree_order_, sizeof(int));
-        offset += sizeof(int);
+        offset += sizeof(int); // 更新偏移量
+        // 将keys_size_（键的总大小）序列化到dest缓冲区
         memcpy(dest + offset, &keys_size_, sizeof(int));
-        offset += sizeof(int);
+        offset += sizeof(int); // 更新偏移量
+        // 将first_leaf_（第一个叶子页号）序列化到dest缓冲区
         memcpy(dest + offset, &first_leaf_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);
+        offset += sizeof(page_id_t); // 更新偏移量
+        // 将last_leaf_（最后一个叶子页号）序列化到dest缓冲区
         memcpy(dest + offset, &last_leaf_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);
+        offset += sizeof(page_id_t); // 更新偏移量
+        // 断言：检查最终的偏移量是否等于结构体的总长度，确保序列化完整性
         assert(offset == tot_len_);
     }
 
@@ -102,16 +113,12 @@ public:
         offset += sizeof(int);
         std::cout << col_num_ << "\n";
         for(int i = 0; i < col_num_; ++i) {
-            // col_types_[i] = *reinterpret_cast<const ColType*>(src + offset);
-            ColType type = *reinterpret_cast<const ColType*>(src + offset);
+            col_types_[i] = *reinterpret_cast<const ColType*>(src + offset);
             offset += sizeof(ColType);
-            col_types_.push_back(type);
         }
         for(int i = 0; i < col_num_; ++i) {
-            // col_lens_[i] = *reinterpret_cast<const int*>(src + offset);
-            int len = *reinterpret_cast<const int*>(src + offset);
+            col_lens_[i] = *reinterpret_cast<const int*>(src + offset);
             offset += sizeof(int);
-            col_lens_.push_back(len);
         }
         col_tot_len_ = *reinterpret_cast<const int*>(src + offset);
         offset += sizeof(int);
@@ -124,6 +131,12 @@ public:
         last_leaf_ = *reinterpret_cast<const page_id_t*>(src + offset);
         offset += sizeof(page_id_t);
         assert(offset == tot_len_);
+    }
+private:
+    void update_tot_len() {
+        tot_len_ = 0;
+        tot_len_ += sizeof(page_id_t) * 4 + sizeof(int) * 6;
+        tot_len_ += sizeof(ColType) * col_num_ + sizeof(int) * col_num_;
     }
 };
 

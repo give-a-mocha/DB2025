@@ -70,9 +70,9 @@ class IxManager {
     */
     void create_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
-        // Create index file
+        // 创建索引文件
         disk_manager_->create_file(ix_name);
-        // Open index file
+        // 打开索引文件
         int fd = disk_manager_->open_file(ix_name);
 
         // Create file header and write to file
@@ -97,10 +97,9 @@ class IxManager {
                                 col_num, col_tot_len, btree_order, (btree_order + 1) * col_tot_len,
                                 IX_INIT_ROOT_PAGE, IX_INIT_ROOT_PAGE);
         for(int i = 0; i < col_num; ++i) {
-            fhdr->col_types_.push_back(index_cols[i].type);
-            fhdr->col_lens_.push_back(index_cols[i].len);
+            fhdr->col_types_[i] = (index_cols[i].type);
+            fhdr->col_lens_[i] = (index_cols[i].len);
         }
-        fhdr->update_tot_len();
         
         char* data = new char[fhdr->tot_len_];
         fhdr->serialize(data);
@@ -155,6 +154,9 @@ class IxManager {
     void destroy_index(const std::string &filename, const std::vector<std::string>& index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         disk_manager_->destroy_file(ix_name);
+    }
+    void destroy_index(const std::string &index_name) {
+        disk_manager_->destroy_file(index_name);
     }
 
     // 注意这里打开文件，创建并返回了index file handle的指针

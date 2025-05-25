@@ -303,7 +303,7 @@ void SmManager::create_index(const std::string& tab_name,
     for(int i = 0; i < col_names.size(); ++i){
         auto col_name = col_names[i];
         cols[i] = (*tab.get_col(col_name));
-        tot_col_len += cols.back().len;
+        tot_col_len += cols[i].len;
     }
     auto fh_ = fhs_[tab_name].get();
     ix_manager_->create_index(tab_name, cols);
