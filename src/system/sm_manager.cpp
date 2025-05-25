@@ -349,7 +349,7 @@ void SmManager::drop_index(const std::string& tab_name,
         ix_manager_->close_index(it->second.get());
         ihs_.erase(it);
     }
-    ix_manager_->destroy_index(index_name, col_names);
+    ix_manager_->destroy_index(tab_name, col_names);
     // 从表的元数据中删除索引
     TabMeta& tab = db_.get_table(tab_name);
     auto index = tab.get_index_meta(col_names);
