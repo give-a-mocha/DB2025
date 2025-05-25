@@ -26,10 +26,8 @@ class UpdateExecutor : public AbstractExecutor {
     SmManager *sm_manager_;
 
    public:
-    UpdateExecutor(SmManager *sm_manager, const std::string &tab_name,
-                   std::vector<SetClause> set_clauses,
-                   std::vector<Condition> conds, std::vector<Rid> rids,
-                   Context *context) {
+    UpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
+                   std::vector<Condition> conds, std::vector<Rid> rids, Context *context) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = set_clauses;
@@ -43,15 +41,11 @@ class UpdateExecutor : public AbstractExecutor {
     void delete_index(RmRecord *rec, Rid rid_) {
         // 从索引中删除
         for (auto &index : tab_.indexes) {
-            auto ih = sm_manager_->ihs_
-                          .at(sm_manager_->get_ix_manager()->get_index_name(
-                              tab_name_, index.cols))
-                          .get();
+            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
             char *key = new char[index.col_tot_len];
             int offset = 0;
             for (size_t i = 0; i < index.col_num; ++i) {
-                memcpy(key + offset, rec->data + index.cols[i].offset,
-                       index.cols[i].len);
+                memcpy(key + offset, rec->data + index.cols[i].offset, index.cols[i].len);
                 offset += index.cols[i].len;
             }
             ih->delete_entry(key, context_->txn_);
@@ -62,15 +56,11 @@ class UpdateExecutor : public AbstractExecutor {
     void insert_index(RmRecord *rec, Rid rid_) {
         // 插入索引
         for (auto &index : tab_.indexes) {
-            auto ih = sm_manager_->ihs_
-                          .at(sm_manager_->get_ix_manager()->get_index_name(
-                              tab_name_, index.cols))
-                          .get();
+            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
             char *key = new char[index.col_tot_len];
             int offset = 0;
             for (size_t i = 0; i < index.col_num; ++i) {
-                memcpy(key + offset, rec->data + index.cols[i].offset,
-                       index.cols[i].len);
+                memcpy(key + offset, rec->data + index.cols[i].offset, index.cols[i].len);
                 offset += index.cols[i].len;
             }
             ih->insert_entry(key, rid_, context_->txn_);
@@ -96,12 +86,10 @@ class UpdateExecutor : public AbstractExecutor {
                     // 类型不匹配，值类型尝试转换为列类型
                     if (col->type == TYPE_INT && value.type == TYPE_FLOAT) {
                         value.set_int(static_cast<int>(value.float_val));
-                    } else if (col->type == TYPE_FLOAT &&
-                               value.type == TYPE_INT) {
+                    } else if (col->type == TYPE_FLOAT && value.type == TYPE_INT) {
                         value.set_float(static_cast<float>(value.int_val));
                     } else {
-                        throw IncompatibleTypeError(coltype2str(col->type),
-                                                    coltype2str(value.type));
+                        throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }
 
@@ -121,4 +109,6 @@ class UpdateExecutor : public AbstractExecutor {
     }
 
     Rid &rid() override { return _abstract_rid; }
+
+    std::string getType() { return "UpdateExecutor"; }
 };

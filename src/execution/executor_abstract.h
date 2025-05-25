@@ -104,7 +104,7 @@ class AbstractExecutor {
                 return;
             }
         }
-        throw InternalError("convert::Unexpected value type");
+        throw InternalError("convert::Unexpected value type at" + getType());
     }
 
     /**
@@ -154,8 +154,6 @@ class AbstractExecutor {
         if (is_numeric){
             Value lhs_val = get_value(lhs_col->type, lhs_data);
             Value rhs_val = get_value(rhs_type, rhs_data);
-            std::cerr << "lhs_val: " << ((lhs_val.type == TYPE_INT) ? std::to_string(lhs_val.int_val) : std::to_string(lhs_val.float_val))
-                      << ", rhs_val: " << ((rhs_val.type == TYPE_INT) ? std::to_string(rhs_val.int_val) : std::to_string(rhs_val.float_val)) << std::endl;
             // 整数比较
             if (lhs_col->type == TYPE_INT && rhs_type == TYPE_INT) {
                 cmp = (lhs_val.int_val < rhs_val.int_val) ? -1
@@ -180,7 +178,6 @@ class AbstractExecutor {
             std::string_view lhs_view(lhs_data, lhs_actual_len);
             std::string_view rhs_view(rhs_data, rhs_actual_len);
 
-            std::cerr << "lhs_view: " << lhs_view << ", rhs_view: " << rhs_view << std::endl;
             // 使用 string_view 比较
             if (lhs_view < rhs_view) {
                 cmp = -1;
@@ -205,7 +202,7 @@ class AbstractExecutor {
             case OP_GE:
                 return cmp >= 0;
             default:
-                throw InternalError("eval_cond::Unexpected op type");
+                throw InternalError("eval_cond::Unexpected op type at " + getType());
         }
     }
 };

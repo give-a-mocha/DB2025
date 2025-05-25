@@ -72,6 +72,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         
         // 检查空指针，如果任一记录为空则返回空指针
         if (!left_rec || !right_rec) {
+            std::cerr << "Error: One of the records is null at " + getType() << std::endl;
             return nullptr;
         }
         
@@ -90,21 +91,21 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     void find_record() {
         while (!is_end()) {
+            if (left_->is_end()) {
+                right_->nextTuple();
+                if (right_->is_end()) {
+                    _is_end = true;
+                    return;
+                }
+                left_->beginTuple();
+                continue;
+            }
+            
             auto left_rec = left_->Next();
             auto right_rec = right_->Next();
-            
-            // 检查空指针，如果任一记录为空则移动游标继续查找
             if (!left_rec || !right_rec) {
-                left_->nextTuple();
-                if (left_->is_end()) {
-                    right_->nextTuple();
-                    left_->beginTuple();
-                    if (right_->is_end()) {
-                        _is_end = true;
-                        return;
-                    }
-                }
-                continue;
+                _is_end = true;
+                return;
             }
             
             auto rec = std::make_unique<RmRecord>(len_);
@@ -115,15 +116,9 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                 return;
             }
             left_->nextTuple();
-            if (left_->is_end()) {
-                right_->nextTuple();
-                left_->beginTuple();
-                if (right_->is_end()) {
-                    _is_end = true;
-                    return;
-                }
-            }
         }
         _is_end = true;
     }
+
+    std::string getType() override { return "NestedLoopJoinExecutor"; }
 };

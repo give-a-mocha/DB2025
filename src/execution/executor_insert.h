@@ -80,4 +80,6 @@ class InsertExecutor : public AbstractExecutor {
         return nullptr;
     }
     Rid &rid() override { return rid_; }
+
+    std::string getType() override { return "InsertExecutor"; }
 };

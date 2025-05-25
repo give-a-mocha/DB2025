@@ -23,8 +23,7 @@ class ProjectionExecutor : public AbstractExecutor {
     std::vector<size_t> sel_idxs_;
 
    public:
-    ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev,
-                       const std::vector<TabCol> &sel_cols) {
+    ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol> &sel_cols) {
         prev_ = std::move(prev);
 
         size_t curr_offset = 0;
@@ -50,7 +49,10 @@ class ProjectionExecutor : public AbstractExecutor {
         // Todo:
         // !需要自己实现
         auto prev_rec = prev_->Next();
-        if (!prev_rec) return nullptr;
+        if (!prev_rec) {
+            std::cerr << "Error: Previous record is null at " + getType() << std::endl;
+            return nullptr;
+        }
 
         // 创建新的记录，只包含选中的列
         auto proj_rec = std::make_unique<RmRecord>(len_);
@@ -61,8 +63,7 @@ class ProjectionExecutor : public AbstractExecutor {
             auto &prev_col = prev_cols[prev_idx];
             auto &proj_col = cols_[i];
 
-            memcpy(proj_rec->data + proj_col.offset,
-                   prev_rec->data + prev_col.offset, proj_col.len);
+            memcpy(proj_rec->data + proj_col.offset, prev_rec->data + prev_col.offset, proj_col.len);
         }
 
         return proj_rec;
@@ -73,4 +74,6 @@ class ProjectionExecutor : public AbstractExecutor {
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
     Rid &rid() override { return _abstract_rid; }
+
+    std::string getType() override { return "ProjectionExecutor"; }
 };

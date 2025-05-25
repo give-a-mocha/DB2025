@@ -32,9 +32,7 @@ class SortExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> current_tuple;
 
    public:
-    SortExecutor(std::unique_ptr<AbstractExecutor> prev,
-                 const TabCol& sel_col,
-                 bool is_desc) {
+    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const TabCol& sel_col, bool is_desc) {
         prev_ = std::move(prev);
         auto pos = get_col(prev_->cols(), sel_col);
         col_ = *pos;
@@ -67,8 +65,7 @@ class SortExecutor : public AbstractExecutor {
         int now = -1;
         current_tuple = nullptr;
         while (!prev_->is_end()) {
-            if (std::find(used_tuple.begin(), used_tuple.end(), cnt) ==
-                    used_tuple.end() &&
+            if (std::find(used_tuple.begin(), used_tuple.end(), cnt) == used_tuple.end() &&
                 cmp(prev_->Next(), current_tuple)) {
                 current_tuple = prev_->Next();
                 now = cnt;
@@ -80,9 +77,7 @@ class SortExecutor : public AbstractExecutor {
         used_tuple.push_back(now);
     }
 
-    std::unique_ptr<RmRecord> Next() override {
-        return std::move(current_tuple);
-    }
+    std::unique_ptr<RmRecord> Next() override { return std::move(current_tuple); }
 
     const std::vector<ColMeta>& cols() const override { return prev_->cols(); }
 
@@ -92,10 +87,10 @@ class SortExecutor : public AbstractExecutor {
         if (b == nullptr) {
             return true;
         }
-        
+
         char* rec_buf_a = a->data + col_.offset;
         char* rec_buf_b = b->data + col_.offset;
-        
+
         if (col_.type == TYPE_INT) {
             int value_a = *(int*)rec_buf_a;
             int value_b = *(int*)rec_buf_b;
@@ -109,10 +104,8 @@ class SortExecutor : public AbstractExecutor {
         } else if (col_.type == TYPE_STRING) {
             // 使用 string_view 进行更安全的字符串比较
             // 先找到实际的字符串长度（去除尾部空字符）
-            size_t a_actual_len = std::min(static_cast<size_t>(col_.len),
-                                           std::strlen(rec_buf_a));
-            size_t b_actual_len = std::min(static_cast<size_t>(col_.len),
-                                           std::strlen(rec_buf_b));
+            size_t a_actual_len = std::min(static_cast<size_t>(col_.len), std::strlen(rec_buf_a));
+            size_t b_actual_len = std::min(static_cast<size_t>(col_.len), std::strlen(rec_buf_b));
 
             // 创建 string_view 进行比较，避免不必要的拷贝
             std::string_view value_a(rec_buf_a, a_actual_len);
@@ -123,4 +116,6 @@ class SortExecutor : public AbstractExecutor {
         }
         return false;
     }
+
+    std::string getType() override { return "SortExecutor"; }
 };
