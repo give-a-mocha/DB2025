@@ -41,8 +41,39 @@ class SortExecutor : public AbstractExecutor {
         
     }
 
-    std::unique_ptr<RmRecord> Next() override {
-        return nullptr;
+    std::unique_ptr<RmRecord> Next() override { return std::move(current_tuple); }
+
+    const std::vector<ColMeta>& cols() const override { return prev_->cols(); }
+
+    Rid& rid() override { return _abstract_rid; }
+
+    bool cmp(std::unique_ptr<RmRecord> a, std::unique_ptr<RmRecord>& b) {
+        if (b == nullptr) {
+            return true;
+        }
+
+        char* rec_buf_a = a->data + col_.offset;
+        char* rec_buf_b = b->data + col_.offset;
+
+        if (col_.type == TYPE_INT) {
+            int value_a = *reinterpret_cast<int*>(rec_buf_a);
+            int value_b = *reinterpret_cast<int*>(rec_buf_b);
+            if (is_desc_) return value_a > value_b;
+            else return value_a < value_b;
+        } else if (col_.type == TYPE_FLOAT) {
+            double value_a = *reinterpret_cast<double*>(rec_buf_a);
+            double value_b = *reinterpret_cast<double*>(rec_buf_b);
+            if (is_desc_) return value_a > value_b;
+            else return value_a < value_b;
+        } else if (col_.type == TYPE_STRING) {
+            int comparison_result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
+            if (is_desc_) {
+                return comparison_result > 0;
+            } else {
+                return comparison_result < 0;
+            }
+        }
+        return false;
     }
 
     Rid &rid() override { return _abstract_rid; }

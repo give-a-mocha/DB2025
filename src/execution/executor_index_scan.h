@@ -65,7 +65,84 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     void beginTuple() override {
-        
+        // 构建索引查询范围
+        auto ih =
+            sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_col_names_)).get();
+
+        // 从条件中提取索引键的范围
+        char *lower_key = new char[index_meta_.col_tot_len];
+        char *upper_key = new char[index_meta_.col_tot_len];
+        bool has_lower = false, has_upper = false;
+
+        // 构建查询键值
+        for (const auto &cond : fed_conds_) {
+            if (cond.is_rhs_val) {
+                // 找到索引列对应的条件
+                for (size_t i = 0; i < static_cast<size_t>(index_meta_.col_num); ++i) {
+                    if (index_meta_.cols[i].name == cond.lhs_col.col_name) {
+                        int offset = 0;
+                        for (size_t j = 0; j < i; ++j) {
+                            offset += index_meta_.cols[j].len;
+                        }
+
+                        // 根据操作符设置范围
+                        switch (cond.op) {
+                            case OP_EQ:
+                                memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
+                                memcpy(upper_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
+                                has_lower = has_upper = true;
+                                break;
+                            case OP_LT:
+                            case OP_LE:
+                                memcpy(upper_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
+                                has_upper = true;
+                                break;
+                            case OP_GT:
+                            case OP_GE:
+                                memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
+                                has_lower = true;
+                                break;
+                            default:
+                                break;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 如果没有找到合适的范围，进行全表扫描
+        Iid lower_iid, upper_iid;
+        if (has_lower || has_upper) {
+            if (has_lower) {
+                lower_iid = ih->lower_bound(lower_key);
+            } else {
+                lower_iid = ih->leaf_begin();
+            }
+            if (has_upper) {
+                upper_iid = ih->upper_bound(upper_key);
+            } else {
+                upper_iid = ih->leaf_end();
+            }
+        } else {
+            lower_iid = ih->leaf_begin();
+            upper_iid = ih->leaf_end();
+        }
+
+        scan_ = std::make_unique<IxScan>(ih, lower_iid, upper_iid, sm_manager_->get_bpm());
+
+        delete[] lower_key;
+        delete[] upper_key;
+
+        // 移动到第一个满足条件的记录
+        while (!scan_->is_end()) {
+            rid_ = scan_->rid();
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
+                return;
+            }
+            scan_->next();
+        }
     }
 
     void nextTuple() override {
