@@ -75,9 +75,11 @@ class IxManager {
         // 打开索引文件
         int fd = disk_manager_->open_file(ix_name);
 
-        // Create file header and write to file
-        // Theoretically we have: |page_hdr| + (|attr| + |rid|) * n <= PAGE_SIZE
-        // but we reserve one slot for convenient inserting and deleting, i.e.
+        // 创建文件头并写入文件
+        // 理论上我们有：|页面头部大小| + (|属性总长度| + |记录ID大小|) * n <= 页面大小
+        // |page_hdr| + (|attr| + |rid|) * n <= PAGE_SIZE
+        // 但是我们额外保留一个槽位以便于插入和删除操作，即：
+        // |页面头部大小| + (|属性总长度| + |记录ID大小|) * (n + 1) <= 页面大小
         // |page_hdr| + (|attr| + |rid|) * (n + 1) <= PAGE_SIZE
         int col_tot_len = 0;
         int col_num = index_cols.size();

@@ -17,6 +17,11 @@ enum class Operation { FIND = 0, INSERT, DELETE };  // 三种操作：查找、�
 
 static const bool binary_search = false;
 
+/*
+* @return: a < b 返回-1
+*          a = b 返回0
+*          a > b 返回1
+*/
 inline int ix_compare(const char *a, const char *b, ColType type, int col_len) {
     switch (type) {
         case TYPE_INT: {
