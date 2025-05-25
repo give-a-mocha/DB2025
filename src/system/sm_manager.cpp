@@ -318,9 +318,12 @@ void SmManager::create_index(const std::string& tab_name,
             std::memcpy(key + offset, record.get()->data + col.offset, col.len);
             offset += col.len;
         }
-        //!要求该键是唯一索引
-        ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
-        
+        //要求该键是唯一索引
+        auto res = ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
+        if(res == INVALID_PAGE_ID){
+            drop_index(tab_name, col_names, context);
+            return ;
+        }
     }
 
     auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);

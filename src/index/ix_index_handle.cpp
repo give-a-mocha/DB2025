@@ -363,7 +363,7 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
         parent_node->insert_pair(pos + 1, key, Rid{new_node->get_page_no(), -1});
         
         // 如果父亲结点已满，则需要继续分裂
-        if (parent_node->page_hdr->num_key >= file_hdr_->btree_order_) {
+        if (parent_node->get_size() >= parent_node->get_max_size()) {
             IxNodeHandle *split_new_node = split(parent_node);
             insert_into_parent(parent_node, split_new_node->get_key(0), split_new_node, transaction);
             buffer_pool_manager_->unpin_page(split_new_node->get_page_id(), true);
@@ -386,8 +386,31 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
     // 2. 在该叶子节点中插入键值对
     // 3. 如果结点已满，分裂结点，并把新结点的相关信息插入父节点
     // 提示：记得unpin page；若当前叶子节点是最右叶子节点，则需要更新file_hdr_.last_leaf；记得处理并发的上锁
-
-    return -1;
+    auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::INSERT, transaction);
+    if(leaf_node == nullptr) {
+        throw std::runtime_error("IxIndexHandle::insert_entry: leaf_node is nullptr");
+    }
+    // 如果叶子节点中已经存在该key，则不插入
+    int pos = leaf_node->lower_bound(key);
+    if (pos < leaf_node->page_hdr->num_key && ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) == 0) {
+        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
+        return INVALID_PAGE_ID;
+    }
+    // 插入键值对
+    leaf_node->insert_pair(pos, key, value);
+    // 如果叶子节点已满，则需要分裂
+    if (leaf_node->get_size() >= leaf_node->get_max_size()) {
+        IxNodeHandle *new_node = split(leaf_node);
+        insert_into_parent(leaf_node, new_node->get_key(0), new_node, transaction);
+        if(leaf_node->get_page_no() == file_hdr_->last_leaf_){
+            // 如果当前叶子节点是最右叶子节点，则需要更新file_hdr_.last_leaf
+            file_hdr_->last_leaf_ = new_node->get_page_no();
+        }
+        buffer_pool_manager_->unpin_page(new_node->get_page_id(), true);
+    }
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+    // 返回插入到的叶结点的page_no
+    return leaf_node->get_page_no();
 }
 
 /**
@@ -401,7 +424,19 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
     // 2. 在该叶子结点中删除键值对
     // 3. 如果删除成功需要调用CoalesceOrRedistribute来进行合并或重分配操作，并根据函数返回结果判断是否有结点需要删除
     // 4. 如果需要并发，并且需要删除叶子结点，则需要在事务的delete_page_set中添加删除结点的对应页面；记得处理并发的上锁
-
+    auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::DELETE, transaction);
+    if(leaf_node == nullptr) {
+        return false; // 没有找到叶子结点
+    }
+    if (leaf_node->get_size() == leaf_node->remove(key)) {
+        // 没有这个键
+        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
+        return false;
+    } else {
+        coalesce_or_redistribute(leaf_node, transaction, &root_is_latched);
+        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+        return true;
+    }
     return false;
 }
 
