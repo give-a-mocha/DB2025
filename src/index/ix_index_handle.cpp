@@ -293,8 +293,31 @@ IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
     IxNodeHandle *new_node = create_node();
     new_node->page_hdr->is_leaf = node->is_leaf_page();
     new_node->page_hdr->parent = node->get_parent_page_no();
-    
-    return nullptr;
+    new_node->page_hdr->num_key = 0;
+    // 如果是叶子节点更新新旧节点的prev_leaf和next_leaf指针
+    if(node->is_leaf_page()){
+        new_node->set_next_leaf(node->get_next_leaf());
+        new_node->set_prev_leaf(node->get_page_no());
+        node->set_next_leaf(new_node->get_page_no());
+        if(new_node->get_next_leaf() != INVALID_PAGE_ID){
+            auto next_node = fetch_node(new_node->get_next_leaf());
+            if (next_node) {
+                next_node->set_prev_leaf(new_node->get_page_no());
+                buffer_pool_manager_->unpin_page(next_node->get_page_id(), true);
+            } else{
+                throw std::runtime_error("IxIndexHandle::split: next_node is nullptr");
+            }
+        }
+    }
+    // 计算分裂点
+    int mid = (node->page_hdr->num_key) / 2; // 向上取整
+    int num = node->page_hdr->num_key - mid; // 右半部分的键值对数量
+    node->page_hdr->num_key = mid; // 更新原结点的键值对数量
+    new_node->insert_pairs(0, node->get_key(mid), node->get_rid(mid), num);
+    for (int i = 0; i < num; i++) {
+        maintain_child(new_node, i);
+    }
+    return new_node;
 }
 
 /**
@@ -320,13 +343,14 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
     // 提示：记得unpin page
     if (old_node->is_root_page()) {
         // 如果old_node是根结点，则需要创建新的根结点
-        IxNodeHandle *new_root = create_node();
+        IxNodeHandle *new_root = create_node(); 
         new_root->page_hdr->is_leaf = false;
         new_root->page_hdr->parent = INVALID_PAGE_ID;
         new_root->page_hdr->num_key = 0;
         new_root->insert_pair(0, key, Rid{new_node->get_page_no(), -1});
         old_node->page_hdr->parent = new_root->get_page_no();
         new_root->insert_pair(1, old_node->get_key(0), Rid{old_node->get_page_no(), -1});
+        // 更新root page
         file_hdr_->root_page_ = new_root->get_page_no();
         buffer_pool_manager_->unpin_page(new_root->get_page_id(), true);
     } else {
@@ -342,10 +366,8 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
             IxNodeHandle *split_new_node = split(parent_node);
             insert_into_parent(parent_node, split_new_node->get_key(0), split_new_node, transaction);
             buffer_pool_manager_->unpin_page(split_new_node->get_page_id(), true);
-            buffer_pool_manager_->unpin_page(parent_node->get_page_id(), true);
-        } else {
-            buffer_pool_manager_->unpin_page(parent_node->get_page_id(), true);
         }
+        buffer_pool_manager_->unpin_page(parent_node->get_page_id(), true);
     }
     buffer_pool_manager_->unpin_page(old_node->get_page_id(), true);
     buffer_pool_manager_->unpin_page(new_node->get_page_id(), true);
