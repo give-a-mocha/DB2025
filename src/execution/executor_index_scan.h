@@ -78,7 +78,7 @@ class IndexScanExecutor : public AbstractExecutor {
         for (const auto &cond : fed_conds_) {
             if (cond.is_rhs_val) {
                 // 找到索引列对应的条件
-                for (size_t i = 0; i < index_meta_.col_num; ++i) {
+                for (size_t i = 0; i < static_cast<size_t>(index_meta_.col_num); ++i) {
                     if (index_meta_.cols[i].name == cond.lhs_col.col_name) {
                         int offset = 0;
                         for (size_t j = 0; j < i; ++j) {
@@ -101,6 +101,8 @@ class IndexScanExecutor : public AbstractExecutor {
                             case OP_GE:
                                 memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
                                 has_lower = true;
+                                break;
+                            default:
                                 break;
                         }
                         break;

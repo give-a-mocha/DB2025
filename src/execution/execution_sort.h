@@ -92,27 +92,22 @@ class SortExecutor : public AbstractExecutor {
         char* rec_buf_b = b->data + col_.offset;
 
         if (col_.type == TYPE_INT) {
-            int value_a = *(int*)rec_buf_a;
-            int value_b = *(int*)rec_buf_b;
+            int value_a = *reinterpret_cast<int*>(rec_buf_a);
+            int value_b = *reinterpret_cast<int*>(rec_buf_b);
             if (is_desc_) return value_a > value_b;
             else return value_a < value_b;
         } else if (col_.type == TYPE_FLOAT) {
-            double value_a = *(double*)rec_buf_a;
-            double value_b = *(double*)rec_buf_b;
+            double value_a = *reinterpret_cast<double*>(rec_buf_a);
+            double value_b = *reinterpret_cast<double*>(rec_buf_b);
             if (is_desc_) return value_a > value_b;
             else return value_a < value_b;
         } else if (col_.type == TYPE_STRING) {
-            // 使用 string_view 进行更安全的字符串比较
-            // 先找到实际的字符串长度（去除尾部空字符）
-            size_t a_actual_len = std::min(static_cast<size_t>(col_.len), std::strlen(rec_buf_a));
-            size_t b_actual_len = std::min(static_cast<size_t>(col_.len), std::strlen(rec_buf_b));
-
-            // 创建 string_view 进行比较，避免不必要的拷贝
-            std::string_view value_a(rec_buf_a, a_actual_len);
-            std::string_view value_b(rec_buf_b, b_actual_len);
-
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
+            int comparison_result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
+            if (is_desc_) {
+                return comparison_result > 0;
+            } else {
+                return comparison_result < 0;
+            }
         }
         return false;
     }
