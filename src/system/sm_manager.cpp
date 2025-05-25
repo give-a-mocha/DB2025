@@ -298,10 +298,11 @@ void SmManager::create_index(const std::string& tab_name,
         throw IndexExistsError(tab_name, col_names);
     }
 
-    std::vector<ColMeta> cols;
+    std::vector<ColMeta> cols(col_names.size());
     int tot_col_len = 0;
-    for(auto &col_name : col_names){
-        cols.emplace_back(*tab.get_col(col_name));
+    for(int i = 0; i < col_names.size(); ++i){
+        auto col_name = col_names[i];
+        cols[i] = (*tab.get_col(col_name));
         tot_col_len += cols.back().len;
     }
     auto fh_ = fhs_[tab_name].get();
