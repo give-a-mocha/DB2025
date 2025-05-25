@@ -13,7 +13,6 @@ See the Mulan PSL v2 for more details. */
 #include <cstring>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "execution_defs.h"
