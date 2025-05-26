@@ -205,13 +205,11 @@ int IxNodeHandle::remove(const char *key) {
 IxIndexHandle::IxIndexHandle(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager, int fd)
     : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager), fd_(fd) {
     // init file_hdr_
-    disk_manager_->read_page(fd, IX_FILE_HDR_PAGE, (char *)&file_hdr_, sizeof(file_hdr_));
     char* buf = new char[PAGE_SIZE];
     memset(buf, 0, PAGE_SIZE);
     disk_manager_->read_page(fd, IX_FILE_HDR_PAGE, buf, PAGE_SIZE);
     file_hdr_ = new IxFileHdr();
     file_hdr_->deserialize(buf);
-    
     // disk_manager管理的fd对应的文件中，设置从file_hdr_->num_pages开始分配page_no
     int now_page_no = disk_manager_->get_fd2pageno(fd);
     disk_manager_->set_fd2pageno(fd, now_page_no + 1);
@@ -241,6 +239,8 @@ std::pair<IxNodeHandle *, bool> IxIndexHandle::find_leaf_page(const char *key, O
         buffer_pool_manager_->unpin_page(cur->get_page_id(), false); // unpin current node
         cur = fetch_node(next_page_no);        
     }
+
+    //? 存疑没说这参数是干嘛的
     return std::make_pair(cur, find_first);
 }
 

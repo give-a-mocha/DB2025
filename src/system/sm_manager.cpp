@@ -297,7 +297,6 @@ void SmManager::create_index(const std::string& tab_name,
     if(ix_manager_->exists(tab_name, col_names)){
         throw IndexExistsError(tab_name, col_names);
     }
-
     std::vector<ColMeta> cols(col_names.size());
     int tot_col_len = 0;
     for(int i = 0; i < col_names.size(); ++i){

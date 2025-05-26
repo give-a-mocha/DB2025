@@ -219,8 +219,7 @@ class IxIndexHandle {
 
     // 查找包含给定键的叶节点。
     // Operation 指定操作类型 (查找、插入、删除)，用于并发控制。
-    // find_first 为 true 时，用于查找第一个键 >= key 的叶子页 (用于范围扫描的起始)
-    // 返回一个 pair，包含叶节点句柄和操作是否成功 (例如，对于插入，如果键已存在且索引唯一，则可能失败)
+    // 返回一个 pair，[leaf node] and [root_is_latched] 返回目标叶子结点以及根结点是否加锁
     std::pair<IxNodeHandle *, bool> find_leaf_page(const char *key, Operation operation, Transaction *transaction,
                                                  bool find_first = false);
 

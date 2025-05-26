@@ -50,8 +50,8 @@ public:
                 : first_free_page_no_(first_free_page_no), num_pages_(num_pages), root_page_(root_page), col_num_(col_num),
                 col_tot_len_(col_tot_len), btree_order_(btree_order), keys_size_(keys_size), first_leaf_(first_leaf), last_leaf_(last_leaf) {
                     update_tot_len();
-                    col_types_.reserve(col_num);
-                    col_lens_.reserve(col_num);
+                    col_types_.resize(col_num);
+                    col_lens_.resize(col_num);
                 } 
     void serialize(char* dest) {
         int offset = 0; // 初始化偏移量，用于在目标缓冲区中定位写入位置
@@ -112,6 +112,9 @@ public:
         col_num_ = *reinterpret_cast<const int*>(src + offset);
         offset += sizeof(int);
         std::cout << col_num_ << "\n";
+        // 反序列化没有初始大小
+        col_types_.resize(col_num_);
+        col_lens_.resize(col_num_);
         for(int i = 0; i < col_num_; ++i) {
             col_types_[i] = *reinterpret_cast<const ColType*>(src + offset);
             offset += sizeof(ColType);
