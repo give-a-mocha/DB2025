@@ -52,7 +52,7 @@ class IndexScanExecutor : public AbstractExecutor {
         if (!sm_manager->ihs_.count(index_name_)) {
             // 如果没有打开则打开文件
             sm_manager->ihs_.emplace(index_name_,
-                                     sm_manager_->get_ix_manager()->open_index(tab_name_, index_col_names));
+                                     sm_manager_->get_ix_manager()->open_index(tab_name_, index_col_names_));
         }
 
         std::function<CompOp(CompOp)> swap_op = [](CompOp op) {
@@ -104,7 +104,7 @@ class IndexScanExecutor : public AbstractExecutor {
                 }
                 case TYPE_FLOAT: {
                     max_val.set_float(std::numeric_limits<float>::max());
-                    min_val.set_float(std::numeric_limits<float>::min());
+                    min_val.set_float(std::numeric_limits<float>::lowest());
                     max_val.init_raw(sizeof(float)), min_val.init_raw(sizeof(float));
                     break;
                 }
