@@ -386,7 +386,7 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
     // 提示：记得unpin page；若当前叶子节点是最右叶子节点，则需要更新file_hdr_.last_leaf；记得处理并发的上锁
     auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::INSERT, transaction);
     if(leaf_node == nullptr) {
-        throw std::runtime_error("IxIndexHandle::insert_entry: leaf_node is nullptr");
+        throw IndexEntryNotFoundError();
     }
     // 如果叶子节点中已经存在该key，则不插入
     int pos = leaf_node->lower_bound(key);
@@ -711,7 +711,7 @@ Iid IxIndexHandle::leaf_begin() const {
 IxNodeHandle *IxIndexHandle::fetch_node(int page_no) const {
     Page *page = buffer_pool_manager_->fetch_page(PageId{fd_, page_no});
     if(page == nullptr) {
-        throw std::runtime_error("IxIndexHandle::fetch_node: page not found");
+        throw FileNotOpenError(fd_);
     }
     IxNodeHandle *node = new IxNodeHandle(file_hdr_, page);
     return node;

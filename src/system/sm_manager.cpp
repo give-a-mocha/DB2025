@@ -180,6 +180,41 @@ void SmManager::show_tables(Context* context) {
     printer.print_separator(context);
     outfile.close();
 }
+//TODO:
+/**
+ * @description: 显示表的索引信息
+ * @param {string&} tab_name 表名称
+ * @param {Context*} context
+ */
+void SmManager::show_index(const std::string& tab_name, Context* context) {
+    // 检查表是否存在
+    if (db_.tabs_.find(tab_name) == db_.tabs_.end()) {
+        throw TableNotFoundError(tab_name);
+    }
+    
+    TabMeta& tab = db_.get_table(tab_name);
+    
+    std::fstream outfile;
+    outfile.open("output.txt", std::ios::out | std::ios::app);
+    
+    RecordPrinter printer(1);
+    printer.print_separator(context);
+    printer.print_record({"index"}, context);
+    printer.print_separator(context);
+    
+    // 遍历表的所有索引
+    for (auto& index : tab.indexes) {
+        std::string col_names = "(";
+        for (size_t i = 0; i < index.cols.size(); ++i) {
+            if(i != 0) col_names += ",";
+            col_names += index.cols[i].name;
+        }
+        col_names += ")";
+        outfile << "| " << tab_name << " | " << "unique" << " | " << col_names<< " |\n";
+    }
+    printer.print_separator(context);
+    outfile.close();
+}
 
 /**
  * @description: 显示表的元数据
