@@ -111,7 +111,7 @@ public:
         offset += sizeof(page_id_t);
         col_num_ = *reinterpret_cast<const int*>(src + offset);
         offset += sizeof(int);
-        std::cout << col_num_ << "\n";
+        // std::cout << col_num_ << "\n";
         // 反序列化没有初始大小
         col_types_.resize(col_num_);
         col_lens_.resize(col_num_);

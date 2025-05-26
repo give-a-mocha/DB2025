@@ -117,7 +117,7 @@ void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n)
     // 3. 通过rid获取n个连续键值对的rid值，并把n个rid值插入到pos位置
     // 4. 更新当前节点的键数量
     if(pos < 0 || pos > page_hdr->num_key){
-        throw std::runtime_error("IxNodeHandle::insert_pairs: pos is out of range");
+        throw RangeError("IxNodeHandle::insert_pairs: pos is out of range");
     }
     char *key_start = get_key(pos);
     int num = page_hdr->num_key - pos;
@@ -164,7 +164,7 @@ void IxNodeHandle::erase_pair(int pos) {
     // 2. 删除该位置的rid
     // 3. 更新结点的键值对数量
     if(pos < 0 || pos >= page_hdr->num_key){
-        throw std::runtime_error("IxNodeHandle::erase_pair: pos is out of range");
+        throw RangeError("IxNodeHandle::erase_pair: pos is out of range");
     }
     // 计算需要向前移动的元素数量
     int num = page_hdr->num_key - 1 - pos;
@@ -662,8 +662,19 @@ Rid IxIndexHandle::get_rid(const Iid &iid) const {
  * 可用*(int *)key转换回去
  */
 Iid IxIndexHandle::lower_bound(const char *key) {
-
-    return Iid{-1, -1};
+    //!DO
+    auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::FIND, nullptr);
+    if (leaf_node == nullptr) {
+        return Iid{-1, -1}; // 没有找到叶子结点
+    }
+    int pos = leaf_node->lower_bound(key);
+    Iid res = {.page_no = leaf_node->get_page_no(), .slot_no = pos};
+    if(pos == leaf_node->get_size()) {
+        // 如果pos等于size，说明没有找到大于等于key的键值对
+        res = leaf_end(); // 返回叶子结点的结束位置
+    }
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
+    return res;
 }
 
 /**
@@ -673,8 +684,19 @@ Iid IxIndexHandle::lower_bound(const char *key) {
  * @return Iid
  */
 Iid IxIndexHandle::upper_bound(const char *key) {
-    
-    return Iid{-1, -1};
+    //!DO
+    auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::FIND, nullptr);
+    if (leaf_node == nullptr) {
+        return Iid{-1, -1}; // 没有找到叶子结点
+    }
+    int pos = leaf_node->upper_bound(key);
+    Iid res = {.page_no = leaf_node->get_page_no(), .slot_no = pos};
+    if(pos == leaf_node->get_size()) {
+        // 如果pos等于size，说明没有找到大于等于key的键值对
+        res = leaf_end(); // 返回叶子结点的结束位置
+    }
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
+    return res;
 }
 
 /**

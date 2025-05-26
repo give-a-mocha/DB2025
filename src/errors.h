@@ -27,6 +27,10 @@ class RMDBError : public std::exception {
 
     std::string _msg;
 };
+class RangeError : public RMDBError {
+   public:
+    RangeError(const std::string &msg) : RMDBError(msg) {}
+};
 
 class InternalError : public RMDBError {
    public:

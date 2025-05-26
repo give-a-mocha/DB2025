@@ -11,6 +11,7 @@ See the Mulan PSL v2 for more details. */
 #include "planner.h"
 
 #include <memory>
+#include <unordered_set>
 
 #include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
@@ -22,21 +23,76 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "record_printer.h"
 
-// 目前的索引匹配规则为：完全匹配索引字段，且全部为单点查询，不会自动调整where条件的顺序
+// 实现最左匹配原则的索引匹配规则
 bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds, std::vector<std::string>& index_col_names) {
+    // 初始代码，完全一致匹配原则
+    // index_col_names.clear();
+    // for(auto& cond: curr_conds) {
+    //     if(cond.is_rhs_val && cond.op == OP_EQ && cond.lhs_col.tab_name.compare(tab_name) == 0)
+    //         index_col_names.push_back(cond.lhs_col.col_name);
+    // }
+    // TabMeta& tab = sm_manager_->db_.get_table(tab_name);
+    // if(tab.is_index(index_col_names)) return true;
+    // return false;
+    
     index_col_names.clear();
-    for(auto& cond: curr_conds) {
-        if(cond.is_rhs_val && cond.op == OP_EQ && cond.lhs_col.tab_name.compare(tab_name) == 0)
-            index_col_names.push_back(cond.lhs_col.col_name);
-    }
     TabMeta& tab = sm_manager_->db_.get_table(tab_name);
-    if(tab.is_index(index_col_names)) return true;
+    if (tab.indexes.empty()){
+        return false;
+    }
+
+    // 从条件中提取所有涉及该表的列
+    std::unordered_set<std::string> cols;
+    for(auto& cond: curr_conds) {
+        if(cond.is_rhs_val && cond.lhs_col.tab_name.compare(tab_name) == 0) {
+            // 支持等值条件和范围条件
+            if(cond.op == OP_EQ || cond.op == OP_GT || cond.op == OP_GE || 
+               cond.op == OP_LT || cond.op == OP_LE) {
+                cols.insert(cond.lhs_col.col_name);
+            }
+        }
+    }
+    
+    if(cols.empty()) return false;
+    
+    // 寻找最匹配的索引（支持最左匹配原则）
+    IndexMeta* ans = nullptr;
+    int mx = 0;
+    for(auto& index : tab.indexes) {
+        int cnt = 0;
+        
+        // 检查从索引的第一列开始，连续能匹配多少列
+        for (int i = 0; i < index.col_num; ++i) {
+            if (cols.count(index.cols[i].name) > 0) {
+                cnt++;
+            } else {
+                break; // 最左匹配原则：如果某一列不匹配，则停止
+            }
+        }
+        
+        if (cnt > mx) {
+            mx = cnt;
+            ans = &index;
+        }
+    }
+    if (ans != nullptr && mx > 0) {
+        // 找到最匹配的索引，返回其列名
+        for (int i = 0; i < mx; ++i) {
+            index_col_names.push_back(ans->cols[i].name);
+        }
+        std::cerr << "DEBUG: get index cols";
+        for(auto x: index_col_names){
+            std::cerr << x << ' ';
+        }
+        std::cerr << std::endl;
+        return true;
+    }
     return false;
 }
 
 /**
  * @brief 表算子条件谓词生成
- *
+ * 从查询语句的WHERE子句中提取出可以应用于单个表扫描操作的条件（也称为谓词）。
  * @param conds 条件
  * @param tab_names 表名
  * @return std::vector<Condition>
@@ -46,22 +102,42 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
     //     return std::find(tab_names.begin(), tab_names.end(), tab_name) != tab_names.end();
     // };
     std::vector<Condition> solved_conds;
-    auto it = conds.begin();
-    while (it != conds.end()) {
-        if ((tab_names.compare(it->lhs_col.tab_name) == 0 && it->is_rhs_val) || (it->lhs_col.tab_name.compare(it->rhs_col.tab_name) == 0)) {
-            solved_conds.emplace_back(std::move(*it));
-            it = conds.erase(it);
+    std::vector<Condition> temp;
+    for(auto &it : conds) {
+        if ((it.lhs_col.tab_name.compare(tab_names) == 0 && it.is_rhs_val) || (it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
+            solved_conds.emplace_back(std::move(it));
         } else {
-            it++;
+            temp.emplace_back(std::move(it));
         }
     }
+    conds = std::move(temp);
     return solved_conds;
 }
 
-int push_conds(Condition *cond, std::shared_ptr<Plan> plan)
-{
-    if(auto x = std::dynamic_pointer_cast<ScanPlan>(plan))
-    {
+/**
+ * @brief 递归地将条件推送到查询计划树的下方。
+ *
+ * 此函数尝试将给定的条件与能够评估该条件的最低层级的计划节点关联起来。
+ * - 对于 ScanPlan（扫描计划节点）：检查条件是否适用于正在扫描的表。
+ * - 对于 JoinPlan（连接计划节点）：尝试将条件推向其左子节点或右子节点。
+ *   如果条件是一个连接谓词，并且适用于此 JoinPlan 正在连接的表，则该条件
+ *   会被添加到此 JoinPlan 自身的条件列表中。条件可能会被规范化
+ *   （例如，交换左右操作数以形成类似 LeftTable.col = RightTable.col 的标准形式）。
+ *
+ * 函数使用特定的返回代码来指示条件如何与当前计划节点及其子树相关联：
+ * - 0：条件不涉及当前计划或其子计划中的任何表。
+ * - 1：条件的左操作数（LHS）列所属的表与此计划节点（或其子节点）相关的表匹配。
+ * - 2：条件的右操作数（RHS）列所属的表与此计划节点（或其子节点）相关的表匹配。
+ * - 3：条件已被完全处理并下推/关联到此计划节点或其后代节点之一。
+ *      如果关联到 JoinPlan，则 `cond` 指向的 Condition 对象可能会被移走 (moved from)。
+ *
+ * @param cond 指向要下推的 Condition 对象的指针。
+ *             注意：如果条件应用于 JoinPlan，则 `cond` 指向的对象将被移走。
+ * @param plan 查询计划树中的当前计划节点（例如 ScanPlan、JoinPlan）。
+ * @return 一个整数代码（0、1、2 或 3），指示下推尝试的结果。
+ */
+int push_conds(Condition *cond, std::shared_ptr<Plan> plan){
+    if(auto x = std::dynamic_pointer_cast<ScanPlan>(plan)){
         if(x->tab_name_.compare(cond->lhs_col.tab_name) == 0) {
             return 1;
         } else if(x->tab_name_.compare(cond->rhs_col.tab_name) == 0){
@@ -69,9 +145,7 @@ int push_conds(Condition *cond, std::shared_ptr<Plan> plan)
         } else {
             return 0;
         }
-    }
-    else if(auto x = std::dynamic_pointer_cast<JoinPlan>(plan))
-    {
+    }else if(auto x = std::dynamic_pointer_cast<JoinPlan>(plan)){
         int left_res = push_conds(cond, x->left_);
         // 条件已经下推到左子节点
         if(left_res == 3){
@@ -101,13 +175,23 @@ int push_conds(Condition *cond, std::shared_ptr<Plan> plan)
     return false;
 }
 
+/**
+ * @brief 从一系列计划节点中查找并“弹出”指定表的扫描计划。
+ *
+ * @param scantbl 一个整型指针，指向一个数组，用于标记哪些扫描计划已被选中。
+ *                数组的大小应与 `plans` 向量的大小相同。
+ * @param table 要查找的表的名称。
+ * @param joined_tables 一个字符串向量的引用，用于记录已连接的表的名称。
+ *                      如果找到匹配的扫描计划，该表的名称会被添加到此向量中。
+ * @param plans 一个包含共享指针的向量，指向多个候选的计划节点。
+ * @return 如果找到匹配的 `ScanPlan`，则返回其共享指针；否则返回 `nullptr`。
+ */
 std::shared_ptr<Plan> pop_scan(int *scantbl, std::string table, std::vector<std::string> &joined_tables, 
                 std::vector<std::shared_ptr<Plan>> plans)
 {
     for (size_t i = 0; i < plans.size(); i++) {
         auto x = std::dynamic_pointer_cast<ScanPlan>(plans[i]);
-        if(x->tab_name_.compare(table) == 0)
-        {
+        if(x->tab_name_.compare(table) == 0){
             scantbl[i] = 1;
             joined_tables.emplace_back(x->tab_name_);
             return plans[i];
@@ -129,16 +213,16 @@ std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> quer
     // 暂时跳过，因为当前系统不支持复杂表达式
     
     // 3. 谓词简化：去除恒真或恒假条件
-    auto it = query->conds.begin();
-    while (it != query->conds.end()) {
-        // 检查是否是恒真或恒假条件（如 1=1 或 1=0）
-        if (it->is_rhs_val && it->lhs_col.tab_name.empty() && it->lhs_col.col_name.empty()) {
-            // 这是一个常量比较，应该在语法分析阶段就处理了
-            it = query->conds.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    // auto it = query->conds.begin();
+    // while (it != query->conds.end()) {
+    //     // 检查是否是恒真或恒假条件（如 1=1 或 1=0）
+    //     if (it->is_rhs_val && it->lhs_col.tab_name.empty() && it->lhs_col.col_name.empty()) {
+    //         // 这是一个常量比较，应该在语法分析阶段就处理了
+    //         it = query->conds.erase(it);
+    //     } else {
+    //         ++it;
+    //     }
+    // }
     
     // 4. 连接重排序：将小表放在外层（暂时跳过，需要统计信息）
     
@@ -168,9 +252,12 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
 }
 
 
-
-std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query)
-{
+/**
+ * @brief 为单关系查询（或多关系查询的单个表部分）创建扫描计划。
+ * @param query 查询对象。
+ * @return 生成的扫描计划或基础连接计划。
+ */
+std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query){
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
     // // Scan table , 生成表算子列表tab_nodes
@@ -190,8 +277,7 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query)
         }
     }
     // 只有一个表，不需要join。
-    if(tables.size() == 1)
-    {
+    if(tables.size() == 1){
         return table_scan_executors[0];
     }
     // 获取where条件
@@ -199,13 +285,11 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query)
     std::shared_ptr<Plan> table_join_executors;
     
     int scantbl[tables.size()];
-    for(size_t i = 0; i < tables.size(); i++)
-    {
+    for(size_t i = 0; i < tables.size(); i++){
         scantbl[i] = -1;
     }
     // 假设在ast中已经添加了jointree，这里需要修改的逻辑是，先处理jointree，然后再考虑剩下的部分
-    if(conds.size() >= 1)
-    {
+    if(conds.size() >= 1){
         // 有连接条件
 
         // 根据连接条件，生成第一层join

@@ -383,11 +383,13 @@ void SmManager::drop_index(const std::string& tab_name,
     // 关闭并删除索引文件
     auto index_name = ix_manager_->get_index_name(tab_name, col_names);
     auto it = ihs_.find(index_name);
+    
     if(it != ihs_.end()) {
-        ix_manager_->close_index(it->second.get());
+        ix_manager_->drop_index(it->second.get());
         ihs_.erase(it);
     }
-    ix_manager_->destroy_index(tab_name, col_names);
+    // 删除索引文件
+    disk_manager_->destroy_file(index_name);
     // 从表的元数据中删除索引
     TabMeta& tab = db_.get_table(tab_name);
     auto index = tab.get_index_meta(col_names);
