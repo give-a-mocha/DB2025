@@ -157,17 +157,17 @@ class IndexScanExecutor : public AbstractExecutor {
                                                 getType());
                     }
                 }
-                memcpy(lower_record.data + offset, min_val.raw->data, col.len);
-                memcpy(upper_record.data + offset, max_val.raw->data, col.len);
-                offset += col.len;
             }
+            memcpy(lower_record.data + offset, min_val.raw->data, col.len);
+            memcpy(upper_record.data + offset, max_val.raw->data, col.len);
+            offset += col.len;
         }
 
         auto lower_iid = ih->lower_bound(lower_record.data);
         auto upper_iid = ih->upper_bound(upper_record.data);
         scan_ = std::make_unique<IxScan>(ih, lower_iid, upper_iid, sm_manager_->get_bpm());
         // 移动到第一个满足条件的记录
-        while (is_end()) {
+        while (!is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec.get())) {
