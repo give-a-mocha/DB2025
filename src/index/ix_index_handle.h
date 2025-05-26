@@ -83,7 +83,7 @@ class IxNodeHandle {
     // 设置节点中键的数量
     void set_size(int size) { page_hdr->num_key = size; }
 
-    // 获取节点能容纳的最大键数量 (B+树的阶相关)
+    // 获取节点能容纳的最大键数量 (B+树的阶相关)btree_order_就是B+树的阶
     int get_max_size() { return file_hdr->btree_order_ + 1; }
 
     // 获取节点的最小键数量 (通常是最大数量的一半)
