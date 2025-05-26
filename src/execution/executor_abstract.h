@@ -87,18 +87,13 @@ class AbstractExecutor {
         // 数值类型的转化(int, float)
         // int -> float
         if (a.type == b.type) return;
-        if (a.type == TYPE_FLOAT) {
-            if (b.type == TYPE_INT) {
-                b.set_float(static_cast<float>(b.int_val));
-                return;
-            }
-        } else if (a.type == TYPE_INT) {
-            if (b.type == TYPE_FLOAT) {
-                a.set_float(static_cast<float>(a.int_val));
-                return;
-            }
+        if (b.type == TYPE_INT) {
+            b.set_float(static_cast<float>(b.int_val));
+            return;
+        } else {
+            a.set_float(static_cast<float>(a.int_val));
+            return;
         }
-        throw InternalError("convert::Unexpected value type at" + getType());
     }
 
     /**
@@ -154,23 +149,8 @@ class AbstractExecutor {
                 cmp = (lhs_val.float_val < rhs_val.float_val) ? -1 : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
             }
         } else if (lhs_col->type == TYPE_STRING) {
-            // 使用 string_view 进行更安全的字符串比较
-            // 先找到实际的字符串长度（去除尾部空字符）
-            size_t lhs_actual_len = std::min(static_cast<size_t>(lhs_col->len), std::strlen(lhs_data));
-            size_t rhs_actual_len = std::min(static_cast<size_t>(rhs_len), std::strlen(rhs_data));
-
-            // 创建 string_view 进行比较，避免不必要的拷贝
-            std::string_view lhs_view(lhs_data, lhs_actual_len);
-            std::string_view rhs_view(rhs_data, rhs_actual_len);
-
-            // 使用 string_view 比较
-            if (lhs_view < rhs_view) {
-                cmp = -1;
-            } else if (lhs_view > rhs_view) {
-                cmp = 1;
-            } else {
-                cmp = 0;
-            }
+            size_t len = std::max(lhs_col->len, rhs_len);
+            cmp = strncmp(lhs_data, rhs_data, len);
         }
 
         switch (cond.op) {
