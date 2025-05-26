@@ -31,7 +31,7 @@ class IndexScanExecutor : public AbstractExecutor {
 
     Rid rid_;
     std::unique_ptr<RecScan> scan_;
-
+    std::string index_name_;  // 索引名称
     SmManager *sm_manager_;
 
    public:
@@ -83,8 +83,7 @@ class IndexScanExecutor : public AbstractExecutor {
     void beginTuple() override {
         // 构建索引查询范围
         auto ih =
-            sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_col_names_)).get();
-
+            sm_manager_->ihs_.at(index_name_).get();
         // 从条件中提取索引键的范围
         char *lower_key = new char[index_meta_.col_tot_len];
         char *upper_key = new char[index_meta_.col_tot_len];

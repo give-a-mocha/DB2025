@@ -78,14 +78,9 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
     }
     if (ans != nullptr && mx > 0) {
         // 找到最匹配的索引，返回其列名
-        for (int i = 0; i < mx; ++i) {
+        for (int i = 0; i < ans->col_num; ++i) {
             index_col_names.push_back(ans->cols[i].name);
         }
-        std::cerr << "DEBUG: get index cols";
-        for (auto x : index_col_names) {
-            std::cerr << x << ' ';
-        }
-        std::cerr << std::endl;
         return true;
     }
     return false;
