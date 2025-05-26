@@ -31,7 +31,7 @@ class IndexScanExecutor : public AbstractExecutor {
 
     Rid rid_;
     std::unique_ptr<RecScan> scan_;
-
+    std::string index_name_;  // 索引名称
     SmManager *sm_manager_;
 
    public:
@@ -48,6 +48,13 @@ class IndexScanExecutor : public AbstractExecutor {
         fh_ = sm_manager_->fhs_.at(tab_name_).get();
         cols_ = tab_.cols;
         len_ = cols_.back().offset + cols_.back().len;
+        index_name_ = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_col_names_);
+        if (!sm_manager->ihs_.count(index_name_)) {
+            //如果没有打开则打开文件
+            sm_manager->ihs_.emplace(
+                index_name_, sm_manager_->get_ix_manager()->open_index(tab_name_, index_col_names));
+        }
+
         std::map<CompOp, CompOp> swap_op = {
             {OP_EQ, OP_EQ}, {OP_NE, OP_NE}, {OP_LT, OP_GT}, {OP_GT, OP_LT}, {OP_LE, OP_GE}, {OP_GE, OP_LE},
         };
@@ -67,8 +74,7 @@ class IndexScanExecutor : public AbstractExecutor {
     void beginTuple() override {
         // 构建索引查询范围
         auto ih =
-            sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_col_names_)).get();
-
+            sm_manager_->ihs_.at(index_name_).get();
         // 从条件中提取索引键的范围
         char *lower_key = new char[index_meta_.col_tot_len];
         char *upper_key = new char[index_meta_.col_tot_len];
