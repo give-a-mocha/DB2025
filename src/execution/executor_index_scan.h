@@ -48,8 +48,24 @@ class IndexScanExecutor : public AbstractExecutor {
         fh_ = sm_manager_->fhs_.at(tab_name_).get();
         cols_ = tab_.cols;
         len_ = cols_.back().offset + cols_.back().len;
-        std::map<CompOp, CompOp> swap_op = {
-            {OP_EQ, OP_EQ}, {OP_NE, OP_NE}, {OP_LT, OP_GT}, {OP_GT, OP_LT}, {OP_LE, OP_GE}, {OP_GE, OP_LE},
+
+        std::function<CompOp(CompOp)> swap_op = [](CompOp op) {
+            switch (op) {
+                case CompOp::OP_EQ:
+                    return CompOp::OP_EQ;
+                case CompOp::OP_NE:
+                    return CompOp::OP_NE;
+                case CompOp::OP_LT:
+                    return CompOp::OP_GT;
+                case CompOp::OP_GT:
+                    return CompOp::OP_LT;
+                case CompOp::OP_LE:
+                    return CompOp::OP_GE;
+                case CompOp::OP_GE:
+                    return CompOp::OP_LE;
+                default:
+                    throw InternalError("Unexpected comparison operator");
+            }
         };
 
         for (auto &cond : conds_) {
@@ -58,7 +74,7 @@ class IndexScanExecutor : public AbstractExecutor {
                 assert(!cond.is_rhs_val && cond.rhs_col.tab_name == tab_name_);
                 // swap lhs and rhs
                 std::swap(cond.lhs_col, cond.rhs_col);
-                cond.op = swap_op.at(cond.op);
+                cond.op = swap_op(cond.op);
             }
         }
         fed_conds_ = conds_;
@@ -87,18 +103,18 @@ class IndexScanExecutor : public AbstractExecutor {
 
                         // 根据操作符设置范围
                         switch (cond.op) {
-                            case OP_EQ:
+                            case CompOp::OP_EQ:
                                 memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
                                 memcpy(upper_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
                                 has_lower = has_upper = true;
                                 break;
-                            case OP_LT:
-                            case OP_LE:
+                            case CompOp::OP_LT:
+                            case CompOp::OP_LE:
                                 memcpy(upper_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
                                 has_upper = true;
                                 break;
-                            case OP_GT:
-                            case OP_GE:
+                            case CompOp::OP_GT:
+                            case CompOp::OP_GE:
                                 memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
                                 has_lower = true;
                                 break;

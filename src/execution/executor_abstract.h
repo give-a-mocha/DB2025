@@ -49,25 +49,20 @@ class AbstractExecutor {
 
     virtual ColMeta get_col_offset(const TabCol &target) { return ColMeta(); };
 
-    std::vector<ColMeta>::const_iterator get_col(
-        const std::vector<ColMeta> &rec_cols, const TabCol &target) {
-        auto pos = std::find_if(rec_cols.begin(), rec_cols.end(),
-                                [&](const ColMeta &col) {
-                                    return col.tab_name == target.tab_name &&
-                                           col.name == target.col_name;
-                                });
+    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target) {
+        auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
+            return col.tab_name == target.tab_name && col.name == target.col_name;
+        });
         if (pos == rec_cols.end()) {
             throw ColumnNotFoundError(target.tab_name + '.' + target.col_name);
         }
         return pos;
     }
 
-        // 判断是否为数值类型
-    bool is_numeric_type(ColType type) {
-        return type == TYPE_INT || type == TYPE_FLOAT;
-    }
+    // 判断是否为数值类型
+    bool is_numeric_type(ColType type) { return type == TYPE_INT || type == TYPE_FLOAT; }
 
-    Value get_value(ColType p, const char* a) {
+    Value get_value(ColType p, const char *a) {
         Value res;
         switch (p) {
             case TYPE_INT: {
@@ -88,11 +83,10 @@ class AbstractExecutor {
         return res;
     }
 
-    void convert(Value& a, Value& b) {
+    void convert(Value &a, Value &b) {
         // 数值类型的转化(int, float)
         // int -> float
-        if (a.type == b.type)
-            return;
+        if (a.type == b.type) return;
         if (a.type == TYPE_FLOAT) {
             if (b.type == TYPE_INT) {
                 b.set_float(static_cast<float>(b.int_val));
@@ -110,8 +104,7 @@ class AbstractExecutor {
     /**
      * @brief 检查记录是否满足所有条件
      */
-    bool eval_conds(const std::vector<ColMeta> &rec_cols,
-                    const std::vector<Condition> &conds, const RmRecord *rec) {
+    bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds, const RmRecord *rec) {
         for (const auto &cond : conds) {
             if (!eval_cond(rec_cols, cond, rec)) {
                 return false;
@@ -123,8 +116,7 @@ class AbstractExecutor {
     /**
      * @brief 检查记录是否满足单个条件
      */
-    bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond,
-                   const RmRecord *rec) {
+    bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
         char *lhs_data = rec->data + lhs_col->offset;
         char *rhs_data;
@@ -143,36 +135,29 @@ class AbstractExecutor {
         }
 
         // 类型应该一致
-        bool is_numeric = is_numeric_type(lhs_col->type) &&
-                          is_numeric_type(rhs_type);
+        bool is_numeric = is_numeric_type(lhs_col->type) && is_numeric_type(rhs_type);
         if (lhs_col->type != rhs_type && !is_numeric) {
-            throw IncompatibleTypeError(coltype2str(lhs_col->type),
-                                        coltype2str(rhs_type));
+            throw IncompatibleTypeError(coltype2str(lhs_col->type), coltype2str(rhs_type));
         }
 
         int cmp;
-        if (is_numeric){
+        if (is_numeric) {
             Value lhs_val = get_value(lhs_col->type, lhs_data);
             Value rhs_val = get_value(rhs_type, rhs_data);
             // 整数比较
             if (lhs_col->type == TYPE_INT && rhs_type == TYPE_INT) {
-                cmp = (lhs_val.int_val < rhs_val.int_val) ? -1
-                      : (lhs_val.int_val > rhs_val.int_val) ? 1 : 0;
-            }
-            else{
+                cmp = (lhs_val.int_val < rhs_val.int_val) ? -1 : (lhs_val.int_val > rhs_val.int_val) ? 1 : 0;
+            } else {
                 // 先转化成浮点数
                 convert(lhs_val, rhs_val);
                 // 浮点数比较
-                cmp = (lhs_val.float_val < rhs_val.float_val) ? -1
-                      : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
+                cmp = (lhs_val.float_val < rhs_val.float_val) ? -1 : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
             }
         } else if (lhs_col->type == TYPE_STRING) {
             // 使用 string_view 进行更安全的字符串比较
             // 先找到实际的字符串长度（去除尾部空字符）
-            size_t lhs_actual_len = std::min(static_cast<size_t>(lhs_col->len),
-                                             std::strlen(lhs_data));
-            size_t rhs_actual_len =
-                std::min(static_cast<size_t>(rhs_len), std::strlen(rhs_data));
+            size_t lhs_actual_len = std::min(static_cast<size_t>(lhs_col->len), std::strlen(lhs_data));
+            size_t rhs_actual_len = std::min(static_cast<size_t>(rhs_len), std::strlen(rhs_data));
 
             // 创建 string_view 进行比较，避免不必要的拷贝
             std::string_view lhs_view(lhs_data, lhs_actual_len);
@@ -189,17 +174,17 @@ class AbstractExecutor {
         }
 
         switch (cond.op) {
-            case OP_EQ:
+            case CompOp::OP_EQ:
                 return cmp == 0;
-            case OP_NE:
+            case CompOp::OP_NE:
                 return cmp != 0;
-            case OP_LT:
+            case CompOp::OP_LT:
                 return cmp < 0;
-            case OP_GT:
+            case CompOp::OP_GT:
                 return cmp > 0;
-            case OP_LE:
+            case CompOp::OP_LE:
                 return cmp <= 0;
-            case OP_GE:
+            case CompOp::OP_GE:
                 return cmp >= 0;
             default:
                 throw InternalError("eval_cond::Unexpected op type at " + getType());

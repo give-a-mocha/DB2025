@@ -72,7 +72,7 @@ struct Value {
     }
 };
 
-enum CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
+enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
 
 struct Condition {
     TabCol lhs_col;   // left-hand side column

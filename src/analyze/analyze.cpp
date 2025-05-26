@@ -13,19 +13,17 @@ See the Mulan PSL v2 for more details. */
 /**
  * @description: 分析器，进行语义分析和查询重写，需要检查不符合语义规定的部分
  * @param {shared_ptr<ast::TreeNode>} parse parser生成的结果集
- * @return {shared_ptr<Query>} Query 
+ * @return {shared_ptr<Query>} Query
  */
-std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
-{
+std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse) {
     std::cerr << "DEBUG: Starting semantic analysis..." << std::endl;
     std::shared_ptr<Query> query = std::make_shared<Query>();
-    if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse))
-    {
+    if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse)) {
         // 处理表名
         query->tables = std::move(x->tabs);
         /** TODO: 检查表是否存在 */
         // 检查所有表是否存在
-        for (const auto& tab_name : query->tables) {
+        for (const auto &tab_name : query->tables) {
             if (!sm_manager_->db_.is_table(tab_name)) {
                 throw TableNotFoundError(tab_name);
             }
@@ -36,7 +34,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
             query->cols.push_back(sel_col);
         }
-        
+
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
         if (query->cols.empty()) {
@@ -51,14 +49,14 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 sel_col = check_column(all_cols, sel_col);  // 列元数据校验
             }
         }
-        //处理where条件
+        // 处理where条件
         get_clause(x->conds, query->conds);
         check_clause(query->tables, query->conds);
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         /** TODO: */
         // 处理表名
         query->tables.push_back(x->tab_name);
-        
+
         // 处理set子句
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
@@ -66,11 +64,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             set_clause.rhs = convert_sv_value(sv_set_clause->val);
             query->set_clauses.push_back(set_clause);
         }
-        
+
         // 处理where条件
         get_clause(x->conds, query->conds);
         check_clause(query->tables, query->conds);
-        
+
         // 检查set子句中的列是否存在并进行类型校验
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
@@ -88,9 +86,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             set_clause.rhs.init_raw(col->len);
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {
-        //处理where条件
+        // 处理where条件
         get_clause(x->conds, query->conds);
-        check_clause({x->tab_name}, query->conds);        
+        check_clause({x->tab_name}, query->conds);
     } else if (auto x = std::dynamic_pointer_cast<ast::InsertStmt>(parse)) {
         // 处理insert 的values值
         for (auto &sv_val : x->vals) {
@@ -102,7 +100,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
     query->parse = std::move(parse);
     return query;
 }
-
 
 TabCol Analyze::check_column(const std::vector<ColMeta> &all_cols, TabCol target) {
     if (target.tab_name.empty()) {
@@ -123,9 +120,8 @@ TabCol Analyze::check_column(const std::vector<ColMeta> &all_cols, TabCol target
     } else {
         /** TODO: Make sure target column exists */
         int count = 0;
-        for (auto& col : all_cols) {  // 遍历查找是否存在以及是否重复
-            if (col.name == target.col_name &&
-                col.tab_name == target.tab_name) {
+        for (auto &col : all_cols) {  // 遍历查找是否存在以及是否重复
+            if (col.name == target.col_name && col.tab_name == target.tab_name) {
                 count++;
                 if (count > 1) {
                     throw AmbiguousColumnError(target.col_name);
@@ -188,14 +184,13 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             rhs_type = rhs_col->type;
         }
         // Allow numeric type comparison (INT vs FLOAT)
-        bool is_numeric = (lhs_type == TYPE_INT || lhs_type == TYPE_FLOAT) &&
-                          (rhs_type == TYPE_INT || rhs_type == TYPE_FLOAT);
+        bool is_numeric =
+            (lhs_type == TYPE_INT || lhs_type == TYPE_FLOAT) && (rhs_type == TYPE_INT || rhs_type == TYPE_FLOAT);
         if (lhs_type != rhs_type && !is_numeric) {
             throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
         }
     }
 }
-
 
 Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
     Value val;
@@ -212,9 +207,20 @@ Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
 }
 
 CompOp Analyze::convert_sv_comp_op(ast::SvCompOp op) {
-    std::map<ast::SvCompOp, CompOp> m = {
-        {ast::SV_OP_EQ, OP_EQ}, {ast::SV_OP_NE, OP_NE}, {ast::SV_OP_LT, OP_LT},
-        {ast::SV_OP_GT, OP_GT}, {ast::SV_OP_LE, OP_LE}, {ast::SV_OP_GE, OP_GE},
-    };
-    return m.at(op);
+    switch (op) {
+        case ast::SV_OP_EQ:
+            return CompOp::OP_EQ;
+        case ast::SV_OP_NE:
+            return CompOp::OP_NE;
+        case ast::SV_OP_LT:
+            return CompOp::OP_LT;
+        case ast::SV_OP_GT:
+            return CompOp::OP_GT;
+        case ast::SV_OP_LE:
+            return CompOp::OP_LE;
+        case ast::SV_OP_GE:
+            return CompOp::OP_GE;
+        default:
+            throw InternalError("Unknown comparison operator in semantic analysis");
+    }
 }
