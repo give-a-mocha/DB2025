@@ -299,11 +299,12 @@ IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
         new_node->set_next_leaf(node->get_next_leaf());
         new_node->set_prev_leaf(node->get_page_no());
         node->set_next_leaf(new_node->get_page_no());
-        if(new_node->get_next_leaf() != INVALID_PAGE_ID){
+        if(file_hdr_->last_leaf_ == node->get_page_no()){
+            file_hdr_->last_leaf_ = new_node->get_page_no();
+        }else{
             auto next_node = fetch_node(new_node->get_next_leaf());
             next_node->set_prev_leaf(new_node->get_page_no());
             buffer_pool_manager_->unpin_page(next_node->get_page_id(), true);
-            
         }
     }
     // 计算分裂点
@@ -399,10 +400,7 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
     if (leaf_node->get_size() >= leaf_node->get_max_size()) {
         IxNodeHandle *new_node = split(leaf_node);
         insert_into_parent(leaf_node, new_node->get_key(0), new_node, transaction);
-        if(leaf_node->get_page_no() == file_hdr_->last_leaf_){
-            // 如果当前叶子节点是最右叶子节点，则需要更新file_hdr_.last_leaf
-            file_hdr_->last_leaf_ = new_node->get_page_no();
-        }
+        // 更新file_hdr_.last_leaf_，在split中处理了
         buffer_pool_manager_->unpin_page(new_node->get_page_id(), true);
     }
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
@@ -571,24 +569,20 @@ void IxIndexHandle::redistribute(IxNodeHandle *neighbor_node, IxNodeHandle *node
     if (index != parent->get_size() - 1 && parent->value_at(index + 1) == neighbor_node->get_page_no()) {
         // neighbor_node是node的后继结点
         // 将neighbor_node的第一个键值对移动到node的末尾
-        char *key = neighbor_node->get_key(0);
-        Rid *rid = neighbor_node->get_rid(0);
-        node->insert_pairs(node->get_size(), key, rid, 1); // 在node末尾插入
+        node->insert_pairs(node->get_size(), neighbor_node->get_key(0), neighbor_node->get_rid(0), 1); // 在node末尾插入
         maintain_child(node, node->get_size() - 1); // 更新node的孩子结点的父节点信息
         neighbor_node->erase_pair(0); // 删除neighbor_node的第一个键值对
         // 更新parent结点中的相关信息
-        parent->set_key(index + 1, key);
+        parent->set_key(index + 1, neighbor_node->get_key(0));
     } else {
         // neighbor_node是node的前驱结点
         // 将neighbor_node的最后一个键值对移动到node的开头
         int last_index = neighbor_node->get_size() - 1;
-        char *key = neighbor_node->get_key(last_index);
-        Rid *rid = neighbor_node->get_rid(last_index);
-        node->insert_pairs(0, key, rid, 1); // 在node开头插入
+        node->insert_pairs(0, neighbor_node->get_key(last_index), neighbor_node->get_rid(last_index), 1); // 在node开头插入
         maintain_child(node, 0); // 更新node的孩子结点的父节点信息
         neighbor_node->erase_pair(last_index); // 删除neighbor_node的最后一个键值对
         // 更新parent结点中的相关信息
-        parent->set_key(index, key);
+        parent->set_key(index, node->get_key(0));
     }
 }
 
