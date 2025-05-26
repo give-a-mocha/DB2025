@@ -20,57 +20,54 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "record_printer.h"
 
-const char *help_info = "Supported SQL syntax:\n"
-                   "  command ;\n"
-                   "command:\n"
-                   "  CREATE TABLE table_name (column_name type [, column_name type ...])\n"
-                   "  DROP TABLE table_name\n"
-                   "  CREATE INDEX table_name (column_name)\n"
-                   "  DROP INDEX table_name (column_name)\n"
-                   "  INSERT INTO table_name VALUES (value [, value ...])\n"
-                   "  DELETE FROM table_name [WHERE where_clause]\n"
-                   "  UPDATE table_name SET column_name = value [, column_name = value ...] [WHERE where_clause]\n"
-                   "  SELECT selector FROM table_name [WHERE where_clause]\n"
-                   "type:\n"
-                   "  {INT | FLOAT | CHAR(n)}\n"
-                   "where_clause:\n"
-                   "  condition [AND condition ...]\n"
-                   "condition:\n"
-                   "  column op {column | value}\n"
-                   "column:\n"
-                   "  [table_name.]column_name\n"
-                   "op:\n"
-                   "  {= | <> | < | > | <= | >=}\n"
-                   "selector:\n"
-                   "  {* | column [, column ...]}\n";
+const char *help_info =
+    "Supported SQL syntax:\n"
+    "  command ;\n"
+    "command:\n"
+    "  CREATE TABLE table_name (column_name type [, column_name type ...])\n"
+    "  DROP TABLE table_name\n"
+    "  CREATE INDEX table_name (column_name)\n"
+    "  DROP INDEX table_name (column_name)\n"
+    "  INSERT INTO table_name VALUES (value [, value ...])\n"
+    "  DELETE FROM table_name [WHERE where_clause]\n"
+    "  UPDATE table_name SET column_name = value [, column_name = value ...] [WHERE where_clause]\n"
+    "  SELECT selector FROM table_name [WHERE where_clause]\n"
+    "type:\n"
+    "  {INT | FLOAT | CHAR(n)}\n"
+    "where_clause:\n"
+    "  condition [AND condition ...]\n"
+    "condition:\n"
+    "  column op {column | value}\n"
+    "column:\n"
+    "  [table_name.]column_name\n"
+    "op:\n"
+    "  {= | <> | < | > | <= | >=}\n"
+    "selector:\n"
+    "  {* | column [, column ...]}\n";
 
 // 主要负责执行DDL语句
-void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context){
+void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
-        switch(x->tag) {
-            case T_CreateTable:
-            {
+        switch (x->tag) {
+            case T_CreateTable: {
                 sm_manager_->create_table(x->tab_name_, x->cols_, context);
                 break;
             }
-            case T_DropTable:
-            {
+            case T_DropTable: {
                 sm_manager_->drop_table(x->tab_name_, context);
                 break;
             }
-            case T_CreateIndex:
-            {
+            case T_CreateIndex: {
                 sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
-            case T_DropIndex:
-            {
+            case T_DropIndex: {
                 sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
             default:
                 throw InternalError("Unexpected field type");
-                break;  
+                break;
         }
     }
 }
@@ -78,15 +75,13 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context){
 // 执行help; show tables; desc table; begin; commit; abort;语句
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
-        switch(x->tag) {
-            case T_Help:
-            {
+        switch (x->tag) {
+            case T_Help: {
                 memcpy(context->data_send_ + *(context->offset_), help_info, strlen(help_info));
                 *(context->offset_) = strlen(help_info);
                 break;
             }
-            case T_ShowTable:
-            {
+            case T_ShowTable: {
                 sm_manager_->show_tables(context);
                 break;
             }
@@ -100,56 +95,51 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
                 sm_manager_->desc_table(x->tab_name_, context);
                 break;
             }
-            case T_Transaction_begin:
-            {
+            case T_Transaction_begin: {
                 // 显示开启一个事务
                 context->txn_->set_txn_mode(true);
                 break;
-            }  
-            case T_Transaction_commit:
-            {
+            }
+            case T_Transaction_commit: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->commit(context->txn_, context->log_mgr_);
                 break;
-            }    
-            case T_Transaction_rollback:
-            {
+            }
+            case T_Transaction_rollback: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context->txn_, context->log_mgr_);
                 break;
-            }    
-            case T_Transaction_abort:
-            {
+            }
+            case T_Transaction_abort: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context->txn_, context->log_mgr_);
                 break;
-            }     
+            }
             default:
                 throw InternalError("Unexpected field type");
-                break;                        
+                break;
         }
 
-    } else if(auto x = std::dynamic_pointer_cast<SetKnobPlan>(plan)) {
-        switch (x->set_knob_type_)
-        {
-        case ast::SetKnobType::EnableNestLoop: {
-            planner_->set_enable_nestedloop_join(x->bool_value_);
-            break;
-        }
-        case ast::SetKnobType::EnableSortMerge: {
-            planner_->set_enable_sortmerge_join(x->bool_value_);
-            break;
-        }
-        default: {
-            throw RMDBError("Not implemented!\n");
-            break;
-        }
+    } else if (auto x = std::dynamic_pointer_cast<SetKnobPlan>(plan)) {
+        switch (x->set_knob_type_) {
+            case ast::SetKnobType::EnableNestLoop: {
+                planner_->set_enable_nestedloop_join(x->bool_value_);
+                break;
+            }
+            case ast::SetKnobType::EnableSortMerge: {
+                planner_->set_enable_sortmerge_join(x->bool_value_);
+                break;
+            }
+            default: {
+                throw RMDBError("Not implemented!\n");
+                break;
+            }
         }
     }
 }
 
 // 执行select语句，select语句的输出除了需要返回客户端外，还需要写入output.txt文件中
-void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols, 
+void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
                             Context *context) {
     std::vector<std::string> captions;
     captions.reserve(sel_cols.size());
@@ -166,7 +156,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     std::fstream outfile;
     outfile.open("output.txt", std::ios::out | std::ios::app);
     outfile << "|";
-    for(int i = 0; i < captions.size(); ++i) {
+    for (std::size_t i = 0; i < captions.size(); ++i) {
         outfile << " " << captions[i] << " |";
     }
     outfile << "\n";
@@ -194,7 +184,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         rec_printer.print_record(columns, context);
         // print record into file
         outfile << "|";
-        for(int i = 0; i < columns.size(); ++i) {
+        for (std::size_t i = 0; i < columns.size(); ++i) {
             outfile << " " << columns[i] << " |";
         }
         outfile << "\n";
@@ -208,6 +198,4 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
 }
 
 // 执行DML语句
-void QlManager::run_dml(std::unique_ptr<AbstractExecutor> exec){
-    exec->Next();
-}
+void QlManager::run_dml(std::unique_ptr<AbstractExecutor> exec) { exec->Next(); }

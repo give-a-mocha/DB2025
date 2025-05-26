@@ -25,9 +25,8 @@ class DeleteExecutor : public AbstractExecutor {
     SmManager *sm_manager_;
 
    public:
-    DeleteExecutor(SmManager *sm_manager, const std::string &tab_name,
-                   std::vector<Condition> conds, std::vector<Rid> rids,
-                   Context *context) {
+    DeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
+                   std::vector<Rid> rids, Context *context) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         tab_ = sm_manager_->db_.get_table(tab_name);
@@ -37,18 +36,14 @@ class DeleteExecutor : public AbstractExecutor {
         context_ = context;
     }
 
-    void delete_index(RmRecord* rec, Rid rid_) {
+    void delete_index(RmRecord *rec, Rid rid_) {
         // 从索引中删除
         for (auto &index : tab_.indexes) {
-            auto ih = sm_manager_->ihs_
-                          .at(sm_manager_->get_ix_manager()->get_index_name(
-                              tab_name_, index.cols))
-                          .get();
+            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
             char *key = new char[index.col_tot_len];
             int offset = 0;
-            for (size_t i = 0; i < index.col_num; ++i) {
-                memcpy(key + offset, rec->data + index.cols[i].offset,
-                       index.cols[i].len);
+            for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
+                memcpy(key + offset, rec->data + index.cols[i].offset, index.cols[i].len);
                 offset += index.cols[i].len;
             }
             ih->delete_entry(key, context_->txn_);

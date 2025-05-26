@@ -70,7 +70,7 @@ class InsertExecutor : public AbstractExecutor {
                           .get();
             char *key = new char[index.col_tot_len];
             int offset = 0;
-            for (size_t i = 0; i < index.col_num; ++i) {
+            for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
                 memcpy(key + offset, rec.data + index.cols[i].offset,
                        index.cols[i].len);
                 offset += index.cols[i].len;
