@@ -21,12 +21,11 @@ class InsertExecutor : public AbstractExecutor {
     std::vector<Value> values_;  // 需要插入的数据
     RmFileHandle *fh_;           // 表的数据文件句柄
     std::string tab_name_;       // 表名称
-    Rid rid_;  // 插入的位置，由于系统默认插入时不指定位置，因此当前rid_在插入后才赋值
+    Rid rid_;                    // 插入的位置，由于系统默认插入时不指定位置，因此当前rid_在插入后才赋值
     SmManager *sm_manager_;
 
    public:
-    InsertExecutor(SmManager *sm_manager, const std::string &tab_name,
-                   std::vector<Value> values, Context *context) {
+    InsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context) {
         sm_manager_ = sm_manager;
         tab_ = sm_manager_->db_.get_table(tab_name);
         values_ = values;
@@ -51,8 +50,7 @@ class InsertExecutor : public AbstractExecutor {
                 } else if (col.type == ColType::TYPE_FLOAT && val.type == ColType::TYPE_INT) {
                     val.set_float(static_cast<float>(val.int_val));
                 } else {
-                    throw IncompatibleTypeError(coltype2str(col.type),
-                                                coltype2str(val.type));
+                    throw IncompatibleTypeError(coltype2str(col.type), coltype2str(val.type));
                 }
             }
             val.init_raw(col.len);
@@ -61,30 +59,52 @@ class InsertExecutor : public AbstractExecutor {
         // Insert into record file
         rid_ = fh_->insert_record(rec.data, context_);
 
+        if (!insert_index(rec)) {
+            // 插入索引失败，回滚记录文件
+            fh_->delete_record(rid_, context_);
+            throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
+        }
+
+        return nullptr;
+    }
+
+    bool insert_index(RmRecord &rec) {
+        int failed_pos = -1;  // 记录失败的索引位置
         // Insert into index
         for (size_t i = 0; i < tab_.indexes.size(); ++i) {
             auto &index = tab_.indexes[i];
-            auto ih = sm_manager_->ihs_
-                          .at(sm_manager_->get_ix_manager()->get_index_name(
-                              tab_name_, index.cols))
-                          .get();
+            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
             char *key = new char[index.col_tot_len];
             int offset = 0;
             for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
-                memcpy(key + offset, rec.data + index.cols[i].offset,
-                       index.cols[i].len);
+                memcpy(key + offset, rec.data + index.cols[i].offset, index.cols[i].len);
                 offset += index.cols[i].len;
             }
             auto res = ih->insert_entry(key, rid_, context_->txn_);
-            if(res == INVALID_PAGE_ID) {
-                // 插入索引失败，回滚插入的记录
-                fh_->delete_record(rid_, context_);
-                delete[] key;
+            delete[] key;
+            if (res == INVALID_PAGE_ID) {
+                // 插入索引失败，回滚
+                failed_pos = i;
                 break;
             }
-            delete[] key;  // 确保在成功插入索引后也删除key
         }
-        return nullptr;
+        if (failed_pos != -1) {
+            for (int i = 0; i < failed_pos; ++i) {
+                auto &index = tab_.indexes[i];
+                auto ih =
+                    sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
+                char *key = new char[index.col_tot_len];
+                int offset = 0;
+                for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+                    memcpy(key + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+                    offset += index.cols[j].len;
+                }
+                ih->delete_entry(key, context_->txn_);
+                delete[] key;
+            }
+            return false;
+        }
+        return true;
     }
     Rid &rid() override { return rid_; }
 
