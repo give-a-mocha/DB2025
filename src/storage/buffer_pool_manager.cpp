@@ -100,6 +100,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
             // 需要在replacer中固定该页
             replacer_->pin(frame_id);
         }
+        replacer_->pin(frame_id);  // 固定该页
         page->pin_count_++;
         return page;
     }
@@ -116,8 +117,8 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     disk_manager_->read_page(page_id.fd, page_id.page_no, page->data_,
                              PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
-    // 本来就是新页不在缓存中
-    // replacer_->pin(frame_id);
+    //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
+    replacer_->pin(frame_id);
     return page;
 }
 
@@ -233,8 +234,8 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
     page_id->page_no = disk_manager_->allocate_page(page_id->fd);
     update_page(page, *page_id, frame_id);
     page->pin_count_ = 1;  // 固定该页
-    // 本来就是新页不在缓存中
-    // replacer_->pin(frame_id);
+    //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
+    replacer_->pin(frame_id);
 
     return page;
 }
