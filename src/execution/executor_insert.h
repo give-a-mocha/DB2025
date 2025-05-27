@@ -75,7 +75,14 @@ class InsertExecutor : public AbstractExecutor {
                        index.cols[i].len);
                 offset += index.cols[i].len;
             }
-            ih->insert_entry(key, rid_, context_->txn_);
+            auto res = ih->insert_entry(key, rid_, context_->txn_);
+            if(res == INVALID_PAGE_ID) {
+                // 插入索引失败，回滚插入的记录
+                fh_->delete_record(rid_, context_);
+                delete[] key;
+                break;
+            }
+            delete[] key;  // 确保在成功插入索引后也删除key
         }
         return nullptr;
     }
