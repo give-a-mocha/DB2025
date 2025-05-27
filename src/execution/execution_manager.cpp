@@ -20,7 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "record_printer.h"
 
-const char *help_info =
+constexpr const char *help_info =
     "Supported SQL syntax:\n"
     "  command ;\n"
     "command:\n"
@@ -44,24 +44,25 @@ const char *help_info =
     "  {= | <> | < | > | <= | >=}\n"
     "selector:\n"
     "  {* | column [, column ...]}\n";
+constexpr int help_info_len = strlen(help_info);
 
 // 主要负责执行DDL语句
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
         switch (x->tag) {
-            case T_CreateTable: {
+            case PlanTag::T_CreateTable: {
                 sm_manager_->create_table(x->tab_name_, x->cols_, context);
                 break;
             }
-            case T_DropTable: {
+            case PlanTag::T_DropTable: {
                 sm_manager_->drop_table(x->tab_name_, context);
                 break;
             }
-            case T_CreateIndex: {
+            case PlanTag::T_CreateIndex: {
                 sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
-            case T_DropIndex: {
+            case PlanTag::T_DropIndex: {
                 sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
@@ -76,35 +77,39 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
         switch (x->tag) {
-            case T_Help: {
-                memcpy(context->data_send_ + *(context->offset_), help_info, strlen(help_info));
-                *(context->offset_) = strlen(help_info);
+            case PlanTag::T_Help: {
+                strcpy(context->data_send_ + *(context->offset_), help_info);
+                *(context->offset_) = help_info_len;
                 break;
             }
-            case T_ShowTable: {
+            case PlanTag::T_ShowTable: {
                 sm_manager_->show_tables(context);
                 break;
             }
-            case T_DescTable: {
+            case PlanTag::T_ShowIndex: {
+                sm_manager_->show_index(x->tab_name_, context);
+                break;
+            }
+            case PlanTag::T_DescTable: {
                 sm_manager_->desc_table(x->tab_name_, context);
                 break;
             }
-            case T_Transaction_begin: {
+            case PlanTag::T_Transaction_begin: {
                 // 显示开启一个事务
                 context->txn_->set_txn_mode(true);
                 break;
             }
-            case T_Transaction_commit: {
+            case PlanTag::T_Transaction_commit: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->commit(context->txn_, context->log_mgr_);
                 break;
             }
-            case T_Transaction_rollback: {
+            case PlanTag::T_Transaction_rollback: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context->txn_, context->log_mgr_);
                 break;
             }
-            case T_Transaction_abort: {
+            case PlanTag::T_Transaction_abort: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context->txn_, context->log_mgr_);
                 break;
@@ -164,11 +169,11 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         for (auto &col : executorTreeRoot->cols()) {
             std::string col_str;
             char *rec_buf = Tuple->data + col.offset;
-            if (col.type == TYPE_INT) {
+            if (col.type == ColType::TYPE_INT) {
                 col_str = std::to_string(*(int *)rec_buf);
-            } else if (col.type == TYPE_FLOAT) {
+            } else if (col.type == ColType::TYPE_FLOAT) {
                 col_str = std::to_string(*(float *)rec_buf);
-            } else if (col.type == TYPE_STRING) {
+            } else if (col.type == ColType::TYPE_STRING) {
                 col_str = std::string((char *)rec_buf, col.len);
                 col_str.resize(strlen(col_str.c_str()));
             }
@@ -178,8 +183,8 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         rec_printer.print_record(columns, context);
         // print record into file
         outfile << "|";
-        for (std::size_t i = 0; i < columns.size(); ++i) {
-            outfile << " " << columns[i] << " |";
+        for (const std::string &column : columns) {
+            outfile << " " << column << " |";
         }
         outfile << "\n";
         num_rec++;

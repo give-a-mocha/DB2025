@@ -39,30 +39,30 @@ struct Value {
     std::shared_ptr<RmRecord> raw;  // raw record buffer
 
     void set_int(int int_val_) {
-        type = TYPE_INT;
+        type = ColType::TYPE_INT;
         int_val = int_val_;
     }
 
     void set_float(float float_val_) {
-        type = TYPE_FLOAT;
+        type = ColType::TYPE_FLOAT;
         float_val = float_val_;
     }
 
     void set_str(std::string str_val_) {
-        type = TYPE_STRING;
+        type = ColType::TYPE_STRING;
         str_val = std::move(str_val_);
     }
 
     void init_raw(int len) {
         assert(raw == nullptr);
         raw = std::make_shared<RmRecord>(len);
-        if (type == TYPE_INT) {
+        if (type == ColType::TYPE_INT) {
             assert(len == sizeof(int));
             *(int *)(raw->data) = int_val;
-        } else if (type == TYPE_FLOAT) {
+        } else if (type == ColType::TYPE_FLOAT) {
             assert(len == sizeof(float));
             *(float *)(raw->data) = float_val;
-        } else if (type == TYPE_STRING) {
+        } else if (type == ColType::TYPE_STRING) {
             if (len < (int)str_val.size()) {
                 throw StringOverflowError();
             }
@@ -72,7 +72,7 @@ struct Value {
     }
 };
 
-enum CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
+enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
 
 struct Condition {
     TabCol lhs_col;   // left-hand side column

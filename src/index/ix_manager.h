@@ -26,6 +26,9 @@ class IxManager {
     IxManager(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager)
         : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager) {}
 
+    /*
+    * @description: 获取索引文件名通过表名和索引列
+    */
     std::string get_index_name(const std::string &filename, const std::vector<std::string>& index_cols) {
         std::string index_name = filename;
         for(size_t i = 0; i < index_cols.size(); ++i) 
@@ -34,7 +37,9 @@ class IxManager {
 
         return index_name;
     }
-
+    /*
+    * @description: 获取索引文件名通过表名和索引列元数据
+    */
     std::string get_index_name(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         std::string index_name = filename;
         for(size_t i = 0; i < index_cols.size(); ++i) 
@@ -44,26 +49,37 @@ class IxManager {
         return index_name;
     }
 
+    /*
+    * @description: 检查索引文件是否存在通过表名和索引列元数据
+    */
     bool exists(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
         return disk_manager_->is_file(ix_name);
     }
 
+    /*
+    * @description: 检查索引文件是否存在通过表名和索引列
+    */
     bool exists(const std::string &filename, const std::vector<std::string>& index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
         return disk_manager_->is_file(ix_name);
     }
 
+    /*
+    * @description: 创建索引文件
+    */
     void create_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
-        // Create index file
+        // 创建索引文件
         disk_manager_->create_file(ix_name);
-        // Open index file
+        // 打开索引文件
         int fd = disk_manager_->open_file(ix_name);
 
-        // Create file header and write to file
-        // Theoretically we have: |page_hdr| + (|attr| + |rid|) * n <= PAGE_SIZE
-        // but we reserve one slot for convenient inserting and deleting, i.e.
+        // 创建文件头并写入文件
+        // 理论上我们有：|页面头部大小| + (|属性总长度| + |记录ID大小|) * n <= 页面大小
+        // |page_hdr| + (|attr| + |rid|) * n <= PAGE_SIZE
+        // 但是我们额外保留一个槽位以便于插入和删除操作，即：
+        // |页面头部大小| + (|属性总长度| + |记录ID大小|) * (n + 1) <= 页面大小
         // |page_hdr| + (|attr| + |rid|) * (n + 1) <= PAGE_SIZE
         int col_tot_len = 0;
         int col_num = index_cols.size();
@@ -83,10 +99,9 @@ class IxManager {
                                 col_num, col_tot_len, btree_order, (btree_order + 1) * col_tot_len,
                                 IX_INIT_ROOT_PAGE, IX_INIT_ROOT_PAGE);
         for(int i = 0; i < col_num; ++i) {
-            fhdr->col_types_.push_back(index_cols[i].type);
-            fhdr->col_lens_.push_back(index_cols[i].len);
+            fhdr->col_types_[i] = (index_cols[i].type);
+            fhdr->col_lens_[i] = (index_cols[i].len);
         }
-        fhdr->update_tot_len();
         
         char* data = new char[fhdr->tot_len_];
         fhdr->serialize(data);
@@ -142,9 +157,13 @@ class IxManager {
         std::string ix_name = get_index_name(filename, index_cols);
         disk_manager_->destroy_file(ix_name);
     }
+    void destroy_index(const std::string &index_name) {
+        disk_manager_->destroy_file(index_name);
+    }
 
     // 注意这里打开文件，创建并返回了index file handle的指针
     std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
+        
         std::string ix_name = get_index_name(filename, index_cols);
         int fd = disk_manager_->open_file(ix_name);
         return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
@@ -162,6 +181,12 @@ class IxManager {
         disk_manager_->write_page(ih->fd_, IX_FILE_HDR_PAGE, data, ih->file_hdr_->tot_len_);
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
         buffer_pool_manager_->flush_all_pages(ih->fd_);
+        disk_manager_->close_file(ih->fd_);
+        delete[] data;
+    }
+
+    void drop_index(const IxIndexHandle *ih) {
+        buffer_pool_manager_->delete_all_pages(ih->fd_);
         disk_manager_->close_file(ih->fd_);
     }
 };

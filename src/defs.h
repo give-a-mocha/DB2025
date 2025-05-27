@@ -39,17 +39,21 @@ struct Rid {
     friend bool operator!=(const Rid &x, const Rid &y) { return !(x == y); }
 };
 
-enum ColType {
+enum class ColType {
     TYPE_INT, TYPE_FLOAT, TYPE_STRING
 };
 
 inline std::string coltype2str(ColType type) {
-    std::map<ColType, std::string> m = {
-            {TYPE_INT,    "INT"},
-            {TYPE_FLOAT,  "FLOAT"},
-            {TYPE_STRING, "STRING"}
-    };
-    return m.at(type);
+    switch(type) {
+        case ColType::TYPE_INT:
+            return "INT";
+        case ColType::TYPE_FLOAT:
+            return "FLOAT";
+        case ColType::TYPE_STRING:
+            return "STRING";
+        default:
+            throw std::runtime_error("Unknown column type");
+    }
 }
 
 class RecScan {

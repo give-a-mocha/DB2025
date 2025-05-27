@@ -31,7 +31,7 @@ class IndexScanExecutor : public AbstractExecutor {
 
     Rid rid_;
     std::unique_ptr<RecScan> scan_;
-
+    std::string index_name_;  // 索引名称
     SmManager *sm_manager_;
 
    public:
@@ -48,8 +48,30 @@ class IndexScanExecutor : public AbstractExecutor {
         fh_ = sm_manager_->fhs_.at(tab_name_).get();
         cols_ = tab_.cols;
         len_ = cols_.back().offset + cols_.back().len;
-        std::map<CompOp, CompOp> swap_op = {
-            {OP_EQ, OP_EQ}, {OP_NE, OP_NE}, {OP_LT, OP_GT}, {OP_GT, OP_LT}, {OP_LE, OP_GE}, {OP_GE, OP_LE},
+        index_name_ = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_col_names_);
+        if (!sm_manager->ihs_.count(index_name_)) {
+            // 如果没有打开则打开文件
+            sm_manager->ihs_.emplace(index_name_,
+                                     sm_manager_->get_ix_manager()->open_index(tab_name_, index_col_names_));
+        }
+
+        std::function<CompOp(CompOp)> swap_op = [](CompOp op) {
+            switch (op) {
+                case CompOp::OP_EQ:
+                    return CompOp::OP_EQ;
+                case CompOp::OP_NE:
+                    return CompOp::OP_NE;
+                case CompOp::OP_LT:
+                    return CompOp::OP_GT;
+                case CompOp::OP_GT:
+                    return CompOp::OP_LT;
+                case CompOp::OP_LE:
+                    return CompOp::OP_GE;
+                case CompOp::OP_GE:
+                    return CompOp::OP_LE;
+                default:
+                    throw InternalError("Unexpected comparison operator");
+            }
         };
 
         for (auto &cond : conds_) {
@@ -58,7 +80,7 @@ class IndexScanExecutor : public AbstractExecutor {
                 assert(!cond.is_rhs_val && cond.rhs_col.tab_name == tab_name_);
                 // swap lhs and rhs
                 std::swap(cond.lhs_col, cond.rhs_col);
-                cond.op = swap_op.at(cond.op);
+                cond.op = swap_op(cond.op);
             }
         }
         fed_conds_ = conds_;
@@ -66,76 +88,86 @@ class IndexScanExecutor : public AbstractExecutor {
 
     void beginTuple() override {
         // 构建索引查询范围
-        auto ih =
-            sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_col_names_)).get();
-
+        auto ih = sm_manager_->ihs_.at(index_name_).get();
         // 从条件中提取索引键的范围
-        char *lower_key = new char[index_meta_.col_tot_len];
-        char *upper_key = new char[index_meta_.col_tot_len];
-        bool has_lower = false, has_upper = false;
+        RmRecord lower_record(index_meta_.col_tot_len), upper_record(index_meta_.col_tot_len);
+        off_t offset = 0;
 
-        // 构建查询键值
-        for (const auto &cond : fed_conds_) {
-            if (cond.is_rhs_val) {
-                // 找到索引列对应的条件
-                for (size_t i = 0; i < static_cast<size_t>(index_meta_.col_num); ++i) {
-                    if (index_meta_.cols[i].name == cond.lhs_col.col_name) {
-                        int offset = 0;
-                        for (size_t j = 0; j < i; ++j) {
-                            offset += index_meta_.cols[j].len;
+        for (const auto &col : index_meta_.cols) {
+            Value max_val, min_val;
+            switch (col.type) {
+                case ColType::TYPE_INT: {
+                    max_val.set_int(std::numeric_limits<int>::max());
+                    min_val.set_int(std::numeric_limits<int>::min());
+                    max_val.init_raw(sizeof(int)), min_val.init_raw(sizeof(int));
+                    break;
+                }
+                case ColType::TYPE_FLOAT: {
+                    max_val.set_float(std::numeric_limits<float>::max());
+                    min_val.set_float(std::numeric_limits<float>::lowest());
+                    max_val.init_raw(sizeof(float)), min_val.init_raw(sizeof(float));
+                    break;
+                }
+                case ColType::TYPE_STRING: {
+                    max_val.set_str(std::string(col.len, 255));
+                    min_val.set_str(std::string(col.len, 0));
+                    max_val.init_raw(col.len), min_val.init_raw(col.len);
+                    break;
+                }
+                default:
+                    throw InternalError("Unsupported column type in index scan");
+            }
+            for (const auto &cond : fed_conds_) {
+                if (cond.lhs_col.col_name == col.name && cond.is_rhs_val) {
+                    switch (cond.op) {
+                        case CompOp::OP_EQ: {
+                            if (compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
+                                min_val = cond.rhs_val;
+                            }
+                            if (compare(cond.rhs_val, max_val, CompOp::OP_LT)) {
+                                max_val = cond.rhs_val;
+                            }
+                            break;
                         }
 
-                        // 根据操作符设置范围
-                        switch (cond.op) {
-                            case OP_EQ:
-                                memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
-                                memcpy(upper_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
-                                has_lower = has_upper = true;
-                                break;
-                            case OP_LT:
-                            case OP_LE:
-                                memcpy(upper_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
-                                has_upper = true;
-                                break;
-                            case OP_GT:
-                            case OP_GE:
-                                memcpy(lower_key + offset, cond.rhs_val.raw->data, index_meta_.cols[i].len);
-                                has_lower = true;
-                                break;
-                            default:
-                                break;
+                        case CompOp::OP_LT:
+                        case CompOp::OP_LE: {
+                            if (compare(cond.rhs_val, max_val, CompOp::OP_LT)) {
+                                max_val = cond.rhs_val;
+                            }
+                            break;
                         }
-                        break;
+
+                        case CompOp::OP_GT:
+                        case CompOp::OP_GE: {
+                            if (compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
+                                min_val = cond.rhs_val;
+                            }
+                            break;
+                        }
+
+                        case CompOp::OP_NE: {
+                            // 对于不等于的情况，忽略
+                            // 这里不处理，因为索引扫描不支持不等于条件
+                            break;
+                        }
+
+                        default:
+                            throw InternalError("Unexpected comparison operator in index scan condition at " +
+                                                getType());
                     }
                 }
             }
+            memcpy(lower_record.data + offset, min_val.raw->data, col.len);
+            memcpy(upper_record.data + offset, max_val.raw->data, col.len);
+            offset += col.len;
         }
 
-        // 如果没有找到合适的范围，进行全表扫描
-        Iid lower_iid, upper_iid;
-        if (has_lower || has_upper) {
-            if (has_lower) {
-                lower_iid = ih->lower_bound(lower_key);
-            } else {
-                lower_iid = ih->leaf_begin();
-            }
-            if (has_upper) {
-                upper_iid = ih->upper_bound(upper_key);
-            } else {
-                upper_iid = ih->leaf_end();
-            }
-        } else {
-            lower_iid = ih->leaf_begin();
-            upper_iid = ih->leaf_end();
-        }
-
+        auto lower_iid = ih->lower_bound(lower_record.data);
+        auto upper_iid = ih->upper_bound(upper_record.data);
         scan_ = std::make_unique<IxScan>(ih, lower_iid, upper_iid, sm_manager_->get_bpm());
-
-        delete[] lower_key;
-        delete[] upper_key;
-
         // 移动到第一个满足条件的记录
-        while (!scan_->is_end()) {
+        while (!is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec.get())) {
@@ -179,4 +211,43 @@ class IndexScanExecutor : public AbstractExecutor {
     Rid &rid() override { return rid_; }
 
     std::string getType() override { return "IndexScanExecutor"; }
+
+   private:
+    bool compare(Value lhs, Value rhs, CompOp op) {
+        bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
+        if (lhs.type != rhs.type && !is_numeric) {
+            throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
+        }
+        int cmp;
+        if (is_numeric) {
+            // 整数比较
+            if (lhs.type == ColType::TYPE_INT && rhs.type == ColType::TYPE_INT) {
+                cmp = (lhs.int_val < rhs.int_val) ? -1 : (lhs.int_val > rhs.int_val) ? 1 : 0;
+            } else {
+                // 先转化成浮点数
+                convert(lhs, rhs);
+                // 浮点数比较
+                cmp = (lhs.float_val < rhs.float_val) ? -1 : (lhs.float_val > rhs.float_val) ? 1 : 0;
+            }
+        } else if (lhs.type == ColType::TYPE_STRING) {
+            size_t len = std::max(lhs.str_val.size(), rhs.str_val.size());
+            cmp = strncmp(lhs.str_val.c_str(), rhs.str_val.c_str(), len);
+        }
+        switch (op) {
+            case CompOp::OP_EQ:
+                return cmp == 0;
+            case CompOp::OP_NE:
+                return cmp != 0;
+            case CompOp::OP_LT:
+                return cmp < 0;
+            case CompOp::OP_GT:
+                return cmp > 0;
+            case CompOp::OP_LE:
+                return cmp <= 0;
+            case CompOp::OP_GE:
+                return cmp >= 0;
+            default:
+                throw InternalError("compare::Unexpected op type at " + getType());
+        }
+    }
 };

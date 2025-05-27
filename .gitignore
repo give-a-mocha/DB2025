@@ -40,3 +40,10 @@ logs/
 *.tmp
 *.swp
 *~
+
+runS.sh
+runC.sh
+run.sh
+execution_test_db/
+index_test_db/
+transaction_test_db/

@@ -9,6 +9,9 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #pragma once
+#include <memory>
+#include <vector>
+
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
@@ -42,69 +45,131 @@ class UpdateExecutor : public AbstractExecutor {
         // 从索引中删除
         for (auto &index : tab_.indexes) {
             auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
-            char *key = new char[index.col_tot_len];
+            auto key = std::make_unique<char[]>(index.col_tot_len);
             int offset = 0;
             for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
-                memcpy(key + offset, rec->data + index.cols[i].offset, index.cols[i].len);
+                memcpy(key.get() + offset, rec->data + index.cols[i].offset, index.cols[i].len);
                 offset += index.cols[i].len;
             }
-            ih->delete_entry(key, context_->txn_);
-            delete[] key;
+            ih->delete_entry(key.get(), context_->txn_);
         }
     }
 
-    void insert_index(RmRecord *rec, Rid rid_) {
-        // 插入索引
+    // 重新插入索引的辅助方法（用于回滚）
+    void reinsert_index(RmRecord *rec, Rid rid_) {
+        // 重新插入索引（用于回滚）
         for (auto &index : tab_.indexes) {
-            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
-            char *key = new char[index.col_tot_len];
+            auto ix_name = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols);
+            auto ih = sm_manager_->ihs_.at(ix_name).get();
+            auto key = std::make_unique<char[]>(index.col_tot_len);
             int offset = 0;
-            for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
-                memcpy(key + offset, rec->data + index.cols[i].offset, index.cols[i].len);
-                offset += index.cols[i].len;
+            for (int j = 0; j < index.col_num; ++j) {
+                memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
+                offset += index.cols[j].len;
             }
-            ih->insert_entry(key, rid_, context_->txn_);
-            delete[] key;
+            auto result = ih->insert_entry(key.get(), rid_, context_->txn_);
+            if (result == INVALID_PAGE_ID) {
+                throw RMDBError("Failed to reinsert index for " + tab_name_ + " at " + getType());
+            }
         }
+    }
+
+    bool insert_index(RmRecord *rec, Rid rid_) {
+        std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
+        inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
+
+        // 插入索引
+        for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+            auto &index = tab_.indexes[i];
+            auto ix_name = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols);
+            auto ih = sm_manager_->ihs_.at(ix_name).get();
+            auto key = std::make_unique<char[]>(index.col_tot_len);
+            int offset = 0;
+            for (int j = 0; j < index.col_num; ++j) {
+                memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
+                offset += index.cols[j].len;
+            }
+
+            auto result = ih->insert_entry(key.get(), rid_, context_->txn_);
+            if (result == INVALID_PAGE_ID) {
+                // 回滚已插入的索引
+                for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
+                    auto &rollback_index = tab_.indexes[rollback_i];
+                    auto rollback_ix_name =
+                        sm_manager_->get_ix_manager()->get_index_name(tab_name_, rollback_index.cols);
+                    auto rollback_ih = sm_manager_->ihs_.at(rollback_ix_name).get();
+                    rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
+                }
+                return false;
+            }
+            inserted_keys.emplace_back(std::move(key));
+        }
+        return true;
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        for (auto &rid : rids_) {
+        std::vector<std::unique_ptr<RmRecord>> old_records;  // 保存旧记录用于回滚
+        std::vector<std::unique_ptr<RmRecord>> new_records;  // 保存新记录
+        old_records.reserve(rids_.size());
+        new_records.reserve(rids_.size());
+
+        // 第一阶段：准备所有新记录
+        for (size_t i = 0; i < rids_.size(); ++i) {
+            auto &rid = rids_[i];
             // 获取旧记录
             auto old_rec = fh_->get_record(rid, context_);
             auto new_rec = fh_->get_record(rid, context_);
-
-            // 更新索引：先删除旧的索引项
-            delete_index(old_rec.get(), rid);
 
             for (const auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
                 // 一定要拷贝
                 auto value = set_clause.rhs;
-                value.raw = nullptr;
+                value.raw.reset();
                 if (col->type != set_clause.rhs.type) {
                     // 类型不匹配，值类型尝试转换为列类型
-                    if (col->type == TYPE_INT && value.type == TYPE_FLOAT) {
+                    if (col->type == ColType::TYPE_INT && value.type == ColType::TYPE_FLOAT) {
                         value.set_int(static_cast<int>(value.float_val));
-                    } else if (col->type == TYPE_FLOAT && value.type == TYPE_INT) {
+                    } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
                         value.set_float(static_cast<float>(value.int_val));
                     } else {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }
-
                 // 设置新记录的对应列
                 value.init_raw(col->len);
-
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            // 插入新的索引项
-            insert_index(new_rec.get(), rid);
-
-            // 更新记录
-            fh_->update_record(rid, new_rec->data, context_);
+            old_records.emplace_back(std::move(old_rec));
+            new_records.emplace_back(std::move(new_rec));
         }
+
+        // 第二阶段：删除所有旧索引
+        for (size_t i = 0; i < rids_.size(); ++i) {
+            delete_index(old_records[i].get(), rids_[i]);
+        }
+
+        // 第三阶段：插入所有新索引
+        for (size_t i = 0; i < rids_.size(); ++i) {
+            if (!insert_index(new_records[i].get(), rids_[i])) {
+                // 插入新索引失败
+                // 1. 回滚 (删除) 所有在此次更新中已成功插入的新索引 (从 0 到 i-1)
+                for (size_t k = 0; k < i; ++k) {
+                    delete_index(new_records[k].get(), rids_[k]);
+                }
+                // 2. 恢复 (重新插入) 所有在第二阶段删除的旧索引
+                for (size_t j = 0; j < rids_.size(); ++j) {
+                    reinsert_index(old_records[j].get(), rids_[j]);
+                }
+                throw RMDBError("Failed to insert new index, rolled back all changes at " + getType());
+            }
+        }
+
+        // 第四阶段：更新所有记录
+        for (size_t i = 0; i < rids_.size(); ++i) {
+            fh_->update_record(rids_[i], new_records[i]->data, context_);
+        }
+
         return nullptr;
     }
 

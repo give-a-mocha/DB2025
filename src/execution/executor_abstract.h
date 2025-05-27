@@ -60,25 +60,27 @@ class AbstractExecutor {
     }
 
     // 判断是否为数值类型
-    bool is_numeric_type(ColType type) { return type == TYPE_INT || type == TYPE_FLOAT; }
+    bool is_numeric_type(ColType type) { return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT; }
 
     Value get_value(ColType p, const char *a) {
         Value res;
         switch (p) {
-            case TYPE_INT:
+            case ColType::TYPE_INT: {
                 int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
                 res.set_int(ia);
                 break;
+            }
 
-            case TYPE_FLOAT:
+            case ColType::TYPE_FLOAT: {
                 float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
                 res.set_float(fa);
                 break;
+            }
 
-            case TYPE_STRING:
-            default:
+            case ColType::TYPE_STRING: {
                 // 需要手动处理string类型的获取
                 throw InternalError("get_value::Unexpected string value type at " + getType());
+            }
         }
         return res;
     }
@@ -87,18 +89,13 @@ class AbstractExecutor {
         // 数值类型的转化(int, float)
         // int -> float
         if (a.type == b.type) return;
-        if (a.type == TYPE_FLOAT) {
-            if (b.type == TYPE_INT) {
-                b.set_float(static_cast<float>(b.int_val));
-                return;
-            }
-        } else if (a.type == TYPE_INT) {
-            if (b.type == TYPE_FLOAT) {
-                a.set_float(static_cast<float>(a.int_val));
-                return;
-            }
+        if (b.type == ColType::TYPE_INT) {
+            b.set_float(static_cast<float>(b.int_val));
+            return;
+        } else {
+            a.set_float(static_cast<float>(a.int_val));
+            return;
         }
-        throw InternalError("convert::Unexpected value type at" + getType());
     }
 
     /**
@@ -145,7 +142,7 @@ class AbstractExecutor {
             Value lhs_val = get_value(lhs_col->type, lhs_data);
             Value rhs_val = get_value(rhs_type, rhs_data);
             // 整数比较
-            if (lhs_col->type == TYPE_INT && rhs_type == TYPE_INT) {
+            if (lhs_col->type == ColType::TYPE_INT && rhs_type == ColType::TYPE_INT) {
                 cmp = (lhs_val.int_val < rhs_val.int_val) ? -1 : (lhs_val.int_val > rhs_val.int_val) ? 1 : 0;
             } else {
                 // 先转化成浮点数
@@ -153,38 +150,23 @@ class AbstractExecutor {
                 // 浮点数比较
                 cmp = (lhs_val.float_val < rhs_val.float_val) ? -1 : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
             }
-        } else if (lhs_col->type == TYPE_STRING) {
-            // 使用 string_view 进行更安全的字符串比较
-            // 先找到实际的字符串长度（去除尾部空字符）
-            size_t lhs_actual_len = std::min(static_cast<size_t>(lhs_col->len), std::strlen(lhs_data));
-            size_t rhs_actual_len = std::min(static_cast<size_t>(rhs_len), std::strlen(rhs_data));
-
-            // 创建 string_view 进行比较，避免不必要的拷贝
-            std::string_view lhs_view(lhs_data, lhs_actual_len);
-            std::string_view rhs_view(rhs_data, rhs_actual_len);
-
-            // 使用 string_view 比较
-            if (lhs_view < rhs_view) {
-                cmp = -1;
-            } else if (lhs_view > rhs_view) {
-                cmp = 1;
-            } else {
-                cmp = 0;
-            }
+        } else if (lhs_col->type == ColType::TYPE_STRING) {
+            size_t len = std::max(lhs_col->len, rhs_len);
+            cmp = strncmp(lhs_data, rhs_data, len);
         }
 
         switch (cond.op) {
-            case OP_EQ:
+            case CompOp::OP_EQ:
                 return cmp == 0;
-            case OP_NE:
+            case CompOp::OP_NE:
                 return cmp != 0;
-            case OP_LT:
+            case CompOp::OP_LT:
                 return cmp < 0;
-            case OP_GT:
+            case CompOp::OP_GT:
                 return cmp > 0;
-            case OP_LE:
+            case CompOp::OP_LE:
                 return cmp <= 0;
-            case OP_GE:
+            case CompOp::OP_GE:
                 return cmp >= 0;
             default:
                 throw InternalError("eval_cond::Unexpected op type at " + getType());
