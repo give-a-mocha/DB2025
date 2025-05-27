@@ -19,7 +19,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "parser/parser.h"
 
-typedef enum PlanTag{
+enum class PlanTag{
     T_Invalid = 1,
     T_Help,
     T_ShowTable,
@@ -44,7 +44,7 @@ typedef enum PlanTag{
     T_SortMerge,    // sort merge join
     T_Sort,
     T_Projection
-} PlanTag;
+};
 
 // 查询执行计划
 class Plan{
@@ -178,7 +178,7 @@ public:
     ast::SetKnobType set_knob_type_;
     bool bool_value_;
     SetKnobPlan(ast::SetKnobType knob_type, bool bool_value) {
-        Plan::tag = T_SetKnob;
+        Plan::tag = PlanTag::T_SetKnob;
         set_knob_type_ = knob_type;
         bool_value_ = bool_value;
     }

@@ -49,19 +49,19 @@ const char *help_info =
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
         switch (x->tag) {
-            case T_CreateTable: {
+            case PlanTag::T_CreateTable: {
                 sm_manager_->create_table(x->tab_name_, x->cols_, context);
                 break;
             }
-            case T_DropTable: {
+            case PlanTag::T_DropTable: {
                 sm_manager_->drop_table(x->tab_name_, context);
                 break;
             }
-            case T_CreateIndex: {
+            case PlanTag::T_CreateIndex: {
                 sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
-            case T_DropIndex: {
+            case PlanTag::T_DropIndex: {
                 sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
@@ -76,39 +76,39 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
         switch (x->tag) {
-            case T_Help: {
+            case PlanTag::T_Help: {
                 memcpy(context->data_send_ + *(context->offset_), help_info, strlen(help_info));
                 *(context->offset_) = strlen(help_info);
                 break;
             }
-            case T_ShowTable: {
+            case PlanTag::T_ShowTable: {
                 sm_manager_->show_tables(context);
                 break;
             }
-            case T_ShowIndex: {
+            case PlanTag::T_ShowIndex: {
                 sm_manager_->show_index(x->tab_name_, context);
                 break;
             }
-            case T_DescTable: {
+            case PlanTag::T_DescTable: {
                 sm_manager_->desc_table(x->tab_name_, context);
                 break;
             }
-            case T_Transaction_begin: {
+            case PlanTag::T_Transaction_begin: {
                 // 显示开启一个事务
                 context->txn_->set_txn_mode(true);
                 break;
             }
-            case T_Transaction_commit: {
+            case PlanTag::T_Transaction_commit: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->commit(context->txn_, context->log_mgr_);
                 break;
             }
-            case T_Transaction_rollback: {
+            case PlanTag::T_Transaction_rollback: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context->txn_, context->log_mgr_);
                 break;
             }
-            case T_Transaction_abort: {
+            case PlanTag::T_Transaction_abort: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context->txn_, context->log_mgr_);
                 break;
