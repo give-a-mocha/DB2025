@@ -56,6 +56,7 @@ class UpdateExecutor : public AbstractExecutor {
                 return false;  // 更新索引失败
             }
         }
+        return true;  // 更新索引成功
     }
 
 
