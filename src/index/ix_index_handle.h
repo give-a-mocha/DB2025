@@ -226,10 +226,6 @@ class IxIndexHandle {
     // 插入操作
     // 向B+树中插入一个键值对 (key, value)
     page_id_t insert_entry(const char *key, const Rid &value, Transaction *transaction);
-    
-    // 更新操作
-    // 向B+树更新一个键值对 (key, value)
-    bool update_entry(const char *key, const Rid &value, Transaction *transaction);
 
     // 分裂一个已满的节点 (node)，返回新创建的兄弟节点句柄
     IxNodeHandle *split(IxNodeHandle *node);
