@@ -454,13 +454,13 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 
                 // 根据类型设置正确的长度
                 switch (col_type) {
-                    case TYPE_INT:
+                    case ColType::TYPE_INT:
                         col_len = sizeof(int);
                         break;
-                    case TYPE_FLOAT:
+                    case ColType::TYPE_FLOAT:
                         col_len = sizeof(float);
                         break;
-                    case TYPE_STRING:
+                    case ColType::TYPE_STRING:
                         col_len = sv_col_def->type_len->len;
                         break;
                     default:

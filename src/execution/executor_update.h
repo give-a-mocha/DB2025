@@ -84,9 +84,9 @@ class UpdateExecutor : public AbstractExecutor {
                 value.raw = nullptr;
                 if (col->type != set_clause.rhs.type) {
                     // 类型不匹配，值类型尝试转换为列类型
-                    if (col->type == TYPE_INT && value.type == TYPE_FLOAT) {
+                    if (col->type == ColType::TYPE_INT && value.type == ColType::TYPE_FLOAT) {
                         value.set_int(static_cast<int>(value.float_val));
-                    } else if (col->type == TYPE_FLOAT && value.type == TYPE_INT) {
+                    } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
                         value.set_float(static_cast<float>(value.int_val));
                     } else {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));

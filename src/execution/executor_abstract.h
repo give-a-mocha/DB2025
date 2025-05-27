@@ -60,24 +60,24 @@ class AbstractExecutor {
     }
 
     // 判断是否为数值类型
-    bool is_numeric_type(ColType type) { return type == TYPE_INT || type == TYPE_FLOAT; }
+    bool is_numeric_type(ColType type) { return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT; }
 
     Value get_value(ColType p, const char *a) {
         Value res;
         switch (p) {
-            case TYPE_INT: {
+            case ColType::TYPE_INT: {
                 int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
                 res.set_int(ia);
                 break;
             }
 
-            case TYPE_FLOAT: {
+            case ColType::TYPE_FLOAT: {
                 float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
                 res.set_float(fa);
                 break;
             }
 
-            case TYPE_STRING: {
+            case ColType::TYPE_STRING: {
                 // 需要手动处理string类型的获取
                 throw InternalError("get_value::Unexpected string value type at " + getType());
             }
@@ -89,7 +89,7 @@ class AbstractExecutor {
         // 数值类型的转化(int, float)
         // int -> float
         if (a.type == b.type) return;
-        if (b.type == TYPE_INT) {
+        if (b.type == ColType::TYPE_INT) {
             b.set_float(static_cast<float>(b.int_val));
             return;
         } else {
@@ -142,7 +142,7 @@ class AbstractExecutor {
             Value lhs_val = get_value(lhs_col->type, lhs_data);
             Value rhs_val = get_value(rhs_type, rhs_data);
             // 整数比较
-            if (lhs_col->type == TYPE_INT && rhs_type == TYPE_INT) {
+            if (lhs_col->type == ColType::TYPE_INT && rhs_type == ColType::TYPE_INT) {
                 cmp = (lhs_val.int_val < rhs_val.int_val) ? -1 : (lhs_val.int_val > rhs_val.int_val) ? 1 : 0;
             } else {
                 // 先转化成浮点数
@@ -150,7 +150,7 @@ class AbstractExecutor {
                 // 浮点数比较
                 cmp = (lhs_val.float_val < rhs_val.float_val) ? -1 : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
             }
-        } else if (lhs_col->type == TYPE_STRING) {
+        } else if (lhs_col->type == ColType::TYPE_STRING) {
             size_t len = std::max(lhs_col->len, rhs_len);
             cmp = strncmp(lhs_data, rhs_data, len);
         }

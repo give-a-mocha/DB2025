@@ -46,9 +46,9 @@ class InsertExecutor : public AbstractExecutor {
             auto &val = values_[i];
             if (col.type != val.type) {
                 // 类型不匹配，值类型尝试转换为列类型
-                if (col.type == TYPE_INT && val.type == TYPE_FLOAT) {
+                if (col.type == ColType::TYPE_INT && val.type == ColType::TYPE_FLOAT) {
                     val.set_int(static_cast<int>(val.float_val));
-                } else if (col.type == TYPE_FLOAT && val.type == TYPE_INT) {
+                } else if (col.type == ColType::TYPE_FLOAT && val.type == ColType::TYPE_INT) {
                     val.set_float(static_cast<float>(val.int_val));
                 } else {
                     throw IncompatibleTypeError(coltype2str(col.type),

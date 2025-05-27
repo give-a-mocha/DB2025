@@ -78,8 +78,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
             auto col = tab.get_col(set_clause.lhs.col_name);
             // Allow numeric type assignment (INT vs FLOAT)
-            bool is_numeric = (col->type == TYPE_INT || col->type == TYPE_FLOAT) &&
-                              (set_clause.rhs.type == TYPE_INT || set_clause.rhs.type == TYPE_FLOAT);
+            bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
+                              (set_clause.rhs.type == ColType::TYPE_INT || set_clause.rhs.type == ColType::TYPE_FLOAT);
             if (col->type != set_clause.rhs.type && !is_numeric) {
                 throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs.type));
             }
@@ -185,7 +185,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         }
         // Allow numeric type comparison (INT vs FLOAT)
         bool is_numeric =
-            (lhs_type == TYPE_INT || lhs_type == TYPE_FLOAT) && (rhs_type == TYPE_INT || rhs_type == TYPE_FLOAT);
+            (lhs_type == ColType::TYPE_INT || lhs_type == ColType::TYPE_FLOAT) && (rhs_type == ColType::TYPE_INT || rhs_type == ColType::TYPE_FLOAT);
         if (lhs_type != rhs_type && !is_numeric) {
             throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
         }

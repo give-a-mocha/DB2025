@@ -168,11 +168,11 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         for (auto &col : executorTreeRoot->cols()) {
             std::string col_str;
             char *rec_buf = Tuple->data + col.offset;
-            if (col.type == TYPE_INT) {
+            if (col.type == ColType::TYPE_INT) {
                 col_str = std::to_string(*(int *)rec_buf);
-            } else if (col.type == TYPE_FLOAT) {
+            } else if (col.type == ColType::TYPE_FLOAT) {
                 col_str = std::to_string(*(float *)rec_buf);
-            } else if (col.type == TYPE_STRING) {
+            } else if (col.type == ColType::TYPE_STRING) {
                 col_str = std::string((char *)rec_buf, col.len);
                 col_str.resize(strlen(col_str.c_str()));
             }
