@@ -20,7 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "record_printer.h"
 
-const char *help_info =
+constexpr const char *help_info =
     "Supported SQL syntax:\n"
     "  command ;\n"
     "command:\n"
@@ -44,6 +44,7 @@ const char *help_info =
     "  {= | <> | < | > | <= | >=}\n"
     "selector:\n"
     "  {* | column [, column ...]}\n";
+constexpr int help_info_len = strlen(help_info);
 
 // 主要负责执行DDL语句
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
@@ -77,8 +78,8 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
         switch (x->tag) {
             case PlanTag::T_Help: {
-                memcpy(context->data_send_ + *(context->offset_), help_info, strlen(help_info));
-                *(context->offset_) = strlen(help_info);
+                strcpy(context->data_send_ + *(context->offset_), help_info);
+                *(context->offset_) = help_info_len;
                 break;
             }
             case PlanTag::T_ShowTable: {
@@ -174,7 +175,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
                 col_str = std::to_string(*(float *)rec_buf);
             } else if (col.type == ColType::TYPE_STRING) {
                 col_str = std::string((char *)rec_buf, col.len);
-                col_str.resize(strlen(col_str.c_str()));
+                // ?col_str.resize(strlen(col_str.c_str()));
             }
             columns.push_back(col_str);
         }
@@ -182,8 +183,8 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         rec_printer.print_record(columns, context);
         // print record into file
         outfile << "|";
-        for (std::size_t i = 0; i < columns.size(); ++i) {
-            outfile << " " << columns[i] << " |";
+        for (const std::string &column : columns) {
+            outfile << " " << column << " |";
         }
         outfile << "\n";
         num_rec++;
