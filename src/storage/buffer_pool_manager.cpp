@@ -118,7 +118,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
                              PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
     //! 本来就是新页不在缓存中
-    // replacer_->pin(frame_id);
+    replacer_->pin(frame_id);
     return page;
 }
 
@@ -235,7 +235,7 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
     update_page(page, *page_id, frame_id);
     page->pin_count_ = 1;  // 固定该页
     //! 本来就是新页不在缓存中
-    // replacer_->pin(frame_id);
+    replacer_->pin(frame_id);
 
     return page;
 }
