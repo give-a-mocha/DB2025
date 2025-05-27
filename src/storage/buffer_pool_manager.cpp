@@ -95,11 +95,11 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
         // 页面在缓冲池中,增加pin_count并返回
         frame_id_t frame_id = iter->second;
         Page* page = &pages_[frame_id];
-        // if(page->pin_count_ == 0){
-        //     // 如果pin_count为0说明是新取出的页
-        //     // 需要在replacer中固定该页
-        //     replacer_->pin(frame_id);
-        // }
+        if(page->pin_count_ == 0){
+            // 如果pin_count为0说明是新取出的页
+            // 需要在replacer中固定该页
+            replacer_->pin(frame_id);
+        }
         replacer_->pin(frame_id);  // 固定该页
         page->pin_count_++;
         return page;
