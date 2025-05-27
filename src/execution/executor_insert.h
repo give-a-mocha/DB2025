@@ -14,6 +14,8 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include <memory>
+#include <vector>
 
 class InsertExecutor : public AbstractExecutor {
    private:
@@ -69,40 +71,30 @@ class InsertExecutor : public AbstractExecutor {
     }
 
     bool insert_index(RmRecord &rec) {
-        int failed_pos = -1;  // 记录失败的索引位置
+        std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
+        inserted_keys.reserve(tab_.indexes.size());  // 预分配空间以提高性能
+        
         // Insert into index
         for (size_t i = 0; i < tab_.indexes.size(); ++i) {
             auto &index = tab_.indexes[i];
             auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
-            char *key = new char[index.col_tot_len];
+            auto key = std::make_unique<char[]>(index.col_tot_len);
             int offset = 0;
-            for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
-                memcpy(key + offset, rec.data + index.cols[i].offset, index.cols[i].len);
-                offset += index.cols[i].len;
+            for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+                memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+                offset += index.cols[j].len;
             }
-            auto res = ih->insert_entry(key, rid_, context_->txn_);
-            delete[] key;
+            auto res = ih->insert_entry(key.get(), rid_, context_->txn_);
             if (res == INVALID_PAGE_ID) {
-                // 插入索引失败，回滚
-                failed_pos = i;
-                break;
-            }
-        }
-        if (failed_pos != -1) {
-            for (int i = 0; i < failed_pos; ++i) {
-                auto &index = tab_.indexes[i];
-                auto ih =
-                    sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
-                char *key = new char[index.col_tot_len];
-                int offset = 0;
-                for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-                    memcpy(key + offset, rec.data + index.cols[j].offset, index.cols[j].len);
-                    offset += index.cols[j].len;
+                // 回滚已插入的索引
+                for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
+                    auto &rollback_index = tab_.indexes[rollback_i];
+                    auto rollback_ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, rollback_index.cols)).get();
+                    rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
                 }
-                ih->delete_entry(key, context_->txn_);
-                delete[] key;
+                return false;
             }
-            return false;
+            inserted_keys.emplace_back(std::move(key));
         }
         return true;
     }
