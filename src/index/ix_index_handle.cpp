@@ -409,6 +409,34 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
 }
 
 /**
+ * @brief 用于更新B+树中含有指定key的键值对
+ * @param (key, value) 要更新的键值对
+ * @param transaction 事务指针
+ * @return bool 返回是否更新成功
+ */
+bool IxIndexHandle::update_entry(const char *key, const Rid &value, Transaction *transaction) {
+    // Todo:
+    // 1. 查找key值应该插入到哪个叶子节点
+    // 2. 在该叶子节点中更新记录
+    // 提示：记得处理并发的上锁
+    auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::INSERT, transaction);
+    if(leaf_node == nullptr) {
+        throw IndexEntryNotFoundError();
+    }
+    // 如果叶子节点中已经存在该key，则不插入
+    int pos = leaf_node->lower_bound(key);
+    if (pos < leaf_node->page_hdr->num_key && ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) == 0) {
+        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
+        return false;
+    }
+    // 更新键值对
+    leaf_node->insert_pair(pos, key, value);
+    leaf_node->set_rid(pos, value);
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+    return true;
+}
+
+/**
  * @brief 用于删除B+树中含有指定key的键值对
  * @param key 要删除的key值
  * @param transaction 事务指针
