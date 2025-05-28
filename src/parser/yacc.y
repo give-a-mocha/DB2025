@@ -23,6 +23,7 @@ using namespace ast;
 // keywords
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
+GROUP HAVING COUNT MAX MIN SUM AVG LIMIT AS IN
 // non-keywords
 %token LEQ NEQ GEQ T_EOF
 
@@ -49,8 +50,12 @@ WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_CO
 %type <sv_set_clauses> setClauses
 %type <sv_cond> condition
 %type <sv_conds> whereClause optWhereClause
-%type <sv_orderby>  order_clause opt_order_clause
+%type <sv_orderby> order_clause
+%type <sv_orderbys> order_list opt_order_clause
 %type <sv_orderby_dir> opt_asc_desc
+%type <sv_groupby> group_clause
+%type <sv_groupbys> group_list optGroupByClause
+%type <sv_having_conds> havingClause optHavingClause
 %type <sv_setKnobType> set_knob_type
 
 %%
@@ -158,9 +163,9 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause
+    |   SELECT selector FROM tableList optWhereClause optGroupByClause optHavingClause opt_order_clause
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8);
     }
     ;
 
@@ -265,13 +270,93 @@ whereClause:
     ;
 
 col:
-        tbName '.' colName
+        tbName '.' colName AS colName
+    {
+        $$ = std::make_shared<Col>($1, $3, $5);
+    }
+    |   colName AS colName
+    {
+        $$ = std::make_shared<Col>("", $1, $3);
+    }
+    |   tbName '.' colName
     {
         $$ = std::make_shared<Col>($1, $3);
     }
     |   colName
     {
         $$ = std::make_shared<Col>("", $1);
+    }
+    |   COUNT '(' '*' ')' AS colName
+    {
+        $$ = std::make_shared<Col>("", "*", $6, "COUNT");
+    }
+    |   COUNT '(' '*' ')'
+    {
+        $$ = std::make_shared<Col>("", "*", "", "COUNT");
+    }
+    |   SUM '(' tbName '.' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>($3, $5, $8, "SUM");
+    }
+    |   SUM '(' tbName '.' colName ')'
+    {
+        $$ = std::make_shared<Col>($3, $5, "", "SUM");
+    }
+    |   MAX '(' tbName '.' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>($3, $5, $8, "MAX");
+    }
+    |   MAX '(' tbName '.' colName ')'
+    {
+        $$ = std::make_shared<Col>($3, $5, "", "MAX");
+    }
+    |   MIN '(' tbName '.' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>($3, $5, $8, "MIN");
+    }
+    |   MIN '(' tbName '.' colName ')'
+    {
+        $$ = std::make_shared<Col>($3, $5, "", "MIN");
+    }
+    |   COUNT '(' tbName '.' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>($3, $5, $8, "COUNT");
+    }
+    |   COUNT '(' tbName '.' colName ')'
+    {
+        $$ = std::make_shared<Col>($3, $5, "", "COUNT");
+    }
+    |   SUM '(' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>("", $3, $6, "SUM");
+    }
+    |   SUM '(' colName ')'
+    {
+        $$ = std::make_shared<Col>("", $3, "", "SUM");
+    }
+    |   MAX '(' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>("", $3, $6, "MAX");
+    }
+    |   MAX '(' colName ')'
+    {
+        $$ = std::make_shared<Col>("", $3, "", "MAX");
+    }
+    |   MIN '(' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>("", $3, $6, "MIN");
+    }
+    |   MIN '(' colName ')'
+    {
+        $$ = std::make_shared<Col>("", $3, "", "MIN");
+    }
+    |   COUNT '(' colName ')' AS colName
+    {
+        $$ = std::make_shared<Col>("", $3, $6, "COUNT");
+    }
+    |   COUNT '(' colName ')'
+    {
+        $$ = std::make_shared<Col>("", $3, "", "COUNT");
     }
     ;
 
@@ -366,25 +451,81 @@ tableList:
     ;
 
 opt_order_clause:
-    ORDER BY order_clause      
-    { 
-        $$ = $3; 
+    ORDER BY order_list
+    {
+        $$ = $3;
     }
-    |   /* epsilon */ { /* ignore*/ }
+    |   /* epsilon */ { $$ = std::vector<std::shared_ptr<OrderBy>>{}; }
     ;
 
 order_clause:
-      col  opt_asc_desc 
-    { 
+    col opt_asc_desc
+    {
         $$ = std::make_shared<OrderBy>($1, $2);
     }
-    ;   
+    ;
+
+order_list:
+    order_clause
+    {
+        $$ = std::vector<std::shared_ptr<OrderBy>>{$1};
+    }
+    |   order_list ',' order_clause
+    {
+        $$.push_back($3);
+    }
+    ;
 
 opt_asc_desc:
     ASC          { $$ = OrderBy_ASC;     }
     |  DESC      { $$ = OrderBy_DESC;    }
     |       { $$ = OrderBy_DEFAULT; }
-    ;    
+    ;
+
+optGroupByClause:
+    GROUP BY group_list
+    {
+        $$ = $3;
+    }
+    |   /* epsilon */ { $$ = std::vector<std::shared_ptr<GroupBy>>{}; }
+    ;
+
+group_clause:
+    col
+    {
+        $$ = std::make_shared<GroupBy>($1);
+    }
+    ;
+
+group_list:
+    group_clause
+    {
+        $$ = std::vector<std::shared_ptr<GroupBy>>{$1};
+    }
+    |   group_list ',' group_clause
+    {
+        $$.push_back($3);
+    }
+    ;
+
+optHavingClause:
+    /* epsilon */ { $$ = std::vector<std::shared_ptr<BinaryExpr>>{}; }
+    |   HAVING havingClause
+    {
+        $$ = $2;
+    }
+    ;
+
+havingClause:
+    condition
+    {
+        $$ = std::vector<std::shared_ptr<BinaryExpr>>{$1};
+    }
+    |   havingClause AND condition
+    {
+        $$.push_back($3);
+    }
+    ;
 
 set_knob_type:
     ENABLE_NESTLOOP { $$ = EnableNestLoop; }

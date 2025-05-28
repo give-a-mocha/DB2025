@@ -64,7 +64,6 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "CREATE" { return CREATE; }
 "TABLE" { return TABLE; }
 "DROP" { return DROP; }
-"DESC" { return DESC; }
 "INSERT" { return INSERT; }
 "INTO" { return INTO; }
 "VALUES" { return VALUES; }
@@ -85,6 +84,16 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "ORDER" { return ORDER; }
 "BY" {  return BY;  }
 "ASC" { return ASC; }
+"DESC" { return DESC; }
+"GROUP" { return GROUP; }
+"HAVING" { return HAVING; }
+"COUNT" { return COUNT; }
+"MAX" { return MAX; }
+"MIN" { return MIN; }
+"SUM" { return SUM; }
+"AVG" { return AVG; }
+"LIMIT" { return LIMIT; }
+"AS" { return AS; }
 "ENABLE_NESTLOOP" { return ENABLE_NESTLOOP; }
 "ENABLE_SORTMERGE" { return ENABLE_SORTMERGE; }
 "TRUE" { 

@@ -24,17 +24,31 @@ See the Mulan PSL v2 for more details. */
 class SortExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
-    ColMeta col_;  // 单键排序的数据结构
+    std::vector<ColMeta> cols_;  // 多键排序的数据结构
     size_t tuple_num;
-    bool is_desc_;
+    std::vector<bool> is_desc_;
     std::vector<size_t> used_tuple;
     std::unique_ptr<RmRecord> current_tuple;
 
    public:
+    // 单列排序构造函数（向后兼容）
     SortExecutor(std::unique_ptr<AbstractExecutor> prev, const TabCol& sel_col, bool is_desc) {
         prev_ = std::move(prev);
         auto pos = get_col(prev_->cols(), sel_col);
-        col_ = *pos;
+        cols_.emplace_back(*pos);
+        is_desc_.emplace_back(is_desc);
+        tuple_num = 0;
+        used_tuple.clear();
+        current_tuple = nullptr;
+    }
+    
+    // 多列排序构造函数
+    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols, const std::vector<bool>& is_desc) {
+        prev_ = std::move(prev);
+        for (const auto& sel_col : sel_cols) {
+            auto pos = get_col(prev_->cols(), sel_col);
+            cols_.emplace_back(*pos);
+        }
         is_desc_ = is_desc;
         tuple_num = 0;
         used_tuple.clear();
@@ -55,7 +69,7 @@ class SortExecutor : public AbstractExecutor {
             cnt++;
         }
         tuple_num++;
-        used_tuple.push_back(now);
+        used_tuple.emplace_back(now);
     }
 
     void nextTuple() override {
@@ -73,7 +87,7 @@ class SortExecutor : public AbstractExecutor {
             cnt++;
         }
         tuple_num++;
-        used_tuple.push_back(now);
+        used_tuple.emplace_back(now);
     }
 
     std::unique_ptr<RmRecord> Next() override { return std::move(current_tuple); }
@@ -87,27 +101,45 @@ class SortExecutor : public AbstractExecutor {
             return true;
         }
 
-        char* rec_buf_a = a->data + col_.offset;
-        char* rec_buf_b = b->data + col_.offset;
+        // 多列比较：按照优先级依次比较每一列
+        for (size_t i = 0; i < cols_.size(); ++i) {
+            const ColMeta& col = cols_[i];
+            bool desc = is_desc_[i];
+            
+            char* rec_buf_a = a->data + col.offset;
+            char* rec_buf_b = b->data + col.offset;
 
-        if (col_.type == ColType::TYPE_INT) {
-            int value_a = *reinterpret_cast<int*>(rec_buf_a);
-            int value_b = *reinterpret_cast<int*>(rec_buf_b);
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
-        } else if (col_.type == ColType::TYPE_FLOAT) {
-            double value_a = *reinterpret_cast<double*>(rec_buf_a);
-            double value_b = *reinterpret_cast<double*>(rec_buf_b);
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
-        } else if (col_.type == ColType::TYPE_STRING) {
-            int comparison_result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
-            if (is_desc_) {
+            int comparison_result = 0;
+            if (col.type == ColType::TYPE_INT) {
+                int value_a = *reinterpret_cast<int*>(rec_buf_a);
+                int value_b = *reinterpret_cast<int*>(rec_buf_b);
+                if (value_a < value_b) comparison_result = -1;
+                else if (value_a > value_b) comparison_result = 1;
+                else comparison_result = 0;
+            } else if (col.type == ColType::TYPE_FLOAT) {
+                double value_a = *reinterpret_cast<double*>(rec_buf_a);
+                double value_b = *reinterpret_cast<double*>(rec_buf_b);
+                if (value_a < value_b) comparison_result = -1;
+                else if (value_a > value_b) comparison_result = 1;
+                else comparison_result = 0;
+            } else if (col.type == ColType::TYPE_STRING) {
+                comparison_result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col.len));
+            }
+            
+            // 如果当前列相等，继续比较下一列
+            if (comparison_result == 0) {
+                continue;
+            }
+            
+            // 根据排序方向返回结果
+            if (desc) {
                 return comparison_result > 0;
             } else {
                 return comparison_result < 0;
             }
         }
+        
+        // 所有列都相等
         return false;
     }
 

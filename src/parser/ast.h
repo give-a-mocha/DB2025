@@ -9,6 +9,8 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 #pragma once
 
+#include "defs.h"
+
 #include <vector>
 #include <string>
 #include <memory>
@@ -35,6 +37,15 @@ enum OrderByDir {
 enum SetKnobType {
     EnableNestLoop, EnableSortMerge
 };
+
+// 辅助函数：生成聚合函数的默认别名
+inline std::string generate_aggregate_alias(AggregateType agg, const std::string& col_name) {
+    if (agg == NONE) return col_name;
+    if (agg == AGG_COUNT && col_name == "*") {
+        return "count(*)";
+    }
+    return aggregate2str(agg) + "_" + col_name;
+}
 
 // Base class for tree nodes
 struct TreeNode {
@@ -152,9 +163,38 @@ struct BoolLit : public Value {
 struct Col : public Expr {
     std::string tab_name;
     std::string col_name;
+    std::string as_name;
+    AggregateType aggregate;
 
     Col(std::string tab_name_, std::string col_name_) :
-            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {}
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {
+        aggregate = AggregateType::NONE;
+        as_name = col_name;
+    }
+
+    Col(std::string tab_name_, std::string col_name_, std::string as_name_) :
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), as_name(std::move(as_name_)) {
+        aggregate = AggregateType::NONE;
+    }
+
+    Col(std::string tab_name_, std::string col_name_, std::string as_name_, std::string aggregate_) :
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), as_name(std::move(as_name_)) {
+        aggregate = str2aggregate(aggregate_);
+        // 如果没有指定别名，生成默认别名
+        if (as_name.empty()) {
+            as_name = generate_aggregate_alias(aggregate, col_name);
+        }
+    }
+
+    // 专门用于聚合函数的构造函数
+    Col(std::string tab_name_, std::string col_name_, AggregateType aggregate_, std::string as_name_ = "") :
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), aggregate(aggregate_) {
+        if (as_name_.empty()) {
+            as_name = generate_aggregate_alias(aggregate, col_name);
+        } else {
+            as_name = std::move(as_name_);
+        }
+    }
 };
 
 struct SetClause : public TreeNode {
@@ -180,6 +220,11 @@ struct OrderBy : public TreeNode
     OrderByDir orderby_dir;
     OrderBy( std::shared_ptr<Col> cols_, OrderByDir orderby_dir_) :
        cols(std::move(cols_)), orderby_dir(std::move(orderby_dir_)) {}
+};
+
+struct GroupBy : public TreeNode {
+    std::shared_ptr<Col> cols;
+    GroupBy(std::shared_ptr<Col> cols_) : cols(std::move(cols_)) {}
 };
 
 struct InsertStmt : public TreeNode {
@@ -226,18 +271,48 @@ struct SelectStmt : public TreeNode {
     std::vector<std::shared_ptr<BinaryExpr>> conds;
     std::vector<std::shared_ptr<JoinExpr>> jointree;
 
-    
     bool has_sort;
-    std::shared_ptr<OrderBy> order;
+    std::vector<std::shared_ptr<GroupBy>> group;
+    std::vector<std::shared_ptr<BinaryExpr>> having_conds;
+    std::vector<std::shared_ptr<OrderBy>> order;
 
-
+    // 原有构造函数，保持兼容性
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
                std::vector<std::string> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::shared_ptr<OrderBy> order_) :
-            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)), 
+            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)) {
+                has_sort = (bool)order_;
+                if (order_) {
+                    order.push_back(order_);
+                }
+                group = std::vector<std::shared_ptr<GroupBy>>();
+                having_conds = std::vector<std::shared_ptr<BinaryExpr>>();
+            }
+
+    // 新构造函数，支持GROUP BY和HAVING
+    SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
+               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<BinaryExpr>> conds_,
+               std::vector<std::shared_ptr<GroupBy>> group_,
+               std::vector<std::shared_ptr<BinaryExpr>> having_conds_) :
+            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)),
+            group(std::move(group_)), having_conds(std::move(having_conds_)) {
+                order = std::vector<std::shared_ptr<OrderBy>>();
+                has_sort = false;
+            }
+
+    // 完整构造函数，支持所有功能
+    SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
+               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<BinaryExpr>> conds_,
+               std::vector<std::shared_ptr<GroupBy>> group_,
+               std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
+               std::vector<std::shared_ptr<OrderBy>> order_) :
+            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)),
+            group(std::move(group_)), having_conds(std::move(having_conds_)),
             order(std::move(order_)) {
-                has_sort = (bool)order;
+                has_sort = !order.empty();
             }
 };
 
@@ -283,6 +358,12 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+    std::vector<std::shared_ptr<OrderBy>> sv_orderbys;
+
+    std::shared_ptr<GroupBy> sv_groupby;
+    std::vector<std::shared_ptr<GroupBy>> sv_groupbys;
+
+    std::vector<std::shared_ptr<BinaryExpr>> sv_having_conds;
 
     SetKnobType sv_setKnobType;
 };

@@ -43,7 +43,9 @@ enum class PlanTag{
     T_NestLoop,
     T_SortMerge,    // sort merge join
     T_Sort,
-    T_Projection
+    T_Projection,
+    T_Aggregate,    // aggregate
+    T_GroupBy       // group by
 };
 
 // 查询执行计划
@@ -114,14 +116,15 @@ public:
 class SortPlan : public Plan{
 public:
     std::shared_ptr<Plan> subplan_;
-    TabCol sel_col_;
-    bool is_desc_;
+    std::vector<TabCol> sel_col_;
+    std::vector<bool> is_desc_;
     ~SortPlan(){}
-    SortPlan(PlanTag tag, std::shared_ptr<Plan> subplan, TabCol sel_col, bool is_desc){
+    SortPlan(PlanTag tag, std::shared_ptr<Plan> subplan,
+             std::vector<TabCol> sel_col, std::vector<bool> is_desc){
         Plan::tag = tag;
         subplan_ = std::move(subplan);
-        sel_col_ = sel_col;
-        is_desc_ = is_desc;
+        sel_col_ = std::move(sel_col);
+        is_desc_ = std::move(is_desc);
     }
 };
 
@@ -170,6 +173,44 @@ public:
         Plan::tag = tag;
         tab_name_ = std::move(tab_name);            
     }
+};
+
+// Aggregate Plan
+class AggregatePlan : public Plan{
+public:
+    std::shared_ptr<Plan> subplan_;
+    std::vector<TabCol> sel_cols_;
+    std::vector<AggregateType> agg_types_;
+    
+    AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan,
+                    std::vector<TabCol> sel_cols,
+                    std::vector<AggregateType> agg_types){
+        Plan::tag = tag;
+        subplan_ = std::move(subplan);
+        sel_cols_ = std::move(sel_cols);
+        agg_types_ = std::move(agg_types);
+    }
+    ~AggregatePlan(){}
+};
+
+// Group Plan
+class GroupPlan : public Plan{
+public:
+    std::shared_ptr<Plan> subplan_;
+    std::vector<TabCol> sel_cols_;
+    std::vector<TabCol> group_cols_;
+    std::vector<Condition> having_conds_;
+    
+    GroupPlan(PlanTag tag, std::shared_ptr<Plan> subplan,
+              std::vector<TabCol> sel_cols, std::vector<TabCol> group_cols,
+              std::vector<Condition> having_conds){
+        Plan::tag = tag;
+        subplan_ = std::move(subplan);
+        sel_cols_ = std::move(sel_cols);
+        group_cols_ = std::move(group_cols);
+        having_conds_ = std::move(having_conds);
+    }
+    ~GroupPlan(){}
 };
 
 // Set Knob Plan

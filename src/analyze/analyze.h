@@ -95,6 +95,10 @@ private:
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
+    void check_where_aggregates(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds);
+    void check_group_by_semantics(const std::vector<TabCol> &select_cols,
+                                 const std::vector<std::shared_ptr<ast::GroupBy>> &group_cols,
+                                 ColCheck &col_check);
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
     CompOp convert_sv_comp_op(ast::SvCompOp op);
 };

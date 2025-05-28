@@ -92,6 +92,22 @@ class Planner {
     std::shared_ptr<Plan> generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
     /**
+     * @brief 如果查询中包含聚合函数，则生成聚合计划。
+     * @param query 查询对象。
+     * @param plan 当前的执行计划。
+     * @return 如果需要聚合，则返回聚合计划；否则返回原始计划。
+     */
+    std::shared_ptr<Plan> generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
+
+    /**
+     * @brief 如果查询中包含 GROUP BY 子句，则生成分组计划。
+     * @param query 查询对象。
+     * @param plan 当前的执行计划。
+     * @return 如果需要分组，则返回分组计划；否则返回原始计划。
+     */
+    std::shared_ptr<Plan> generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
+
+    /**
      * @brief 为 SELECT 语句生成完整的查询计划。
      * @param query SELECT 查询对象。
      * @param context 当前查询的上下文。
