@@ -38,7 +38,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         if(x->cols.empty()){
             query->cols.reserve(all_cols.size());
             for (auto &col : all_cols) {
-                TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+                TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name, .as_name = col.name, .aggregate = AggregateType::NONE};
                 query->cols.push_back(sel_col);
             }
         }else{
@@ -51,25 +51,47 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     .as_name = sv_sel_col->as_name,
                     .aggregate = sv_sel_col->aggregate
                 };
+                if(sel_col.aggregate == AggregateType::AGG_COUNT && 
+                   (sel_col.col_name == "*" || sel_col.col_name.empty())) {
+                    // 如果是COUNT(*)，则默认第一列
+                    sel_col.col_name = all_cols[0].name;
+                    sel_col.tab_name = all_cols[0].tab_name;
+                }
                 // !初始代码 列元数据校验
                 // sel_col = check_column(all_cols, sel_col);
                 sel_col = col_check.check(sel_col);
                 query->cols.push_back(sel_col);
             }
         }
+
+        // 处理group by
+        for (auto& sv_group_col : x->group) {
+            TabCol group_col = {.tab_name = sv_group_col->cols->tab_name,
+                                .col_name = sv_group_col->cols->col_name,
+                                .as_name = sv_group_col->cols->as_name,
+                                .aggregate = sv_group_col->cols->aggregate};
+            query->group_cols.push_back(group_col);
+        }
+        // 如果有group by，检查group by的列是否存在
+        for (auto& group_col : query->group_cols) {
+            group_col = col_check.check(group_col);
+        }
+        // 语义检查：SELECT列表中的非聚集列必须在GROUP BY中
+        check_group_by_semantics(query->cols, query->group_cols);
         
         // 处理where条件
         get_clause(x->conds, query->conds);
-        
-        // 检查WHERE子句中不能使用聚集函数
-        check_where_aggregates(x->conds);
-        
         check_clause(query->tables, query->conds, col_check);
-        
-        // 检查GROUP BY语义：SELECT列表中的非聚集列必须在GROUP BY中
-        if (!x->group.empty()) {
-            check_group_by_semantics(query->cols, x->group, col_check);
-        }
+        // 检查WHERE子句中不能使用聚集函数
+        check_where_aggregates(query->tables, query->conds);
+
+        // 处理 HAVING 子句
+        get_clause(x->having_conds, query->having_conds);
+        check_clause(query->tables, query->having_conds, col_check);
+        // 检查having条件中是否有不是聚合函数也不是group by的列
+        check_having_conds(query->having_conds, query->group_cols);
+        // 检测group by不存在时，是否有having条件
+        check_without_group(query->group_cols, query->having_conds);
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         /** TODO: */
         // 处理表名
@@ -185,14 +207,24 @@ void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv
     conds.reserve(sv_conds.size());
     for (auto &expr : sv_conds) {
         Condition cond;
-        cond.lhs_col = {.tab_name = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
+        cond.lhs_col = {
+            .tab_name = expr->lhs->tab_name,
+            .col_name = expr->lhs->col_name,
+            .as_name = expr->lhs->as_name,
+            .aggregate = expr->lhs->aggregate
+        };
         cond.op = convert_sv_comp_op(expr->op);
         if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
             cond.is_rhs_val = true;
             cond.rhs_val = convert_sv_value(rhs_val);
         } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
             cond.is_rhs_val = false;
-            cond.rhs_col = {.tab_name = rhs_col->tab_name, .col_name = rhs_col->col_name};
+            cond.rhs_col = {
+                .tab_name = rhs_col->tab_name,
+                .col_name = rhs_col->col_name,
+                .as_name = rhs_col->as_name,
+                .aggregate = rhs_col->aggregate
+            };
         }
         conds.push_back(cond);
     }
@@ -293,45 +325,25 @@ CompOp Analyze::convert_sv_comp_op(ast::SvCompOp op) {
 
 /**
  * @description: 检查WHERE子句中不能使用聚集函数
- * @param {vector<shared_ptr<ast::BinaryExpr>>} sv_conds WHERE条件列表
  */
-void Analyze::check_where_aggregates(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds) {
-    for (const auto &expr : sv_conds) {
+void Analyze::check_where_aggregates(const std::vector<std::string> &tab_names, std::vector<Condition> &conds) {
+    for (const auto &cond : conds) {
         // 检查左侧列是否使用了聚集函数
-        if (expr->lhs && expr->lhs->aggregate != AggregateType::NONE) {
-            throw InternalError("WHERE子句中不能使用聚集函数: " + aggregate2str(expr->lhs->aggregate) + "(" + expr->lhs->col_name + ")");
-        }
-        
-        // 检查右侧如果是列的话，是否使用了聚集函数
-        if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
-            if (rhs_col->aggregate != AggregateType::NONE) {
-                throw InternalError("WHERE子句中不能使用聚集函数: " + aggregate2str(rhs_col->aggregate) + "(" + rhs_col->col_name + ")");
-            }
+        if (cond.lhs_col.aggregate != AggregateType::NONE) {
+            throw InternalError("WHERE子句中不能使用聚集函数: " + aggregate2str(cond.lhs_col.aggregate) + "(" + cond.lhs_col.col_name + ")");
         }
     }
 }
 
 /**
  * @description: 检查GROUP BY语义：SELECT列表中的非聚集列必须在GROUP BY中
- * @param {vector<TabCol>} select_cols SELECT列表
- * @param {vector<shared_ptr<ast::GroupBy>>} group_cols GROUP BY列表
- * @param {ColCheck} col_check 列检查器
  */
 void Analyze::check_group_by_semantics(const std::vector<TabCol> &select_cols,
-                                      const std::vector<std::shared_ptr<ast::GroupBy>> &group_cols,
-                                      ColCheck &col_check) {
-    // 收集GROUP BY中的所有列
-    std::set<std::pair<std::string, std::string>> group_by_cols;
-    for (const auto &group_by : group_cols) {
-        if (group_by && group_by->cols) {
-            // 确保GROUP BY中的列存在并补全表名
-            TabCol group_col = {
-                .tab_name = group_by->cols->tab_name,
-                .col_name = group_by->cols->col_name
-            };
-            group_col = col_check.check(group_col);
-            group_by_cols.emplace(group_col.tab_name, group_col.col_name);
-        }
+                                      const std::vector<TabCol> &group_by_clause_cols) {
+    // 将 GROUP BY 列存入 set 以便快速查找
+    std::set<std::pair<std::string, std::string>> group_by_cols_set;
+    for (const auto &group_col : group_by_clause_cols) {
+        group_by_cols_set.emplace(group_col.tab_name, group_col.col_name);
     }
     
     // 检查SELECT列表中的每一列
@@ -343,8 +355,36 @@ void Analyze::check_group_by_semantics(const std::vector<TabCol> &select_cols,
         
         // 如果不是聚集函数，则必须在GROUP BY中
         std::pair<std::string, std::string> col_pair = {sel_col.tab_name, sel_col.col_name};
-        if (group_by_cols.find(col_pair) == group_by_cols.end()) {
-            throw InternalError("SELECT列表中的非聚集列 '" + sel_col.col_name + "' 必须出现在GROUP BY子句中");
+        if (group_by_cols_set.find(col_pair) == group_by_cols_set.end()) {
+            throw InternalError("SELECT列表中的非聚集列 '" + sel_col.col_name + "' 必须出现在GROUP BY子句中或用作聚合函数");
         }
+    }
+}
+
+void Analyze::check_having_conds(const std::vector<Condition> &having_conds, const std::vector<TabCol> &group_cols) {
+    // 将 GROUP BY 列存入 set 以便快速查找
+    std::set<std::pair<std::string, std::string>> group_cols_set;
+    for (const auto &group_col : group_cols) {
+        group_cols_set.emplace(group_col.tab_name, group_col.col_name);
+    }
+    
+    // 检查 HAVING 子句中的每个条件
+    for (const auto &cond : having_conds) {
+        // 如果是聚集函数，则跳过检查
+        if (cond.lhs_col.aggregate != AggregateType::NONE) {
+            continue;
+        }
+        
+        // 如果不是聚集函数，则必须在 GROUP BY 中
+        std::pair<std::string, std::string> col_pair = {cond.lhs_col.tab_name, cond.lhs_col.col_name};
+        if (group_cols_set.find(col_pair) == group_cols_set.end()) {
+            throw InternalError("HAVING子句中的非聚集列 '" + cond.lhs_col.col_name + "' 必须出现在GROUP BY子句中或用作聚合函数");
+        }
+    }
+}
+
+void Analyze::check_without_group(const std::vector<TabCol> &group_cols, const std::vector<Condition> &having_conds) {
+    if (group_cols.empty() && !having_conds.empty()) {
+        throw InternalError("HAVING子句只能在GROUP BY子句存在时使用");
     }
 }

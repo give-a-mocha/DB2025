@@ -42,7 +42,7 @@ GROUP HAVING COUNT MAX MIN SUM AVG LIMIT AS IN
 %type <sv_expr> expr
 %type <sv_val> value
 %type <sv_vals> valueList
-%type <sv_str> tbName colName
+%type <sv_str> tbName colName aggregator optAlias
 %type <sv_strs> tableList colNameList
 %type <sv_col> col
 %type <sv_cols> colList selector
@@ -176,6 +176,7 @@ fieldList:
     }
     |   fieldList ',' field
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -187,6 +188,7 @@ colNameList:
     }
     | colNameList ',' colName
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -220,6 +222,7 @@ valueList:
     }
     |   valueList ',' value
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -251,7 +254,7 @@ condition:
     ;
 
 optWhereClause:
-        /* epsilon */ { /* ignore*/ }
+        /* epsilon */ { $$ = std::vector<std::shared_ptr<BinaryExpr>>{}; }
     |   WHERE whereClause
     {
         $$ = $2;
@@ -265,6 +268,7 @@ whereClause:
     }
     |   whereClause AND condition
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -286,78 +290,31 @@ col:
     {
         $$ = std::make_shared<Col>("", $1);
     }
-    |   COUNT '(' '*' ')' AS colName
+    |   aggregator '(' '*' ')' optAlias
     {
-        $$ = std::make_shared<Col>("", "*", $6, "COUNT");
+        $$ = std::make_shared<Col>("", "*", $5, $1);
     }
-    |   COUNT '(' '*' ')'
+    |   aggregator '(' tbName '.' colName ')' optAlias
     {
-        $$ = std::make_shared<Col>("", "*", "", "COUNT");
+        $$ = std::make_shared<Col>($3, $5, $7, $1);
     }
-    |   SUM '(' tbName '.' colName ')' AS colName
+    |   aggregator '(' colName ')' optAlias
     {
-        $$ = std::make_shared<Col>($3, $5, $8, "SUM");
+        $$ = std::make_shared<Col>("", $3, $5, $1);
     }
-    |   SUM '(' tbName '.' colName ')'
-    {
-        $$ = std::make_shared<Col>($3, $5, "", "SUM");
-    }
-    |   MAX '(' tbName '.' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>($3, $5, $8, "MAX");
-    }
-    |   MAX '(' tbName '.' colName ')'
-    {
-        $$ = std::make_shared<Col>($3, $5, "", "MAX");
-    }
-    |   MIN '(' tbName '.' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>($3, $5, $8, "MIN");
-    }
-    |   MIN '(' tbName '.' colName ')'
-    {
-        $$ = std::make_shared<Col>($3, $5, "", "MIN");
-    }
-    |   COUNT '(' tbName '.' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>($3, $5, $8, "COUNT");
-    }
-    |   COUNT '(' tbName '.' colName ')'
-    {
-        $$ = std::make_shared<Col>($3, $5, "", "COUNT");
-    }
-    |   SUM '(' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>("", $3, $6, "SUM");
-    }
-    |   SUM '(' colName ')'
-    {
-        $$ = std::make_shared<Col>("", $3, "", "SUM");
-    }
-    |   MAX '(' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>("", $3, $6, "MAX");
-    }
-    |   MAX '(' colName ')'
-    {
-        $$ = std::make_shared<Col>("", $3, "", "MAX");
-    }
-    |   MIN '(' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>("", $3, $6, "MIN");
-    }
-    |   MIN '(' colName ')'
-    {
-        $$ = std::make_shared<Col>("", $3, "", "MIN");
-    }
-    |   COUNT '(' colName ')' AS colName
-    {
-        $$ = std::make_shared<Col>("", $3, $6, "COUNT");
-    }
-    |   COUNT '(' colName ')'
-    {
-        $$ = std::make_shared<Col>("", $3, "", "COUNT");
-    }
+    ;
+
+aggregator:
+        COUNT { $$ = "COUNT"; }
+    |   SUM   { $$ = "SUM"; }
+    |   MAX   { $$ = "MAX"; }
+    |   MIN   { $$ = "MIN"; }
+    |   AVG   { $$ = "AVG"; }
+    ;
+
+optAlias:
+        AS colName { $$ = $2; }
+    |   /* epsilon */ { $$ = ""; }
     ;
 
 colList:
@@ -367,6 +324,7 @@ colList:
     }
     |   colList ',' col
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -416,6 +374,7 @@ setClauses:
     }
     |   setClauses ',' setClause
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -442,10 +401,12 @@ tableList:
     }
     |   tableList ',' tbName
     {
+        $$ = $1;
         $$.push_back($3);
     }
     |   tableList JOIN tbName
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -472,6 +433,7 @@ order_list:
     }
     |   order_list ',' order_clause
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -504,6 +466,7 @@ group_list:
     }
     |   group_list ',' group_clause
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -523,6 +486,7 @@ havingClause:
     }
     |   havingClause AND condition
     {
+        $$ = $1;
         $$.push_back($3);
     }
     ;

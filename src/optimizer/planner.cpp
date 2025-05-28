@@ -252,11 +252,11 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     // 4. 连接顺序优化：基于成本的连接顺序选择（需要统计信息支持）
     // 当前使用启发式规则：按照条件中出现的表的顺序进行连接
 
-    // 处理聚合函数
-    plan = generate_aggregate_plan(query, std::move(plan));
-    
     // 处理GROUP BY
     plan = generate_group_plan(query, std::move(plan));
+
+    // 处理聚合函数
+    plan = generate_aggregate_plan(query, std::move(plan));
 
     // 处理orderby
     plan = generate_sort_plan(query, std::move(plan));
@@ -272,7 +272,7 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
 std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
-    // // Scan table , 生成表算子列表tab_nodes
+    // Scan table , 生成表算子列表tab_nodes
     std::vector<std::shared_ptr<Plan>> table_scan_executors(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
         auto curr_conds = pop_conds(query->conds, tables[i]);
@@ -461,65 +461,20 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
 std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     
-    // 检查是否有聚合函数
-    std::vector<TabCol> sel_cols;
-    std::vector<AggregateType> agg_types;
-    bool has_aggregate = false;
-    
-    for (auto &col : x->cols) {
-        if (col->aggregate != AggregateType::NONE) {
-            has_aggregate = true;
-            TabCol tab_col = {.tab_name = col->tab_name, .col_name = col->col_name};
-            sel_cols.emplace_back(tab_col);
-            agg_types.emplace_back(col->aggregate);
-        }
-    }
-    
-    if (!has_aggregate) {
+    if (any_of(x->cols.begin(), x->cols.end(),
+               [](const TabCol &col) { return col.aggregate != AggregateType::NONE; })) {
         return plan;
     }
     
-    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), sel_cols, agg_types);
+    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), x->cols);
 }
 
 std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-    
-    if (x->group.empty()) {
-        return plan;
+    if(x->group.empty()) {
+        return plan;  // 没有GROUP BY，直接返回原计划
     }
-    
-    std::vector<std::string> tables = query->tables;
-    std::vector<ColMeta> all_cols;
-    for (auto &sel_tab_name : tables) {
-        const auto &sel_tab_cols = sm_manager_->db_.get_table(sel_tab_name).cols;
-        all_cols.insert(all_cols.end(), sel_tab_cols.begin(), sel_tab_cols.end());
-    }
-    
-    // 构建GROUP BY列
-    std::vector<TabCol> group_cols;
-    for (auto &group_by : x->group) {
-        TabCol group_col;
-        for (auto &col : all_cols) {
-            if (col.name.compare(group_by->cols->col_name) == 0) {
-                group_col = {.tab_name = col.tab_name, .col_name = col.name};
-                break;
-            }
-        }
-        group_cols.emplace_back(group_col);
-    }
-    
-    // 构建选择列（包括GROUP BY列和聚合列）
-    std::vector<TabCol> sel_cols;
-    for (auto &col : x->cols) {
-        TabCol sel_col = {.tab_name = col->tab_name, .col_name = col->col_name};
-        sel_cols.emplace_back(sel_col);
-    }
-    
-    // 构建HAVING条件
-    std::vector<Condition> having_conds;  // 暂时为空，后续需要在Query中添加having_conds字段
-    
-    return std::make_shared<GroupPlan>(PlanTag::T_GroupBy, std::move(plan), sel_cols, group_cols, having_conds);
+    return std::make_shared<GroupPlan>(PlanTag::T_Group, std::move(plan), x->group);
 }
 
 // 生成DDL语句和DML语句的查询执行计划

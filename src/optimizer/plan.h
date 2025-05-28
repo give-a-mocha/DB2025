@@ -45,7 +45,7 @@ enum class PlanTag{
     T_Sort,
     T_Projection,
     T_Aggregate,    // aggregate
-    T_GroupBy       // group by
+    T_Group         // group
 };
 
 // 查询执行计划
@@ -123,6 +123,7 @@ public:
              std::vector<TabCol> sel_col, std::vector<bool> is_desc){
         Plan::tag = tag;
         subplan_ = std::move(subplan);
+        assert(sel_col.size() == is_desc.size());
         sel_col_ = std::move(sel_col);
         is_desc_ = std::move(is_desc);
     }
@@ -180,7 +181,6 @@ class AggregatePlan : public Plan{
 public:
     std::shared_ptr<Plan> subplan_;
     std::vector<TabCol> sel_cols_;
-    std::vector<AggregateType> agg_types_;
     
     AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan,
                     std::vector<TabCol> sel_cols,
@@ -188,7 +188,6 @@ public:
         Plan::tag = tag;
         subplan_ = std::move(subplan);
         sel_cols_ = std::move(sel_cols);
-        agg_types_ = std::move(agg_types);
     }
     ~AggregatePlan(){}
 };

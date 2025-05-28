@@ -22,9 +22,9 @@ See the Mulan PSL v2 for more details. */
 struct TabCol {
     std::string tab_name;
     std::string col_name;
-    std::string as_name;
+    std::string as_name{};
 
-    AggregateType aggregate;
+    AggregateType aggregate{AggregateType::NONE};
 
     friend bool operator<(const TabCol &x, const TabCol &y) {
         return std::make_pair(x.tab_name, x.col_name) < std::make_pair(y.tab_name, y.col_name);
@@ -41,6 +41,18 @@ struct TabCol {
 
     friend bool operator>(const TabCol& x, const TabCol& y) {
         return std::make_pair(x.tab_name, x.col_name) > std::make_pair(y.tab_name, y.col_name);
+    }
+
+    TabCol& operator=(const TabCol& x) {
+        tab_name = x.tab_name;
+        col_name = x.col_name;
+        if(!x.as_name.empty()){
+            as_name = x.as_name;
+        }
+        if(x.aggregate != AggregateType::NONE) {
+            aggregate = x.aggregate;
+        }
+        return *this;
     }
 
 };
