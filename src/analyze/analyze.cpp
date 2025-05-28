@@ -105,7 +105,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 处理where条件
         // get_clause(x->conds, query->conds);
         // check_clause({x->tab_name}, query->conds);
-
+        
+        query->tables.push_back(x->tab_name);
         get_clause(x->conds, query->conds);
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
