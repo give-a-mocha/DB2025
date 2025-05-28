@@ -100,7 +100,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
             // 需要在replacer中固定该页
             replacer_->pin(frame_id);
         }
-        replacer_->pin(frame_id);  // 固定该页
+        // replacer_->pin(frame_id);  // 固定该页
         page->pin_count_++;
         return page;
     }
