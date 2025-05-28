@@ -29,34 +29,41 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             }
         }
 
-        // 处理target list，再target list中添加上表名，例如 a.id
-        for (auto &sv_sel_col : x->cols) {
-            TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
-            query->cols.push_back(sel_col);
-        }
-
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
-        if (query->cols.empty()) {
-            // select all columns
+        ColCheck col_check(all_cols);
+        // 如果没有指定列，比如*则查询所有列
+        if(x->cols.empty()){
+            query->cols.reserve(all_cols.size());
             for (auto &col : all_cols) {
                 TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
                 query->cols.push_back(sel_col);
             }
-        } else {
-            // infer table name from column name
-            for (auto &sel_col : query->cols) {
-                sel_col = check_column(all_cols, sel_col);  // 列元数据校验
+        }else{
+            //把列加入并进行校验，添加表名
+            query->cols.reserve(x->cols.size());
+            for (auto &sv_sel_col : x->cols) {
+                TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
+                // !初始代码 列元数据校验
+                // sel_col = check_column(all_cols, sel_col); 
+                sel_col = col_check.check(sel_col);
+                query->cols.push_back(sel_col);
             }
         }
+        //! 初始代码
         // 处理where条件
+        // get_clause(x->conds, query->conds);
+        // check_clause(query->tables, query->conds);
+
         get_clause(x->conds, query->conds);
-        check_clause(query->tables, query->conds);
+        check_clause(query->tables, query->conds, col_check);
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         /** TODO: */
         // 处理表名
         query->tables.push_back(x->tab_name);
 
+        // 检查表是否存在
+        query->set_clauses.reserve(x->set_clauses.size());
         // 处理set子句
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
@@ -65,15 +72,23 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             query->set_clauses.push_back(set_clause);
         }
 
-        // 处理where条件
-        get_clause(x->conds, query->conds);
-        check_clause(query->tables, query->conds);
-
         // 检查set子句中的列是否存在并进行类型校验
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
+        ColCheck col_check(all_cols);
+        
+
+        //! 初始代码,处理where条件
+        // get_clause(x->conds, query->conds);
+        // check_clause(query->tables, query->conds);
+        
+        get_clause(x->conds, query->conds);
+        check_clause(query->tables, query->conds, col_check);
+        
         for (auto &set_clause : query->set_clauses) {
-            set_clause.lhs = check_column(all_cols, set_clause.lhs);
+            //! 初始代码
+            // set_clause.lhs = check_column(all_cols, set_clause.lhs);
+            set_clause.lhs = col_check.check(set_clause.lhs);
             // 检查类型兼容性
             TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
             auto col = tab.get_col(set_clause.lhs.col_name);
@@ -86,9 +101,18 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             set_clause.rhs.init_raw(col->len);
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {
+        // !初始代码
         // 处理where条件
+        // get_clause(x->conds, query->conds);
+        // check_clause({x->tab_name}, query->conds);
+        
+        query->tables.push_back(x->tab_name);
         get_clause(x->conds, query->conds);
-        check_clause({x->tab_name}, query->conds);
+        std::vector<ColMeta> all_cols;
+        get_all_cols(query->tables, all_cols);
+        ColCheck col_check(all_cols);
+        check_clause(query->tables, query->conds, col_check);
+
     } else if (auto x = std::dynamic_pointer_cast<ast::InsertStmt>(parse)) {
         // 处理insert 的values值
         for (auto &sv_val : x->vals) {
@@ -145,6 +169,7 @@ void Analyze::get_all_cols(const std::vector<std::string> &tab_names, std::vecto
 
 void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds) {
     conds.clear();
+    conds.reserve(sv_conds.size());
     for (auto &expr : sv_conds) {
         Condition cond;
         cond.lhs_col = {.tab_name = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
@@ -170,6 +195,34 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         cond.lhs_col = check_column(all_cols, cond.lhs_col);
         if (!cond.is_rhs_val) {
             cond.rhs_col = check_column(all_cols, cond.rhs_col);
+        }
+        TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
+        auto lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
+        ColType lhs_type = lhs_col->type;
+        ColType rhs_type;
+        if (cond.is_rhs_val) {
+            cond.rhs_val.init_raw(lhs_col->len);
+            rhs_type = cond.rhs_val.type;
+        } else {
+            TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
+            auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
+            rhs_type = rhs_col->type;
+        }
+        // Allow numeric type comparison (INT vs FLOAT)
+        bool is_numeric =
+            (lhs_type == ColType::TYPE_INT || lhs_type == ColType::TYPE_FLOAT) && (rhs_type == ColType::TYPE_INT || rhs_type == ColType::TYPE_FLOAT);
+        if (lhs_type != rhs_type && !is_numeric) {
+            throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
+        }
+    }
+}
+
+void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check) {
+    for (auto &cond : conds) {
+        // Infer table name from column name
+        cond.lhs_col = col_check.check(cond.lhs_col);
+        if (!cond.is_rhs_val) {
+            cond.rhs_col = col_check.check(cond.rhs_col);
         }
         TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
         auto lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);

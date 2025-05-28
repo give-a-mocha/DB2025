@@ -20,6 +20,46 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 #include "common/common.h"
 
+class ColCheck {
+public:
+    std::map<std::string, std::vector<std::string>> mp;
+    std::map<std::pair<std::string, std::string>, int> cols;
+    ColCheck(const std::vector<ColMeta> &all_cols) {
+        for (const auto &col : all_cols) {
+            cols[{col.tab_name, col.name}]++;
+            auto it = mp.find(col.name);
+            if (it == mp.end()) {
+                mp[col.name] = std::vector<std::string>({col.tab_name});
+            }else{
+                if(it->second.size() < 2){
+                    it->second.push_back(col.tab_name);
+                }
+            }
+        }
+    }
+    TabCol check(TabCol target_col) {
+        if (target_col.tab_name.empty()) {
+            auto it = mp.find(target_col.col_name);
+            if (it == mp.end()) {
+                throw ColumnNotFoundError(target_col.col_name);
+            }
+            if (it->second.size() > 1) {
+                throw AmbiguousColumnError(target_col.col_name);
+            }
+            target_col.tab_name = it->second[0];
+        } else {
+            auto it = cols.find({target_col.tab_name, target_col.col_name});
+            if (it == cols.end()) {
+                throw ColumnNotFoundError(target_col.col_name);
+            }
+            if (it->second > 1) {
+                throw AmbiguousColumnError(target_col.col_name);
+            }
+        }
+        return target_col;
+    }
+};
+
 class Query{
     public:
     std::shared_ptr<ast::TreeNode> parse;
@@ -54,6 +94,7 @@ private:
     void get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols);
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
+    void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
     CompOp convert_sv_comp_op(ast::SvCompOp op);
 };
