@@ -175,5 +175,5 @@ class UpdateExecutor : public AbstractExecutor {
 
     Rid &rid() override { return _abstract_rid; }
 
-    std::string getType() { return "UpdateExecutor"; }
+    std::string getType() override { return "UpdateExecutor"; }
 };
