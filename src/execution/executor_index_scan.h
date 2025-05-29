@@ -211,4 +211,43 @@ class IndexScanExecutor : public AbstractExecutor {
     Rid &rid() override { return rid_; }
 
     std::string getType() override { return "IndexScanExecutor"; }
+
+   private:
+    bool compare(Value lhs, Value rhs, CompOp op) {
+        bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
+        if (lhs.type != rhs.type && !is_numeric) {
+            throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
+        }
+        int cmp;
+        if (is_numeric) {
+            // 整数比较
+            if (lhs.type == ColType::TYPE_INT && rhs.type == ColType::TYPE_INT) {
+                cmp = (lhs.int_val < rhs.int_val) ? -1 : (lhs.int_val > rhs.int_val) ? 1 : 0;
+            } else {
+                // 先转化成浮点数
+                convert(lhs, rhs);
+                // 浮点数比较
+                cmp = (lhs.float_val < rhs.float_val) ? -1 : (lhs.float_val > rhs.float_val) ? 1 : 0;
+            }
+        } else if (lhs.type == ColType::TYPE_STRING) {
+            size_t len = std::max(lhs.str_val.size(), rhs.str_val.size());
+            cmp = strncmp(lhs.str_val.c_str(), rhs.str_val.c_str(), len);
+        }
+        switch (op) {
+            case CompOp::OP_EQ:
+                return cmp == 0;
+            case CompOp::OP_NE:
+                return cmp != 0;
+            case CompOp::OP_LT:
+                return cmp < 0;
+            case CompOp::OP_GT:
+                return cmp > 0;
+            case CompOp::OP_LE:
+                return cmp <= 0;
+            case CompOp::OP_GE:
+                return cmp >= 0;
+            default:
+                throw InternalError("compare::Unexpected op type at " + getType());
+        }
+    }
 };

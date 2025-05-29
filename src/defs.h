@@ -56,32 +56,6 @@ inline std::string coltype2str(ColType type) {
     }
 }
 
-enum AggregateType {
-    NONE, AGG_COUNT, AGG_MAX, AGG_MIN, AGG_SUM, AGG_AVG
-};
-
-// 辅助函数：将字符串转换为聚合类型
-inline AggregateType str2aggregate(const std::string& str) {
-    if (str == "COUNT") return AGG_COUNT;
-    if (str == "MAX") return AGG_MAX;
-    if (str == "MIN") return AGG_MIN;
-    if (str == "SUM") return AGG_SUM;
-    if (str == "AVG") return AGG_AVG;
-    return NONE;
-}
-
-// 辅助函数：将聚合类型转换为小写字符串
-inline std::string aggregate2str(AggregateType agg) {
-    switch (agg) {
-        case AGG_COUNT: return "count";
-        case AGG_MAX: return "max";
-        case AGG_MIN: return "min";
-        case AGG_SUM: return "sum";
-        case AGG_AVG: return "avg";
-        default: return "";
-    }
-}
-
 class RecScan {
 public:
     virtual ~RecScan() = default;

@@ -109,7 +109,6 @@ using namespace ast;
 # endif
 
 #include "yacc.tab.h"
-#include "yacc.tab.h"
 /* Symbol kind.  */
 enum yysymbol_kind_t
 {
@@ -535,7 +534,7 @@ union yyalloc
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  55
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  39
+#define YYNNTS  31
 /* YYNRULES -- Number of rules.  */
 #define YYNRULES  76
 /* YYNSTATES -- Number of states.  */
@@ -651,7 +650,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 
 /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
    STATE-NUM.  */
-static const yytype_int16 yypact[] =
+static const yytype_int8 yypact[] =
 {
       63,     3,    10,    12,   -24,     9,    24,   -24,    -2,   -33,
      -88,   -88,   -88,   -88,   -88,   -88,    31,   -88,    44,     1,
@@ -1805,7 +1804,7 @@ yyreduce:
   case 26: /* dml: SELECT selector FROM tableList optWhereClause opt_order_clause  */
 #line 195 "/Users/masttf/coding/git/DB2025/src/parser/yacc.y"
     {
-        (yyval.sv_node) = std::make_shared<SelectStmt>((yyvsp[-6].sv_cols), (yyvsp[-4].sv_strs), (yyvsp[-3].sv_conds), (yyvsp[-2].sv_groupbys), (yyvsp[-1].sv_having_conds), (yyvsp[0].sv_orderbys));
+        (yyval.sv_node) = std::make_shared<SelectStmt>((yyvsp[-4].sv_cols), (yyvsp[-2].sv_strs), (yyvsp[-1].sv_conds), (yyvsp[0].sv_orderby));
     }
 #line 1810 "/Users/masttf/coding/git/DB2025/src/parser/yacc.tab.cpp"
     break;
