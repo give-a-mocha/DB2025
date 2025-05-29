@@ -61,5 +61,5 @@ class ExplainProjectExecutor : public AbstractExecutor {
     
     Rid &rid() override { return _abstract_rid; }
 
-    std::string getType() override { return "ExplainScanExecutor"; }
+    std::string getType() override { return "ExplainProjectExecutor"; }
 };

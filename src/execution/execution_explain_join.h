@@ -22,21 +22,19 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 #include "common/config.h"
 
-class ExplainFilterExecutor : public AbstractExecutor {
+class ExplainJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
+    std::vector<std::string> tables_;
     std::vector<Condition> conds_;
     Context *context_;
     int offset_;
 
    public:
-    ExplainFilterExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<Condition> conds, int offset, Context *context) {
+    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> prev,std::vector<std::string>tables, std::vector<Condition> conds, int offset, Context *context) {
         prev_ = std::move(prev);
+        tables_ = std::move(tables);
         conds_ = std::move(conds);
-        // 多个条件按字典序排序
-        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
-            return a.lhs_col < b.lhs_col;
-        });
         offset_ = offset;
         context_ = context;
     }
@@ -61,8 +59,14 @@ class ExplainFilterExecutor : public AbstractExecutor {
     
     std::unique_ptr<RmRecord> Next() override {
         std::string pre = std::string(offset_, '\t');
-        std::string output = pre + "Filter(condition=[";
-        
+        std::string output = pre + "Join(tables=[";
+        for(size_t i = 0; i < tables_.size(); ++i) {
+            if(i != 0) {
+                output += ",";
+            }
+            output += tables_[i];
+        }
+        output += "],conditions=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {
                 output += ",";
@@ -97,5 +101,5 @@ class ExplainFilterExecutor : public AbstractExecutor {
     
     Rid &rid() override { return _abstract_rid; }
 
-    std::string getType() override { return "ExplainFilterExecutor"; }
+    std::string getType() override { return "ExplainJoinExecutor"; }
 };
