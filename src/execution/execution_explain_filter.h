@@ -21,6 +21,7 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 #include "common/config.h"
+#include "common/StackString.hpp"
 
 class ExplainFilterExecutor : public AbstractExecutor {
    private:
@@ -60,37 +61,73 @@ class ExplainFilterExecutor : public AbstractExecutor {
     }
     
     std::unique_ptr<RmRecord> Next() override {
-        std::string pre = std::string(offset_, '\t');
-        std::string output = pre + "Filter(condition=[";
+        // std::string output = std::string(offset_, '\t');
+        // assert(offset_ < 1024);
+        // output.resize(1024);
+        // output += "Filter(condition=[";
         
+        // for (size_t i = 0; i < conds_.size(); ++i) {
+        //     if(i != 0) {
+        //         output += ",";
+        //     }
+        //     const auto &cond = conds_[i];
+        //     output += cond.lhs_col.tab_name + "." + cond.lhs_col.col_name + compOpToString(cond.op);
+        //     if (cond.is_rhs_val) {
+        //         if (cond.rhs_val.type == ColType::TYPE_INT) {
+        //             output += std::to_string(cond.rhs_val.int_val);
+        //         } else if (cond.rhs_val.type == ColType::TYPE_FLOAT) {
+        //             output += std::to_string(cond.rhs_val.float_val);
+        //         } else if (cond.rhs_val.type == ColType::TYPE_STRING) {
+        //             output += "'" + std::string(cond.rhs_val.str_val) + "'";
+        //         } else {
+        //             throw InternalError("Unknown value type in condition");
+        //         }
+        //     } else {
+        //         output += cond.rhs_col.tab_name + "." + cond.rhs_col.col_name;
+        //     }
+        // }
+        // output += "])\n";
+        // // message_out(context_, output);
+        // if (context_ && context_->data_send_ && context_->offset_ &&
+        //     *context_->offset_ + output.length() < BUFFER_LENGTH) {
+        //     memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
+        //     *context_->offset_ += output.length();
+        // }
+
+        StackString<2048> output;
+        output.append(offset_, '\t');
+        output += "Filter(condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {
                 output += ",";
             }
             const auto &cond = conds_[i];
-            output += cond.lhs_col.tab_name + "." + cond.lhs_col.col_name + compOpToString(cond.op);
+            output += cond.lhs_col.tab_name;
+            output += ".";
+            output += cond.lhs_col.col_name; 
+            output += compOpToString(cond.op);
             if (cond.is_rhs_val) {
                 if (cond.rhs_val.type == ColType::TYPE_INT) {
                     output += std::to_string(cond.rhs_val.int_val);
                 } else if (cond.rhs_val.type == ColType::TYPE_FLOAT) {
                     output += std::to_string(cond.rhs_val.float_val);
                 } else if (cond.rhs_val.type == ColType::TYPE_STRING) {
-                    output += "'" + std::string(cond.rhs_val.str_val) + "'";
+                    output += "'"; 
+                    output += cond.rhs_val.str_val;
+                    output += "'";
                 } else {
                     throw InternalError("Unknown value type in condition");
                 }
             } else {
-                output += cond.rhs_col.tab_name + "." + cond.rhs_col.col_name;
+                output += cond.rhs_col.tab_name;
+                output += ".";
+                output += cond.rhs_col.col_name;
             }
         }
         output += "])\n";
-        
-        if (context_ && context_->data_send_ && context_->offset_ &&
-            *context_->offset_ + output.length() < BUFFER_LENGTH) {
-            memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
-            *context_->offset_ += output.length();
-        }
-        
+        message_out(context_, output.c_str(), output.size());
+
+
         prev_->Next();
         return nullptr;
     }

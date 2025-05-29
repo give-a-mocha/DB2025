@@ -23,3 +23,7 @@ auto ReconstructTuple(const TabMeta *schema, const RmRecord &base_tuple, const T
 
 
 auto IsWriteWriteConflict(timestamp_t tuple_ts, Transaction *txn) -> bool;
+
+auto message_out(Context * context_, const std::string &output) -> void;
+
+auto message_out(Context *context_, const char *output, size_t output_size) -> void;
