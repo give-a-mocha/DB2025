@@ -40,26 +40,7 @@ class ExplainProjectExecutor : public AbstractExecutor {
     }
     
     std::unique_ptr<RmRecord> Next() override {
-        // std::string output = std::string(offset_, '\t');
-        // assert(offset_ < 512);
-        // output.resize(512);
-        // output += "Project(condition=[";
-        
-        // for (size_t i = 0; i < cols_.size(); ++i) {
-        //     if(i != 0) {
-        //         output += ",";
-        //     }
-        //     output += cols_[i].tab_name + "." + cols_[i].col_name;
-        // }
-        // output += "])\n";
-        // // message_out(context_, output);
-        // if (context_ && context_->data_send_ && context_->offset_ &&
-        //     *context_->offset_ + output.length() < BUFFER_LENGTH) {
-        //     memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
-        //     *context_->offset_ += output.length();
-        // }
-
-        StackString<2048> output;
+        StackString<2048, true> output(context_->data_send_ + *context_->offset_);
         output.append(offset_, '\t');
         output += "Project(condition=[";
         for (size_t i = 0; i < cols_.size(); ++i) {
@@ -71,8 +52,7 @@ class ExplainProjectExecutor : public AbstractExecutor {
             output += cols_[i].col_name;
         }
         output += "])\n";
-        message_out(context_, output.c_str(), output.size());
-
+        *context_->offset_ += output.size();
         prev_->Next();
         return nullptr;
     }

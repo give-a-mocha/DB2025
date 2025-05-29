@@ -11,6 +11,7 @@ class StackString {
    private:
     using BufferType = std::conditional_t<external_space, char*, char[SIZE]>;
     BufferType buf_;
+    // char buf_[SIZE];
     size_t size_;
 
    public:
@@ -20,20 +21,18 @@ class StackString {
     StackString& operator=(const StackString&) = delete;
     StackString& operator=(StackString&&) = delete;
 
-    constexpr StackString() = default;
-    constexpr StackString(char *buffer): buf_(buffer) {
-        static_assert(external_space);
-    }
+    constexpr StackString() : size_(0) {}
+    constexpr StackString(char* buffer) : buf_(buffer), size_(0) { static_assert(external_space); }
 
     constexpr void operator+=(const char* str) {
+        size_t len = strlen(str);
         if constexpr (is_throw) {
-            size_t len = strlen(str);
             if (len + size_ > SIZE - 1) {
                 throw std::runtime_error("(StackString::operator+=) StackString overflow");
             }
         }
         strcpy(buf_ + size_, str);
-
+        size_ += len;
     }
 
     constexpr void operator+=(const std::string& str) {
@@ -43,6 +42,7 @@ class StackString {
             }
         }
         memcpy(buf_ + size_, str.c_str(), str.size());
+        size_ += str.size();
     }
 
     constexpr void append(size_t size, char ch) {
@@ -52,6 +52,7 @@ class StackString {
             }
         }
         memset(buf_ + size_, ch, size);
+        size_ += size;
     }
 
     constexpr const char* c_str() {
@@ -65,10 +66,7 @@ class StackString {
 
     constexpr bool empty() const { return size_ == 0; }
 
-    constexpr std::string toString() const {
-        return std::string(buf_, size_);
-    }
+    constexpr std::string toString() const { return std::string(buf_, size_); }
 };
-
 
 #endif

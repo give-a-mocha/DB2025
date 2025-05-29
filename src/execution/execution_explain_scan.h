@@ -38,24 +38,13 @@ class ExplainScanExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        // std::string output = std::string(offset_, '\t');
-        // output.resize(1024);
-        // output += "Scan(table=" + tab_name_ + ")\n";
-        // // message_out(context_, output);
-        // if (context_ && context_->data_send_ && context_->offset_ &&
-        //     *context_->offset_ + output.length() < BUFFER_LENGTH) {
-        //     memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
-        //     *context_->offset_ += output.length();
-        // }
-
-
-        StackString output;
+        StackString<2048, true> output(context_->data_send_ + *context_->offset_);
         output.append(offset_, '\t');
         output += "Scan(table=";
         output += tab_name_;
         output += ")\n";
-        
-        message_out(context_, output.c_str(), output.size());
+
+        *context_->offset_ += output.size();
         return nullptr;
     }
     
