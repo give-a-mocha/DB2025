@@ -27,8 +27,7 @@ using namespace ast;
 // SQL关键字 - 这些是保留字，在词法分析阶段识别
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 %token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
-%token EXPLAIN
-
+%token EXPLAIN GROUP HAVING COUNT MAX MIN SUM AVG LIMIT AS IN
 // 复合操作符 - 由多个字符组成的操作符
 %token LEQ NEQ GEQ T_EOF
 
@@ -191,9 +190,9 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause  // 查询数据
+    |   SELECT selector FROM tableList optWhereClause optGroupByClause optHavingClause opt_order_clause  // 查询数据
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8);
     }
     |   EXPLAIN SELECT selector FROM tableList optWhereClause opt_order_clause  // 查询数据
     {
@@ -314,7 +313,15 @@ whereClause:
 
 /* 列引用 */
 col:
-        tbName '.' colName                  // 表名.列名（完全限定）
+        tbName '.' colName                  // 表名.列名（完全限定） AS colName
+    {
+        $$ = std::make_shared<Col>($1, $3, $5);
+    }
+    |   colName AS colName
+    {
+        $$ = std::make_shared<Col>("", $1, $3);
+    }
+    |   tbName '.' colName
     {
         $$ = std::make_shared<Col>($1, $3);
     }
@@ -322,6 +329,31 @@ col:
     {
         $$ = std::make_shared<Col>("", $1); // 表名为空字符串
     }
+    |   aggregator '(' '*' ')' optAlias
+    {
+        $$ = std::make_shared<Col>("", "*", $5, $1);
+    }
+    |   aggregator '(' tbName '.' colName ')' optAlias
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, $1);
+    }
+    |   aggregator '(' colName ')' optAlias
+    {
+        $$ = std::make_shared<Col>("", $3, $5, $1);
+    }
+    ;
+
+aggregator:
+        COUNT { $$ = "COUNT"; }
+    |   SUM   { $$ = "SUM"; }
+    |   MAX   { $$ = "MAX"; }
+    |   MIN   { $$ = "MIN"; }
+    |   AVG   { $$ = "AVG"; }
+    ;
+
+optAlias:
+        AS colName { $$ = $2; }
+    |   /* epsilon */ { $$ = ""; }
     ;
 
 /* 列列表 - 用于SELECT等 */
@@ -423,9 +455,9 @@ tableList:
 
 /* 可选的ORDER BY子句 */
 opt_order_clause:
-    ORDER BY order_clause                   // 有ORDER BY子句
-    { 
-        $$ = $3; 
+    ORDER BY order_list             // 有ORDER BY子句
+    {
+        $$ = $3;
     }
     |   /* epsilon */                       // 没有ORDER BY子句
     { 
@@ -439,7 +471,19 @@ order_clause:
     { 
         $$ = std::make_shared<OrderBy>($1, $2);
     }
-    ;   
+    ;
+
+order_list:
+    order_clause
+    {
+        $$ = std::vector<std::shared_ptr<OrderBy>>{$1};
+    }
+    |   order_list ',' order_clause
+    {
+        $$ = $1;
+        $$.push_back($3);
+    }
+    ;
 
 /* 可选的排序方向 */
 opt_asc_desc:
@@ -456,6 +500,53 @@ opt_asc_desc:
         $$ = OrderBy_DEFAULT; 
     }
     ;    
+
+optGroupByClause:
+    GROUP BY group_list
+    {
+        $$ = $3;
+    }
+    |   /* epsilon */ { $$ = std::vector<std::shared_ptr<GroupBy>>{}; }
+    ;
+
+group_clause:
+    col
+    {
+        $$ = std::make_shared<GroupBy>($1);
+    }
+    ;
+
+group_list:
+    group_clause
+    {
+        $$ = std::vector<std::shared_ptr<GroupBy>>{$1};
+    }
+    |   group_list ',' group_clause
+    {
+        $$ = $1;
+        $$.push_back($3);
+    }
+    ;
+
+optHavingClause:
+    /* epsilon */ { $$ = std::vector<std::shared_ptr<BinaryExpr>>{}; }
+    |   HAVING havingClause
+    {
+        $$ = $2;
+    }
+    ;
+
+havingClause:
+    condition
+    {
+        $$ = std::vector<std::shared_ptr<BinaryExpr>>{$1};
+    }
+    |   havingClause AND condition
+    {
+        $$ = $1;
+        $$.push_back($3);
+    }
+    ;
 
 /* 配置选项类型 */
 set_knob_type:

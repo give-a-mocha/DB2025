@@ -22,10 +22,27 @@ See the Mulan PSL v2 for more details. */
 struct TabCol {
     std::string tab_name;
     std::string col_name;
+    std::string as_name{};
+
+    AggregateType aggregate{AggregateType::NONE};
 
     friend bool operator<(const TabCol &x, const TabCol &y) {
         return std::make_pair(x.tab_name, x.col_name) < std::make_pair(y.tab_name, y.col_name);
     }
+
+    friend bool operator==(const TabCol& x, const TabCol& y) {
+        return std::make_pair(x.tab_name, x.col_name) ==
+               std::make_pair(y.tab_name, y.col_name);
+    }
+
+    friend bool operator!=(const TabCol& x, const TabCol& y) {
+        return !(x == y);
+    }
+
+    friend bool operator>(const TabCol& x, const TabCol& y) {
+        return std::make_pair(x.tab_name, x.col_name) > std::make_pair(y.tab_name, y.col_name);
+    }
+
 };
 
 struct Value {
@@ -67,6 +84,20 @@ struct Value {
                 throw StringOverflowError();
             }
             memset(raw->data, 0, len);
+            memcpy(raw->data, str_val.c_str(), str_val.size());
+        }
+    }
+
+    void init_raw(){
+        assert(raw == nullptr);
+        if (type == ColType::TYPE_INT) {
+            raw = std::make_shared<RmRecord>(sizeof(int));
+            *(int*)(raw->data) = int_val;
+        } else if (type == ColType::TYPE_FLOAT) {
+            raw = std::make_shared<RmRecord>(sizeof(float));
+            *(float*)(raw->data) = float_val;
+        } else if (type == ColType::TYPE_STRING) {
+            raw = std::make_shared<RmRecord>(str_val.size());
             memcpy(raw->data, str_val.c_str(), str_val.size());
         }
     }

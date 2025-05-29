@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_projection.h"
 #include "executor_seq_scan.h"
 #include "executor_update.h"
+#include "execution_sort.h"
 #include "index/ix.h"
 #include "record_printer.h"
 
@@ -143,7 +144,11 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     std::vector<std::string> captions;
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {
-        captions.push_back(sel_col.col_name);
+        if (!sel_col.as_name.empty())
+            captions.emplace_back(sel_col.as_name);
+        else
+        captions.emplace_back(sel_col.col_name);
+
     }
 
     // Print header into buffer
@@ -177,7 +182,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
                 col_str = std::string((char *)rec_buf, col.len);
                 col_str.resize(strlen(col_str.c_str()));
             }
-            columns.push_back(col_str);
+            columns.emplace_back(col_str);
         }
         // print record into buffer
         rec_printer.print_record(columns, context);
