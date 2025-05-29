@@ -18,9 +18,11 @@ See the Mulan PSL v2 for more details. */
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
+#include "execution_common.h"
 #include "index/ix.h"
 #include "system/sm.h"
 #include "common/config.h"
+#include "common/StackString.hpp"
 
 class ExplainScanExecutor : public AbstractExecutor {
    private:
@@ -36,14 +38,24 @@ class ExplainScanExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        std::string pre = std::string(offset_, '\t');
-        std::string output = pre + "Scan(table=" + tab_name_ + ")\n";
+        // std::string output = std::string(offset_, '\t');
+        // output.resize(1024);
+        // output += "Scan(table=" + tab_name_ + ")\n";
+        // // message_out(context_, output);
+        // if (context_ && context_->data_send_ && context_->offset_ &&
+        //     *context_->offset_ + output.length() < BUFFER_LENGTH) {
+        //     memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
+        //     *context_->offset_ += output.length();
+        // }
+
+
+        StackString output;
+        output.append(offset_, '\t');
+        output += "Scan(table=";
+        output += tab_name_;
+        output += ")\n";
         
-        if (context_ && context_->data_send_ && context_->offset_ &&
-            *context_->offset_ + output.length() < BUFFER_LENGTH) {
-            memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
-            *context_->offset_ += output.length();
-        }
+        message_out(context_, output.c_str(), output.size());
         return nullptr;
     }
     

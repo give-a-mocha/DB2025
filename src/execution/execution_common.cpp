@@ -56,3 +56,19 @@ auto IsWriteWriteConflict(timestamp_t tuple_ts, Transaction *txn) -> bool {
     // 如果元组的时间戳大于事务的开始时间戳，则存在写-写冲突
     return tuple_ts > txn->get_start_ts();
 }
+
+auto message_out(Context *context_, const std::string &output) -> void {
+    if (context_ && context_->data_send_ && context_->offset_ &&
+        *context_->offset_ + output.length() < BUFFER_LENGTH) {
+        memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
+        *context_->offset_ += output.length();
+    }
+}
+
+auto message_out(Context *context_, const char *output, size_t output_size) -> void {
+    if (context_ && context_->data_send_ && context_->offset_ &&
+        *context_->offset_ + output_size < BUFFER_LENGTH) {
+        memcpy(context_->data_send_ + *context_->offset_, output, output_size);
+        *context_->offset_ += output_size;
+    }
+}
