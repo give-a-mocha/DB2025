@@ -37,45 +37,32 @@ using namespace ast;
 %token <sv_float> VALUE_FLOAT               // 浮点数字面量
 %token <sv_bool> VALUE_BOOL                 // 布尔字面量
 
-
-// 语句类型 - 所有返回TreeNode的语法规则
+// specify types for non-terminal symbol
 %type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
+%type <sv_field> field
+%type <sv_fields> fieldList
+%type <sv_type_len> type
+%type <sv_comp_op> op
+%type <sv_expr> expr
+%type <sv_val> value
+%type <sv_vals> valueList
+%type <sv_str> tbName colName aggregator optAlias
+%type <sv_strs> tableList colNameList
+%type <sv_col> col
+%type <sv_cols> colList selector
+%type <sv_set_clause> setClause
+%type <sv_set_clauses> setClauses
+%type <sv_cond> condition
+%type <sv_conds> whereClause optWhereClause
+%type <sv_orderby> order_clause
+%type <sv_orderbys> order_list opt_order_clause
+%type <sv_orderby_dir> opt_asc_desc
+%type <sv_groupby> group_clause
+%type <sv_groupbys> group_list optGroupByClause
+%type <sv_having_conds> havingClause optHavingClause
+%type <sv_setKnobType> set_knob_type
 
-// 表结构相关
-%type <sv_field> field                      // 单个字段定义
-%type <sv_fields> fieldList                 // 字段列表
 
-// 数据类型
-%type <sv_type_len> type                    // 数据类型定义
-
-// 表达式和操作符
-%type <sv_comp_op> op                       // 比较操作符
-%type <sv_expr> expr                        // 表达式
-%type <sv_val> value                        // 值
-%type <sv_vals> valueList                   // 值列表
-
-// 标识符
-%type <sv_str> tbName colName               // 表名和列名
-
-// 列表类型
-%type <sv_strs> tableList colNameList       // 表名列表和列名列表
-%type <sv_col> col                          // 列引用
-%type <sv_cols> colList selector            // 列列表和选择器
-
-// UPDATE相关
-%type <sv_set_clause> setClause             // SET子句
-%type <sv_set_clauses> setClauses           // SET子句列表
-
-// WHERE相关
-%type <sv_cond> condition                   // 条件表达式
-%type <sv_conds> whereClause optWhereClause // WHERE子句
-
-// ORDER BY相关
-%type <sv_orderby> order_clause opt_order_clause  // ORDER BY子句
-%type <sv_orderby_dir> opt_asc_desc               // 排序方向
-
-// 配置相关
-%type <sv_setKnobType> set_knob_type        // 配置选项类型
 
 %%
 
@@ -313,7 +300,7 @@ whereClause:
 
 /* 列引用 */
 col:
-        tbName '.' colName                  // 表名.列名（完全限定） AS colName
+        tbName '.' colName AS colName      // 表名.列名（完全限定） 
     {
         $$ = std::make_shared<Col>($1, $3, $5);
     }
@@ -480,7 +467,6 @@ order_list:
     }
     |   order_list ',' order_clause
     {
-        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -523,7 +509,6 @@ group_list:
     }
     |   group_list ',' group_clause
     {
-        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -543,7 +528,6 @@ havingClause:
     }
     |   havingClause AND condition
     {
-        $$ = $1;
         $$.push_back($3);
     }
     ;
@@ -561,7 +545,7 @@ set_knob_type:
     ;
 
 /* 基本标识符规则 */
-tbName: IDENTIFIER;                         // 表名就是标识符
-colName: IDENTIFIER;                        // 列名就是标识符
+tbName: IDENTIFIER;            // 表名就是标识符
+colName: IDENTIFIER;           // 列名就是标识符
 
 %%
