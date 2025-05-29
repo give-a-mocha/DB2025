@@ -24,6 +24,10 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_projection.h"
 #include "execution/executor_seq_scan.h"
 #include "execution/executor_update.h"
+#include "execution/execution_explain_project.h"
+#include "execution/execution_explain_scan.h"
+#include "execution/execution_explain_filter.h"
+
 #include "optimizer/plan.h"
 
 typedef enum portalTag {
@@ -31,7 +35,8 @@ typedef enum portalTag {
     PORTAL_ONE_SELECT,
     PORTAL_DML_WITHOUT_SELECT,
     PORTAL_MULTI_QUERY,
-    PORTAL_CMD_UTILITY
+    PORTAL_CMD_UTILITY,
+    PORTAL_EXPLAIN
 } portalTag;
 
 struct PortalStmt {
@@ -107,7 +112,12 @@ class Portal {
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
-
+                case PlanTag::T_explain: {
+                    std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
+                    std::unique_ptr<AbstractExecutor> root = convert_plan_explain_executor(p, context, 0);
+                    return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(p->sel_cols_), std::move(root),
+                                                        plan);
+                }
                 default:
                     throw InternalError("Unexpected field type");
                     break;
@@ -138,6 +148,11 @@ class Portal {
                 ql->run_cmd_utility(portal->plan, txn_id, context);
                 break;
             }
+
+            case PORTAL_EXPLAIN: {
+                ql->run_explain(std::move(portal->root), std::move(portal->sel_cols), context);
+                break;
+            }
             default: {
                 throw InternalError("Unexpected field type");
             }
@@ -166,6 +181,27 @@ class Portal {
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context), x->sel_col_,
                                                   x->is_desc_);
+        }
+        return nullptr;
+    }
+
+    std::unique_ptr<AbstractExecutor> convert_plan_explain_executor(std::shared_ptr<Plan> plan, Context *context, int offset) {
+        if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
+            return std::make_unique<ExplainProjectExecutor>(convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, context);
+        } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
+            std::cerr << "plan->执行器这是一个ScanPlan: " << x->tab_name_ << std::endl;
+            if(x->conds_.empty()){
+                std::cerr << "进入:ScanExecutor" << std::endl;
+                return std::make_unique<ExplainScanExecutor>(x->tab_name_, offset, context);
+            }else{
+                std::cerr << "进入:FilterExecutor" << std::endl;
+                auto res =  std::make_unique<ExplainScanExecutor>(x->tab_name_, offset + 1, context);
+                return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset, context);
+            }
+        } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
+            
+        } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
+            return convert_plan_explain_executor(x->subplan_, context, offset); 
         }
         return nullptr;
     }

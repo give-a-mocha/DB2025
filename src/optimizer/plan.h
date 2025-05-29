@@ -34,6 +34,7 @@ enum class PlanTag{
     T_Update,
     T_Delete,
     T_select,
+    T_explain,
     T_Transaction_begin,
     T_Transaction_commit,
     T_Transaction_abort,

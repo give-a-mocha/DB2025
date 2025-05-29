@@ -238,6 +238,7 @@ std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> quer
 }
 
 std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> query, Context *context) {
+    //scanPlan JoinPlan
     std::shared_ptr<Plan> plan = make_one_rel(query);
 
     // 其他物理优化
@@ -435,7 +436,15 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
 
     // 物理优化
     auto sel_cols = query->cols;
+    //joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
+    if(auto x = std::dynamic_pointer_cast<ScanPlan>(plannerRoot)) {
+        std::cerr<< "这是一个ScanPlan: " << x->tab_name_ << std::endl;
+    }else if(auto x = std::dynamic_pointer_cast<JoinPlan>(plannerRoot)) {
+        std::cerr<< "这是一个JoinPlan:" << std::endl;
+    }else if(auto x = std::dynamic_pointer_cast<SortPlan>(plannerRoot)) {
+        std::cerr<< "这是一个SortPlan: " << std::endl;
+    }
     plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols));
 
     return plannerRoot;
@@ -529,6 +538,11 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
         }
         plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Update, table_scan_executors, x->tab_name,
                                                 std::vector<Value>(), query->conds, query->set_clauses);
+    } else if (auto x = std::dynamic_pointer_cast<ast::ExplainStmt>(query->parse)){
+        // explain
+        std::shared_ptr<Plan> projection = generate_select_plan(std::move(query), context);
+        plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_explain, projection, std::string(), std::vector<Value>(),
+                                                std::vector<Condition>(), std::vector<SetClause>());
     } else if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)) {
         std::shared_ptr<plannerInfo> root = std::make_shared<plannerInfo>(x);
         // 生成select语句的查询执行计划

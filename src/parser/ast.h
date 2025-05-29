@@ -241,6 +241,18 @@ struct SelectStmt : public TreeNode {
             }
 };
 
+struct ExplainStmt : public SelectStmt {
+
+    ExplainStmt(std::vector<std::shared_ptr<Col>> cols_,
+               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<BinaryExpr>> conds_,
+               std::shared_ptr<OrderBy> order_) :
+            SelectStmt(std::move(cols_), std::move(tabs_), 
+                      std::move(conds_), std::move(order_)) {
+                
+            }
+};
+
 // set enable_nestloop
 struct SetStmt : public TreeNode {
     SetKnobType set_knob_type_;

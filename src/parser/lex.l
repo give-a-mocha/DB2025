@@ -1,13 +1,20 @@
+/*词法分析器*/
     /* keywords are case insensitive */
+/* 关键字不区分大小写（SELECT = select */
 %option caseless
     /* we don't need yywrap() function */
+/* 不需要处理多文件 */
 %option noyywrap
     /* we don't need yyunput() function */
+/* 不需要退回字符功能 */
 %option nounput
     /* we don't need input() function */
+/* 不需要输入功能 */
 %option noinput
     /* enable location */
+/* 与语法分析器配合工作 */
 %option bison-bridge
+/* 记录每个词的位置 */
 %option bison-locations
 
 %{
@@ -15,7 +22,7 @@
 #include "yacc.tab.h"
 #include <iostream>
 
-// automatically update location
+// 自动更新位置信息的宏
 #define YY_USER_ACTION \
     yylloc->first_line = yylloc->last_line; \
     yylloc->first_column = yylloc->last_column; \
@@ -85,6 +92,7 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "ORDER" { return ORDER; }
 "BY" {  return BY;  }
 "ASC" { return ASC; }
+"EXPLAIN" { return EXPLAIN; }
 "ENABLE_NESTLOOP" { return ENABLE_NESTLOOP; }
 "ENABLE_SORTMERGE" { return ENABLE_SORTMERGE; }
 "TRUE" { 

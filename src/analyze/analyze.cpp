@@ -18,7 +18,39 @@ See the Mulan PSL v2 for more details. */
 std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse) {
     std::cerr << "DEBUG: Starting semantic analysis..." << std::endl;
     std::shared_ptr<Query> query = std::make_shared<Query>();
-    if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse)) {
+    if(auto x = std::dynamic_pointer_cast<ast::ExplainStmt>(parse)){
+        std::cerr << "DEBUG: Explain statement detected." << std::endl;
+        //!DO
+        // 处理表名
+        query->tables = std::move(x->tabs);
+        for (const auto &tab_name : query->tables) {
+            if (!sm_manager_->db_.is_table(tab_name)) {
+                throw TableNotFoundError(tab_name);
+            }
+        }
+
+        std::vector<ColMeta> all_cols;
+        get_all_cols(query->tables, all_cols);
+        ColCheck col_check(all_cols);
+        // 如果没有指定列，比如*则查询所有列
+        if(x->cols.empty()){
+            query->cols.reserve(all_cols.size());
+            for (auto &col : all_cols) {
+                TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+                query->cols.push_back(sel_col);
+            }
+        }else{
+            //把列加入并进行校验，添加表名
+            query->cols.reserve(x->cols.size());
+            for (auto &sv_sel_col : x->cols) {
+                TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name}; 
+                sel_col = col_check.check(sel_col);
+                query->cols.push_back(sel_col);
+            }
+        }
+        get_clause(x->conds, query->conds);
+        check_clause(query->tables, query->conds, col_check);
+    }else if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse)) {
         // 处理表名
         query->tables = std::move(x->tabs);
         /** TODO: 检查表是否存在 */
