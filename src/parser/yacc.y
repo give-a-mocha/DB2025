@@ -27,7 +27,8 @@ using namespace ast;
 // SQL关键字 - 这些是保留字，在词法分析阶段识别
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 %token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
-%token EXPLAIN GROUP HAVING COUNT MAX MIN SUM AVG LIMIT AS IN
+%token EXPLAIN
+
 // 复合操作符 - 由多个字符组成的操作符
 %token LEQ NEQ GEQ T_EOF
 
@@ -37,32 +38,45 @@ using namespace ast;
 %token <sv_float> VALUE_FLOAT               // 浮点数字面量
 %token <sv_bool> VALUE_BOOL                 // 布尔字面量
 
-// specify types for non-terminal symbol
+
+// 语句类型 - 所有返回TreeNode的语法规则
 %type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
-%type <sv_field> field
-%type <sv_fields> fieldList
-%type <sv_type_len> type
-%type <sv_comp_op> op
-%type <sv_expr> expr
-%type <sv_val> value
-%type <sv_vals> valueList
-%type <sv_str> tbName colName aggregator optAlias
-%type <sv_strs> tableList colNameList
-%type <sv_col> col
-%type <sv_cols> colList selector
-%type <sv_set_clause> setClause
-%type <sv_set_clauses> setClauses
-%type <sv_cond> condition
-%type <sv_conds> whereClause optWhereClause
-%type <sv_orderby> order_clause
-%type <sv_orderbys> order_list opt_order_clause
-%type <sv_orderby_dir> opt_asc_desc
-%type <sv_groupby> group_clause
-%type <sv_groupbys> group_list optGroupByClause
-%type <sv_having_conds> havingClause optHavingClause
-%type <sv_setKnobType> set_knob_type
 
+// 表结构相关
+%type <sv_field> field                      // 单个字段定义
+%type <sv_fields> fieldList                 // 字段列表
 
+// 数据类型
+%type <sv_type_len> type                    // 数据类型定义
+
+// 表达式和操作符
+%type <sv_comp_op> op                       // 比较操作符
+%type <sv_expr> expr                        // 表达式
+%type <sv_val> value                        // 值
+%type <sv_vals> valueList                   // 值列表
+
+// 标识符
+%type <sv_str> tbName colName               // 表名和列名
+
+// 列表类型
+%type <sv_strs> tableList colNameList       // 表名列表和列名列表
+%type <sv_col> col                          // 列引用
+%type <sv_cols> colList selector            // 列列表和选择器
+
+// UPDATE相关
+%type <sv_set_clause> setClause             // SET子句
+%type <sv_set_clauses> setClauses           // SET子句列表
+
+// WHERE相关
+%type <sv_cond> condition                   // 条件表达式
+%type <sv_conds> whereClause optWhereClause // WHERE子句
+
+// ORDER BY相关
+%type <sv_orderby> order_clause opt_order_clause  // ORDER BY子句
+%type <sv_orderby_dir> opt_asc_desc               // 排序方向
+
+// 配置相关
+%type <sv_setKnobType> set_knob_type        // 配置选项类型
 
 %%
 
@@ -177,9 +191,9 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause optGroupByClause optHavingClause opt_order_clause  // 查询数据
+    |   SELECT selector FROM tableList optWhereClause opt_order_clause  // 查询数据
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
     }
     |   EXPLAIN SELECT selector FROM tableList optWhereClause opt_order_clause  // 查询数据
     {
@@ -300,15 +314,7 @@ whereClause:
 
 /* 列引用 */
 col:
-        tbName '.' colName AS colName      // 表名.列名（完全限定） 
-    {
-        $$ = std::make_shared<Col>($1, $3, $5);
-    }
-    |   colName AS colName
-    {
-        $$ = std::make_shared<Col>("", $1, $3);
-    }
-    |   tbName '.' colName
+        tbName '.' colName                  // 表名.列名（完全限定）
     {
         $$ = std::make_shared<Col>($1, $3);
     }
@@ -316,31 +322,6 @@ col:
     {
         $$ = std::make_shared<Col>("", $1); // 表名为空字符串
     }
-    |   aggregator '(' '*' ')' optAlias
-    {
-        $$ = std::make_shared<Col>("", "*", $5, $1);
-    }
-    |   aggregator '(' tbName '.' colName ')' optAlias
-    {
-        $$ = std::make_shared<Col>($3, $5, $7, $1);
-    }
-    |   aggregator '(' colName ')' optAlias
-    {
-        $$ = std::make_shared<Col>("", $3, $5, $1);
-    }
-    ;
-
-aggregator:
-        COUNT { $$ = "COUNT"; }
-    |   SUM   { $$ = "SUM"; }
-    |   MAX   { $$ = "MAX"; }
-    |   MIN   { $$ = "MIN"; }
-    |   AVG   { $$ = "AVG"; }
-    ;
-
-optAlias:
-        AS colName { $$ = $2; }
-    |   /* epsilon */ { $$ = ""; }
     ;
 
 /* 列列表 - 用于SELECT等 */
@@ -442,9 +423,9 @@ tableList:
 
 /* 可选的ORDER BY子句 */
 opt_order_clause:
-    ORDER BY order_list             // 有ORDER BY子句
-    {
-        $$ = $3;
+    ORDER BY order_clause                   // 有ORDER BY子句
+    { 
+        $$ = $3; 
     }
     |   /* epsilon */                       // 没有ORDER BY子句
     { 
@@ -458,18 +439,7 @@ order_clause:
     { 
         $$ = std::make_shared<OrderBy>($1, $2);
     }
-    ;
-
-order_list:
-    order_clause
-    {
-        $$ = std::vector<std::shared_ptr<OrderBy>>{$1};
-    }
-    |   order_list ',' order_clause
-    {
-        $$.push_back($3);
-    }
-    ;
+    ;   
 
 /* 可选的排序方向 */
 opt_asc_desc:
@@ -487,51 +457,6 @@ opt_asc_desc:
     }
     ;    
 
-optGroupByClause:
-    GROUP BY group_list
-    {
-        $$ = $3;
-    }
-    |   /* epsilon */ { $$ = std::vector<std::shared_ptr<GroupBy>>{}; }
-    ;
-
-group_clause:
-    col
-    {
-        $$ = std::make_shared<GroupBy>($1);
-    }
-    ;
-
-group_list:
-    group_clause
-    {
-        $$ = std::vector<std::shared_ptr<GroupBy>>{$1};
-    }
-    |   group_list ',' group_clause
-    {
-        $$.push_back($3);
-    }
-    ;
-
-optHavingClause:
-    /* epsilon */ { $$ = std::vector<std::shared_ptr<BinaryExpr>>{}; }
-    |   HAVING havingClause
-    {
-        $$ = $2;
-    }
-    ;
-
-havingClause:
-    condition
-    {
-        $$ = std::vector<std::shared_ptr<BinaryExpr>>{$1};
-    }
-    |   havingClause AND condition
-    {
-        $$.push_back($3);
-    }
-    ;
-
 /* 配置选项类型 */
 set_knob_type:
     ENABLE_NESTLOOP                         // 启用嵌套循环连接
@@ -545,7 +470,7 @@ set_knob_type:
     ;
 
 /* 基本标识符规则 */
-tbName: IDENTIFIER;            // 表名就是标识符
-colName: IDENTIFIER;           // 列名就是标识符
+tbName: IDENTIFIER;                         // 表名就是标识符
+colName: IDENTIFIER;                        // 列名就是标识符
 
 %%
