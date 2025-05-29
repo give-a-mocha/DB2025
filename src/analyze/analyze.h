@@ -38,6 +38,9 @@ public:
         }
     }
     TabCol check(TabCol target_col) {
+        if(target_col.aggregate == AggregateType::AGG_COUNT && target_col.col_name == "*") {
+            return target_col;
+        }
         if (target_col.tab_name.empty()) {
             auto it = mp.find(target_col.col_name);
             if (it == mp.end()) {
@@ -97,7 +100,7 @@ private:
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
-    void check_where_aggregates(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
+    void check_where_aggregates(std::vector<Condition> &conds);
     void check_group_by_semantics(const std::vector<TabCol> &select_cols,
                                  const std::vector<TabCol> &group_by_clause_cols);
     void check_having_conds(const std::vector<Condition> &having_conds, const std::vector<TabCol> &group_cols);

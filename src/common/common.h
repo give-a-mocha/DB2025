@@ -43,18 +43,6 @@ struct TabCol {
         return std::make_pair(x.tab_name, x.col_name) > std::make_pair(y.tab_name, y.col_name);
     }
 
-    TabCol& operator=(const TabCol& x) {
-        tab_name = x.tab_name;
-        col_name = x.col_name;
-        if(!x.as_name.empty()){
-            as_name = x.as_name;
-        }
-        if(x.aggregate != AggregateType::NONE) {
-            aggregate = x.aggregate;
-        }
-        return *this;
-    }
-
 };
 
 struct Value {
@@ -96,6 +84,20 @@ struct Value {
                 throw StringOverflowError();
             }
             memset(raw->data, 0, len);
+            memcpy(raw->data, str_val.c_str(), str_val.size());
+        }
+    }
+
+    void init_raw(){
+        assert(raw == nullptr);
+        if (type == ColType::TYPE_INT) {
+            raw = std::make_shared<RmRecord>(sizeof(int));
+            *(int*)(raw->data) = int_val;
+        } else if (type == ColType::TYPE_FLOAT) {
+            raw = std::make_shared<RmRecord>(sizeof(float));
+            *(float*)(raw->data) = float_val;
+        } else if (type == ColType::TYPE_STRING) {
+            raw = std::make_shared<RmRecord>(str_val.size());
             memcpy(raw->data, str_val.c_str(), str_val.size());
         }
     }

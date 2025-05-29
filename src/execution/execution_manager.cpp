@@ -145,9 +145,9 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {
         if (!sel_col.as_name.empty())
-            captions.push_back(sel_col.as_name);
+            captions.emplace_back(sel_col.as_name);
         else
-        captions.push_back(sel_col.col_name);
+        captions.emplace_back(sel_col.col_name);
 
     }
 
@@ -182,7 +182,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
                 col_str = std::string((char *)rec_buf, col.len);
                 col_str.resize(strlen(col_str.c_str()));
             }
-            columns.push_back(col_str);
+            columns.emplace_back(col_str);
         }
         // print record into buffer
         rec_printer.print_record(columns, context);

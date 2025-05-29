@@ -1,6 +1,6 @@
-#line 1 "lex.yy.cpp"
+#line 1 "/home/fuyuki_vila/Desktop/DB2025/src/parser/lex.yy.cpp"
 
-#line 3 "lex.yy.cpp"
+#line 3 "/home/fuyuki_vila/Desktop/DB2025/src/parser/lex.yy.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -667,9 +667,9 @@ char *yytext;
         } \
     }
 
-#line 670 "lex.yy.cpp"
+#line 670 "/home/fuyuki_vila/Desktop/DB2025/src/parser/lex.yy.cpp"
 
-#line 672 "lex.yy.cpp"
+#line 672 "/home/fuyuki_vila/Desktop/DB2025/src/parser/lex.yy.cpp"
 
 #define INITIAL 0
 #define STATE_COMMENT 1
@@ -907,7 +907,7 @@ YY_DECL
 
 #line 48 "lex.l"
     /* block comment */
-#line 910 "lex.yy.cpp"
+#line 910 "/home/fuyuki_vila/Desktop/DB2025/src/parser/lex.yy.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1298,7 +1298,7 @@ YY_RULE_SETUP
 #line 135 "lex.l"
 ECHO;
 	YY_BREAK
-#line 1301 "lex.yy.cpp"
+#line 1301 "/home/fuyuki_vila/Desktop/DB2025/src/parser/lex.yy.cpp"
 
 	case YY_END_OF_BUFFER:
 		{
