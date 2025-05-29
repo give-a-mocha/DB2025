@@ -30,11 +30,11 @@ class ProjectionExecutor : public AbstractExecutor {
         auto &prev_cols = prev_->cols();
         for (auto &sel_col : sel_cols) {
             auto pos = get_col(prev_cols, sel_col);
-            sel_idxs_.push_back(pos - prev_cols.begin());
+            sel_idxs_.emplace_back(pos - prev_cols.begin());
             auto col = *pos;
             col.offset = curr_offset;
             curr_offset += col.len;
-            cols_.push_back(col);
+            cols_.emplace_back(col);
         }
         len_ = curr_offset;
     }
@@ -46,8 +46,6 @@ class ProjectionExecutor : public AbstractExecutor {
     bool is_end() const override { return prev_->is_end(); }
 
     std::unique_ptr<RmRecord> Next() override {
-        // Todo:
-        // !需要自己实现
         auto prev_rec = prev_->Next();
         if (!prev_rec) {
             std::cerr << "Error: Previous record is null at " + getType() << std::endl;

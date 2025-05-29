@@ -85,6 +85,21 @@ struct RmRecord {
         memcpy(data, data_, size);
     }
 
+    void AddData(char* data_, int size_) {
+        if (allocated_) {
+            char* new_data = new char[size + size_];
+            memcpy(new_data, data, size);
+            memcpy(new_data + size, data_, size_);
+            delete[] data;
+            data = new_data;
+        } else {
+            data = new char[size + size_];
+            allocated_ = true;
+        }
+        memcpy(data + size, data_, size_);
+        size += size_;
+    }
+
     void Deserialize(const char* data_) {
         size = *reinterpret_cast<const int*>(data_);
         if(allocated_) {

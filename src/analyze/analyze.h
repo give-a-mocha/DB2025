@@ -38,6 +38,9 @@ public:
         }
     }
     TabCol check(TabCol target_col) {
+        if(target_col.aggregate == AggregateType::AGG_COUNT && target_col.col_name == "*") {
+            return target_col;
+        }
         if (target_col.tab_name.empty()) {
             auto it = mp.find(target_col.col_name);
             if (it == mp.end()) {
@@ -59,9 +62,8 @@ public:
         return target_col;
     }
 };
-
-class Query{
-    public:
+class Query {
+   public:
     std::shared_ptr<ast::TreeNode> parse;
     // TODO jointree
     // where条件
@@ -75,8 +77,11 @@ class Query{
     //insert 的values值
     std::vector<Value> values;
 
-    Query(){}
+    std::vector<TabCol> group_cols;
 
+    std::vector<Condition> having_conds;
+
+    Query() {}
 };
 
 class Analyze
@@ -95,6 +100,11 @@ private:
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
+    void check_where_aggregates(std::vector<Condition> &conds);
+    void check_group_by_semantics(const std::vector<TabCol> &select_cols,
+                                 const std::vector<TabCol> &group_by_clause_cols);
+    void check_having_conds(const std::vector<Condition> &having_conds, const std::vector<TabCol> &group_cols);
+    void check_without_group(const std::vector<TabCol> &group_cols, const std::vector<Condition> &having_conds);
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
     CompOp convert_sv_comp_op(ast::SvCompOp op);
 };
