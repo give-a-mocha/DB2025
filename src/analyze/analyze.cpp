@@ -35,6 +35,32 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             query->tables.push_back(tab_name);
         }
 
+        // 处理JOIN表达式
+        if (!x->jointree.empty()) {
+            query->jointree.reserve(x->jointree.size());
+            for (const auto &join_expr : x->jointree) {
+                // 检查右表是否存在
+                std::string right_tab_name = join_expr->right->tab_name;
+                if (!sm_manager_->db_.is_table(right_tab_name)) {
+                    throw TableNotFoundError(right_tab_name);
+                }
+                
+                TabRef right_table(right_tab_name, join_expr->right->alias);
+
+                // 添加右表到表列表和tab_refs
+                query->tables.push_back(right_tab_name);
+                tab_refs.push_back(right_table);
+                
+                // 转换JOIN条件
+                std::vector<Condition> join_conds;
+                get_clause_alias(join_expr->conds, join_conds, tab_refs);
+                
+                // 创建JoinNode
+                JoinType join_type = convert_sv_join_type(join_expr->type);
+                query->jointree.emplace_back(right_tab_name, join_conds, join_type);
+            }
+        }
+
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
         // 如果没有指定列，比如*则查询所有列
@@ -58,6 +84,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 处理where条件
         get_clause_alias(x->conds, query->conds, tab_refs);
         check_clause(query->tables, query->conds);
+        
+        // 校验JOIN条件
+        for (auto &join_node : query->jointree) {
+            check_clause(query->tables, join_node.join_conds);
+        }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         /** TODO: */
         // 处理表名
@@ -276,6 +307,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
     }
 }
 
+
 Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
     Value val;
     if (auto int_lit = std::dynamic_pointer_cast<ast::IntLit>(sv_val)) {
@@ -306,5 +338,19 @@ CompOp Analyze::convert_sv_comp_op(ast::SvCompOp op) {
             return CompOp::OP_GE;
         default:
             throw InternalError("Unknown comparison operator in semantic analysis");
+    }
+}
+JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
+    switch (type) {
+        case ast::JoinType::SV_INNER_JOIN:
+            return JoinType::INNER_JOIN;
+        case ast::JoinType::SV_LEFT_JOIN:
+            return JoinType::LEFT_JOIN;
+        case ast::JoinType::SV_RIGHT_JOIN:
+            return JoinType::RIGHT_JOIN;
+        case ast::JoinType::SV_FULL_JOIN:
+            return JoinType::FULL_JOIN;
+        default:
+            throw InternalError("Unknown join type in semantic analysis");
     }
 }

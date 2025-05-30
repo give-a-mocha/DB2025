@@ -60,10 +60,13 @@ public:
     }
 };
 
+
 class Query{
     public:
     std::shared_ptr<ast::TreeNode> parse;
-    // TODO jointree
+    // TODO: jointree
+    // JOIN树 - 存储所有的JOIN操作
+    std::vector<JoinNode> jointree;
     // where条件
     std::vector<Condition> conds;
     // 投影列
@@ -106,9 +109,9 @@ private:
     //检查where条件合法性
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
-    
     // 辅助函数
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
     CompOp convert_sv_comp_op(ast::SvCompOp op);
+    JoinType convert_sv_join_type(ast::JoinType type);
 };
 

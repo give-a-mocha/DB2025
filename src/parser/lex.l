@@ -86,7 +86,12 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "FLOAT" { return FLOAT; }
 "INDEX" { return INDEX; }
 "AND" { return AND; }
-"JOIN" {return JOIN;}
+"JOIN" { return JOIN; }
+"INNER_JOIN" { return INNER_JOIN; }
+"LEFT_JOIN" { return LEFT_JOIN; }
+"RIGHT_JOIN" { return RIGHT_JOIN; }
+"FULL_JOIN" { return FULL_JOIN; }
+"ON" { return ON; }
 "EXIT" { return EXIT; }
 "HELP" { return HELP; }
 "ORDER" { return ORDER; }

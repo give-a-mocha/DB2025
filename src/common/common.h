@@ -82,8 +82,9 @@ struct Value {
     }
 };
 
-enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
 
+enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
+enum class JoinType { INNER_JOIN, LEFT_JOIN, RIGHT_JOIN, FULL_JOIN, CROSS_JOIN };
 struct Condition {
     TabCol lhs_col;   // left-hand side column
     CompOp op;        // comparison operator
@@ -92,7 +93,36 @@ struct Condition {
     Value rhs_val;    // right-hand side value
 };
 
+struct JoinNode {
+    std::string tab_name;
+    std::vector<Condition> join_conds;     // JOIN条件
+    JoinType join_type;                    // JOIN类型
+    
+    JoinNode(std::string name_, std::vector<Condition> join_conds_, JoinType join_type_)
+        :tab_name(name_),join_conds(std::move(join_conds_)), join_type(join_type_) {}
+};
+
+
 struct SetClause {
     TabCol lhs;
     Value rhs;
 };
+
+inline CompOp swap_op(CompOp op) {
+    switch (op) {
+        case CompOp::OP_EQ:
+            return CompOp::OP_EQ;
+        case CompOp::OP_NE:
+            return CompOp::OP_NE;
+        case CompOp::OP_LT:
+            return CompOp::OP_GT;
+        case CompOp::OP_GT:
+            return CompOp::OP_LT;
+        case CompOp::OP_LE:
+            return CompOp::OP_GE;
+        case CompOp::OP_GE:
+            return CompOp::OP_LE;
+        default:
+            throw RMDBError("Unknown comparison operator");
+    }
+}

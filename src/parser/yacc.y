@@ -28,6 +28,7 @@ using namespace ast;
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 %token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
 %token EXPLAIN AS
+%token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON
 
 // 复合操作符 - 由多个字符组成的操作符
 %token LEQ NEQ GEQ T_EOF
@@ -77,6 +78,11 @@ using namespace ast;
 // ORDER BY相关
 %type <sv_orderby> order_clause opt_order_clause  // ORDER BY子句
 %type <sv_orderby_dir> opt_asc_desc               // 排序方向
+
+// JOIN相关
+%type <sv_join_type> joinType               // JOIN类型
+%type <sv_join_expr> joinExpr               // JOIN表达式
+%type <sv_join_exprs> joinExprs optJoinExprs // JOIN表达式列表
 
 // 配置相关
 %type <sv_setKnobType> set_knob_type        // 配置选项类型
@@ -194,13 +200,13 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名)
+    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
     }
-    |   EXPLAIN SELECT selector FROM tableList optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名)
+    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7);
+        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8);
     };
 
 /* 字段列表 - 用于CREATE TABLE */
@@ -444,10 +450,6 @@ tableList:
     {
         $$.push_back($3);                   // 向表列表添加新表
     }
-    |   tableList JOIN tableRef             // 多个表（JOIN连接）
-    {
-        $$.push_back($3);                   // 向表列表添加新表
-    }
     ;
 
 /* 可选的ORDER BY子句 */
@@ -486,15 +488,71 @@ opt_asc_desc:
     }
     ;    
 
+/* 可选的JOIN表达式列表 */
+optJoinExprs:
+        /* epsilon */                       // 没有JOIN
+    {
+        $$ = std::vector<std::shared_ptr<JoinExpr>>{};
+    }
+    |   joinExprs                          // 有JOIN表达式
+    {
+        $$ = $1;
+    }
+    ;
+
+/* JOIN表达式列表 */
+joinExprs:
+        joinExpr                           // 单个JOIN表达式
+    {
+        $$ = std::vector<std::shared_ptr<JoinExpr>>{$1};
+    }
+    |   joinExprs joinExpr                 // 多个JOIN表达式
+    {
+        $$.push_back($2);
+    }
+    ;
+
+/* JOIN表达式 */
+joinExpr:
+        joinType tableRef ON whereClause   // JOIN类型 表 ON 条件
+    {
+        $$ = std::make_shared<JoinExpr>($2, $4, $1);
+    }
+    ;
+
+/* JOIN类型 */
+joinType:
+        JOIN                               // 默认INNER JOIN
+    {
+        $$ = SV_INNER_JOIN;
+    }
+    |   INNER_JOIN                         // 显式INNER JOIN
+    {
+        $$ = SV_INNER_JOIN;
+    }
+    |   LEFT_JOIN                          // LEFT JOIN
+    {
+        $$ = SV_LEFT_JOIN;
+    }
+    |   RIGHT_JOIN                         // RIGHT JOIN
+    {
+        $$ = SV_RIGHT_JOIN;
+    }
+    |   FULL_JOIN                          // FULL JOIN
+    {
+        $$ = SV_FULL_JOIN;
+    }
+    ;
+
 /* 配置选项类型 */
 set_knob_type:
     ENABLE_NESTLOOP                         // 启用嵌套循环连接
-    { 
-        $$ = EnableNestLoop; 
+    {
+        $$ = EnableNestLoop;
     }
     |   ENABLE_SORTMERGE                    // 启用排序合并连接
-    { 
-        $$ = EnableSortMerge; 
+    {
+        $$ = EnableSortMerge;
     }
     ;
 

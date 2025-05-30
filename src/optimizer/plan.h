@@ -93,7 +93,14 @@ public:
         left_ = std::move(left);
         right_ = std::move(right);
         conds_ = std::move(conds);
-        type = INNER_JOIN;
+        type = JoinType::INNER_JOIN;
+    }
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds, JoinType type){
+        Plan::tag = tag;
+        left_ = std::move(left);
+        right_ = std::move(right);
+        conds_ = std::move(conds);
+        this->type = type;
     }
 };
 
