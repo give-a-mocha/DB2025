@@ -1,6 +1,6 @@
-#line 2 "/Users/masttf/coding/git/DB2025/src/parser/lex.yy.cpp"
+#line 2 "lex.yy.cpp"
 
-#line 4 "/Users/masttf/coding/git/DB2025/src/parser/lex.yy.cpp"
+#line 4 "lex.yy.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -379,8 +379,8 @@ static void yynoreturn yy_fatal_error ( const char* msg  );
 	(yy_hold_char) = *yy_cp; \
 	*yy_cp = '\0'; \
 	(yy_c_buf_p) = yy_cp;
-#define YY_NUM_RULES 52
-#define YY_END_OF_BUFFER 53
+#define YY_NUM_RULES 53
+#define YY_END_OF_BUFFER 54
 /* This struct is not used in this scanner,
    but its presence is necessary. */
 struct yy_trans_info
@@ -390,26 +390,26 @@ struct yy_trans_info
 	};
 static const flex_int16_t yy_accept[189] =
     {   0,
-        0,    0,    0,    0,   53,   51,    6,    7,    7,   51,
-       46,   51,   51,   51,   48,   46,   46,   47,   47,   47,
-       47,   47,   47,   47,   47,   47,   47,   47,   47,   47,
-       47,   47,   47,   47,    3,    4,    6,    7,    0,   50,
-       48,    5,    1,   49,   44,   45,   43,   47,   47,   47,
-       47,   47,   36,   47,   47,   47,   47,   47,   47,   47,
-       47,   47,   47,   47,   47,   47,   47,   47,   47,   47,
-       47,   47,   47,   47,   47,    2,    5,   49,   47,   31,
-       37,   47,   47,   47,   47,   47,   47,   47,   47,   47,
-       47,   47,   47,   47,   47,   47,   47,   27,   47,   47,
+        0,    0,    0,    0,   54,   52,    6,    7,    7,   52,
+       47,   52,   52,   52,   49,   47,   47,   48,   48,   48,
+       48,   48,   48,   48,   48,   48,   48,   48,   48,   48,
+       48,   48,   48,   48,    3,    4,    6,    7,    0,   51,
+       49,    5,    1,   50,   45,   46,   44,   48,   48,   48,
+       38,   48,   36,   48,   48,   48,   48,   48,   48,   48,
+       48,   48,   48,   48,   48,   48,   48,   48,   48,   48,
+       48,   48,   48,   48,   48,    2,    5,   50,   48,   31,
+       37,   48,   48,   48,   48,   48,   48,   48,   48,   48,
+       48,   48,   48,   48,   48,   48,   48,   27,   48,   48,
 
-       47,   47,   25,   47,   47,   47,   47,   47,   47,   47,
-       47,   28,   47,   47,   47,   17,   16,   47,   33,   47,
-       47,   47,   22,   34,   47,   47,   19,   32,   47,   47,
-       47,    8,   47,   41,   47,   47,   47,   11,    9,   47,
-       47,   47,   47,   47,   42,   29,   30,   47,   35,   47,
-       47,   15,   47,   47,   23,   10,   14,   21,   47,   47,
-       18,   47,   26,   13,   24,   20,   47,   38,   47,   47,
-       47,   12,   47,   47,   47,   47,   47,   47,   47,   47,
-       47,   47,   47,   47,   39,   47,   40,    0
+       48,   48,   25,   48,   48,   48,   48,   48,   48,   48,
+       48,   28,   48,   48,   48,   17,   16,   48,   33,   48,
+       48,   48,   22,   34,   48,   48,   19,   32,   48,   48,
+       48,    8,   48,   42,   48,   48,   48,   11,    9,   48,
+       48,   48,   48,   48,   43,   29,   30,   48,   35,   48,
+       48,   15,   48,   48,   23,   10,   14,   21,   48,   48,
+       18,   48,   26,   13,   24,   20,   48,   39,   48,   48,
+       48,   12,   48,   48,   48,   48,   48,   48,   48,   48,
+       48,   48,   48,   48,   40,   48,   41,    0
     } ;
 
 static const YY_CHAR yy_ec[256] =
@@ -659,9 +659,9 @@ char *yytext;
         } \
     }
 
-#line 663 "/Users/masttf/coding/git/DB2025/src/parser/lex.yy.cpp"
+#line 663 "lex.yy.cpp"
 
-#line 665 "/Users/masttf/coding/git/DB2025/src/parser/lex.yy.cpp"
+#line 665 "lex.yy.cpp"
 
 #define INITIAL 0
 #define STATE_COMMENT 1
@@ -899,7 +899,7 @@ YY_DECL
 
 #line 55 "lex.l"
     /* block comment */
-#line 903 "/Users/masttf/coding/git/DB2025/src/parser/lex.yy.cpp"
+#line 903 "lex.yy.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1149,85 +1149,90 @@ YY_RULE_SETUP
 case 38:
 YY_RULE_SETUP
 #line 96 "lex.l"
-{ return EXPLAIN; }
+{ return AS; }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
 #line 97 "lex.l"
-{ return ENABLE_NESTLOOP; }
+{ return EXPLAIN; }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
 #line 98 "lex.l"
-{ return ENABLE_SORTMERGE; }
+{ return ENABLE_NESTLOOP; }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
 #line 99 "lex.l"
+{ return ENABLE_SORTMERGE; }
+	YY_BREAK
+case 42:
+YY_RULE_SETUP
+#line 100 "lex.l"
 { 
     yylval->sv_bool = true;
     return VALUE_BOOL; 
 }
 	YY_BREAK
-case 42:
+case 43:
 YY_RULE_SETUP
-#line 103 "lex.l"
+#line 104 "lex.l"
 {
     yylval->sv_bool = false;
     return VALUE_BOOL;
 }
 	YY_BREAK
 /* operators */
-case 43:
-YY_RULE_SETUP
-#line 108 "lex.l"
-{ return GEQ; }
-	YY_BREAK
 case 44:
 YY_RULE_SETUP
 #line 109 "lex.l"
-{ return LEQ; }
+{ return GEQ; }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
 #line 110 "lex.l"
-{ return NEQ; }
+{ return LEQ; }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
 #line 111 "lex.l"
+{ return NEQ; }
+	YY_BREAK
+case 47:
+YY_RULE_SETUP
+#line 112 "lex.l"
 { return yytext[0]; }
 	YY_BREAK
 /* id */
-case 47:
+case 48:
 YY_RULE_SETUP
-#line 113 "lex.l"
+#line 114 "lex.l"
 {
     yylval->sv_str = yytext;
     return IDENTIFIER;
 }
 	YY_BREAK
 /* literals */
-case 48:
+case 49:
 YY_RULE_SETUP
-#line 118 "lex.l"
+#line 119 "lex.l"
 {
     yylval->sv_int = atoi(yytext);
     return VALUE_INT;
 }
 	YY_BREAK
-case 49:
+case 50:
 YY_RULE_SETUP
-#line 122 "lex.l"
+#line 123 "lex.l"
 {
     yylval->sv_float = atof(yytext);
     return VALUE_FLOAT;
 }
 	YY_BREAK
-case 50:
-/* rule 50 can match eol */
+case 51:
+/* rule 51 can match eol */
 YY_RULE_SETUP
-#line 126 "lex.l"
+#line 127 "lex.l"
 {
     yylval->sv_str = std::string(yytext + 1, strlen(yytext) - 2);
     return VALUE_STRING;
@@ -1236,21 +1241,21 @@ YY_RULE_SETUP
 /* EOF */
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(STATE_COMMENT):
-#line 131 "lex.l"
+#line 132 "lex.l"
 { return T_EOF; }
 	YY_BREAK
 /* unexpected char */
-case 51:
-YY_RULE_SETUP
-#line 133 "lex.l"
-{ std::cerr << "Lexer Error: unexpected character " << yytext[0] << std::endl; }
-	YY_BREAK
 case 52:
 YY_RULE_SETUP
 #line 134 "lex.l"
+{ std::cerr << "Lexer Error: unexpected character " << yytext[0] << std::endl; }
+	YY_BREAK
+case 53:
+YY_RULE_SETUP
+#line 135 "lex.l"
 ECHO;
 	YY_BREAK
-#line 1254 "/Users/masttf/coding/git/DB2025/src/parser/lex.yy.cpp"
+#line 1259 "lex.yy.cpp"
 
 	case YY_END_OF_BUFFER:
 		{
@@ -2216,6 +2221,6 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 134 "lex.l"
+#line 135 "lex.l"
 
 

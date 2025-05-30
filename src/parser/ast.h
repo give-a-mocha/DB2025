@@ -152,9 +152,13 @@ struct BoolLit : public Value {
 struct Col : public Expr {
     std::string tab_name;
     std::string col_name;
+    std::string alias;  // 列别名
 
     Col(std::string tab_name_, std::string col_name_) :
-            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {}
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias("") {}
+    
+    Col(std::string tab_name_, std::string col_name_, std::string alias_) :
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias(std::move(alias_)) {}
 };
 
 struct SetClause : public TreeNode {
@@ -220,9 +224,18 @@ struct JoinExpr : public TreeNode {
             left(std::move(left_)), right(std::move(right_)), conds(std::move(conds_)), type(type_) {}
 };
 
+// 表别名结构
+struct TableRef : public TreeNode {
+    std::string tab_name;
+    std::string alias;  // 表别名
+
+    TableRef(std::string tab_name_) : tab_name(std::move(tab_name_)), alias("") {}
+    TableRef(std::string tab_name_, std::string alias_) : tab_name(std::move(tab_name_)), alias(std::move(alias_)) {}
+};
+
 struct SelectStmt : public TreeNode {
     std::vector<std::shared_ptr<Col>> cols;
-    std::vector<std::string> tabs;
+    std::vector<std::shared_ptr<TableRef>> tabs;  // 改为TableRef以支持别名
     std::vector<std::shared_ptr<BinaryExpr>> conds;
     std::vector<std::shared_ptr<JoinExpr>> jointree;
 
@@ -232,10 +245,10 @@ struct SelectStmt : public TreeNode {
 
 
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
-               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<TableRef>> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::shared_ptr<OrderBy> order_) :
-            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)), 
+            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)),
             order(std::move(order_)) {
                 has_sort = (bool)order;
             }
@@ -244,10 +257,10 @@ struct SelectStmt : public TreeNode {
 struct ExplainStmt : public SelectStmt {
 
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_,
-               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<TableRef>> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::shared_ptr<OrderBy> order_) :
-            SelectStmt(std::move(cols_), std::move(tabs_), 
+            SelectStmt(std::move(cols_), std::move(tabs_),
                       std::move(conds_), std::move(order_)) {
                 
             }
@@ -287,6 +300,9 @@ struct SemValue {
 
     std::shared_ptr<Col> sv_col;
     std::vector<std::shared_ptr<Col>> sv_cols;
+
+    std::shared_ptr<TableRef> sv_table_ref;  // 添加表引用支持
+    std::vector<std::shared_ptr<TableRef>> sv_table_refs;  // 添加表引用列表支持
 
     std::shared_ptr<SetClause> sv_set_clause;
     std::vector<std::shared_ptr<SetClause>> sv_set_clauses;

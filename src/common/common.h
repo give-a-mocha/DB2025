@@ -28,6 +28,16 @@ struct TabCol {
     }
 };
 
+struct TabRef {
+    std::string name;
+    std::string alias;  // 表别名
+    TabRef(std::string name_, std::string alias_ = "") : name(std::move(name_)), alias(std::move(alias_)) {}
+
+    std::string get_name() const {
+        return alias.empty() ? name : alias;
+    }
+};
+
 struct Value {
     ColType type;  // type of value
     union {

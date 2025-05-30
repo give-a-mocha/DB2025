@@ -92,6 +92,7 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "ORDER" { return ORDER; }
 "BY" {  return BY;  }
 "ASC" { return ASC; }
+"AS" { return AS; }
 "EXPLAIN" { return EXPLAIN; }
 "ENABLE_NESTLOOP" { return ENABLE_NESTLOOP; }
 "ENABLE_SORTMERGE" { return ENABLE_SORTMERGE; }
