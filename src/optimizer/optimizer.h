@@ -20,6 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "transaction/transaction_manager.h"
 #include "planner.h"
 #include "plan.h"
+#include "common/print.hpp"
 
 class Optimizer {
    private:
@@ -46,6 +47,7 @@ class Optimizer {
             return std::make_shared<OtherPlan>(PlanTag::T_DescTable, x->tab_name);
         } else if (auto x = std::dynamic_pointer_cast<ast::TxnBegin>(query->parse)) {
             // begin;
+            LOG("optimizer: begin");
             return std::make_shared<OtherPlan>(PlanTag::T_Transaction_begin, std::string());
         } else if (auto x = std::dynamic_pointer_cast<ast::TxnAbort>(query->parse)) {
             // abort;
