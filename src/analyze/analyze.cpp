@@ -167,20 +167,41 @@ void Analyze::get_all_cols(const std::vector<std::string> &tab_names, std::vecto
     }
 }
 
+/**
+ * @brief 将抽象语法树中的二元表达式转换为查询条件
+ * 
+ * 该函数负责解析WHERE子句中的条件表达式，并将其转换为系统内部使用的Condition对象。
+ * 支持处理列与值的比较以及列与列之间的比较。
+ *
+ * @param sv_conds 输入的语法树中的二元表达式集合
+ * @param conds 输出参数，用于存储转换后的条件对象
+ */
 void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds) {
+    // 清空输出条件向量
     conds.clear();
+    // 预留足够空间以避免后续插入时的内存重分配
     conds.reserve(sv_conds.size());
+    
+    // 遍历每个二元表达式并转换为条件对象
     for (auto &expr : sv_conds) {
         Condition cond;
+        // 处理左侧操作数(通常是列)
         cond.lhs_col = {.tab_name = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
+        // 转换比较操作符(如 =, <, >, !=等)
         cond.op = convert_sv_comp_op(expr->op);
+        
+        // 处理右侧操作数，可能是值或列
         if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
+            // 右侧是常量值
             cond.is_rhs_val = true;
             cond.rhs_val = convert_sv_value(rhs_val);
         } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
+            // 右侧是列名
             cond.is_rhs_val = false;
             cond.rhs_col = {.tab_name = rhs_col->tab_name, .col_name = rhs_col->col_name};
         }
+        
+        // 将转换后的条件添加到结果集中
         conds.push_back(cond);
     }
 }

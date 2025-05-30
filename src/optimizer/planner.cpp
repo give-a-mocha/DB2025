@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_update.h"
 #include "index/ix.h"
 #include "record_printer.h"
+#include <set>
 
 // 实现最左匹配原则的索引匹配规则
 bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds,
@@ -212,27 +213,91 @@ std::shared_ptr<Plan> pop_scan(int *scantbl, std::string table, std::vector<std:
 }
 
 std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> query, Context *context) {
-    // TODO 实现逻辑优化规则
-
+    if (query == nullptr)
+        return nullptr;
+    
     // 1. 条件下推优化：将单表条件尽早执行
     // 这里已经在make_one_rel中通过pop_conds实现了条件下推
+    
+    // 2. 谓词简化：移除恒真条件，标记恒假条件
+    // 不存在两侧都为常数的情况
+    auto it = query->conds.begin();
+    while (it != query->conds.end()) {
+        if (!it->is_rhs_val && it->lhs_col == it->rhs_col) {
+            
+            if (it->op == CompOp::OP_EQ || it->op == CompOp::OP_LE || it->op == CompOp::OP_GE) {
+                // 恒真条件，可以直接移除
+                it = query->conds.erase(it);
+            } else if(it->op == CompOp::OP_NE){
+                // 如果出现恒假条件，语句无结果
+                // TODO
+                // return std::make_shared<Query>();
+                break;
+            } else {
+                ++it;
+            }
+        } else {
+            ++it;
+        }
+    }
+    
+    // 3. 冗余表消除：删除不需要的表（没有在结果或条件中使用的表）
+    if (query->tables.size() > 1) {
+        std::set<std::string> used_tables;
+        
+        // 从结果列中收集表名
+        for (const auto& col : query->cols) {
+            if (!col.tab_name.empty()) {
+                used_tables.insert(col.tab_name);
+            }
+        }
+        
+        // 从条件中收集表名
+        for (const auto& cond : query->conds) {
+            if (!cond.lhs_col.tab_name.empty()) {
+                used_tables.insert(cond.lhs_col.tab_name);
+            }
+            if (!cond.is_rhs_val && !cond.rhs_col.tab_name.empty()) {
+                used_tables.insert(cond.rhs_col.tab_name);
+            }
+        }
 
-    // 2. 常量折叠：预计算常量表达式
-    // 暂时跳过，因为当前系统不支持复杂表达式
-
-    // 3. 谓词简化：去除恒真或恒假条件
-    // auto it = query->conds.begin();
-    // while (it != query->conds.end()) {
-    //     // 检查是否是恒真或恒假条件（如 1=1 或 1=0）
-    //     if (it->is_rhs_val && it->lhs_col.tab_name.empty() && it->lhs_col.col_name.empty()) {
-    //         // 这是一个常量比较，应该在语法分析阶段就处理了
-    //         it = query->conds.erase(it);
-    //     } else {
-    //         ++it;
+        std::remove_if(query->tables.begin(), query->tables.end(), [&used_tables](const std::string& table) {
+            return used_tables.count(table);
+        });
+    }
+    
+    // TODO
+    // 4. 连接重排序：尝试根据表大小进行重排
+    // 这需要统计信息，当前系统可能不支持
+    // 可以使用一个简单启发式规则：将小表放在外侧
+    // if (query->tables.size() > 1 && sm_manager_->db_.is_open()) {
+    //     std::vector<std::pair<std::string, int>> table_sizes;
+        
+    //     for (const auto& table_name : query->tables) {
+    //         // 获取表的大小估计（可以是表的页数或记录数）
+    //         int size_estimate = 0;
+    //         try {
+    //             auto& table_info = sm_manager_->db_.get_table(table_name);
+    //             // 使用页数作为大小估计
+    //             size_estimate = table_info.file_hdr->num_pages;
+    //         } catch (...) {
+    //             // 如果无法获取表信息，给一个默认值
+    //             size_estimate = 100;
+    //         }
+    //         table_sizes.emplace_back(table_name, size_estimate);
+    //     }
+        
+    //     // 根据表大小排序（从小到大）
+    //     std::sort(table_sizes.begin(), table_sizes.end(), 
+    //             [](const auto& a, const auto& b) { return a.second < b.second; });
+        
+    //     // 重构tables数组
+    //     query->tables.clear();
+    //     for (const auto& [table_name, _] : table_sizes) {
+    //         query->tables.push_back(table_name);
     //     }
     // }
-
-    // 4. 连接重排序：将小表放在外层（暂时跳过，需要统计信息）
 
     return query;
 }
@@ -544,7 +609,7 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
         plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_explain, projection, std::string(), std::vector<Value>(),
                                                 std::vector<Condition>(), std::vector<SetClause>());
     } else if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)) {
-        std::shared_ptr<plannerInfo> root = std::make_shared<plannerInfo>(x);
+        // ?auto root = std::make_shared<plannerInfo>(x);   // 未使用的语句
         // 生成select语句的查询执行计划
         std::shared_ptr<Plan> projection = generate_select_plan(std::move(query), context);
         plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_select, projection, std::string(), std::vector<Value>(),

@@ -54,16 +54,39 @@ public:
     virtual ~Plan() = default;
 };
 
+/**
+ * @brief 表扫描计划类
+ * 
+ * ScanPlan 类表示一个数据表的扫描计划，是优化器生成的执行计划树的叶节点。
+ * 该类支持两种扫描方式：顺序扫描(SeqScan)和索引扫描(IndexScan)，
+ * 通过传入的 PlanTag 区分具体扫描类型。
+ */
 class ScanPlan : public Plan{
 public:
-    // 以下变量同ScanExecutor中的变量
-    std::string tab_name_;                     
-    std::vector<ColMeta> cols_;                
-    std::vector<Condition> conds_;             
-    size_t len_;                               
-    std::vector<Condition> fed_conds_;
-    std::vector<std::string> index_col_names_;
-    ~ScanPlan(){}
+    std::string tab_name_;                     ///< 要扫描的表名
+    std::vector<ColMeta> cols_;                ///< 表中所有列的元数据
+    std::vector<Condition> conds_;             ///< 过滤条件列表
+    size_t len_;                               ///< 表中一条记录的长度(字节)
+    std::vector<Condition> fed_conds_;         ///< 传递给执行器的过滤条件
+    std::vector<std::string> index_col_names_; ///< 索引扫描时使用的列名列表
+    
+    /**
+     * @brief 析构函数
+     */
+    ~ScanPlan() = default;
+    
+    /**
+     * @brief 构造函数
+     * 
+     * @param tag 计划类型标签，区分顺序扫描(T_SeqScan)或索引扫描(T_IndexScan)
+     * @param sm_manager 存储管理器指针，用于获取表的元数据
+     * @param tab_name 要扫描的表名
+     * @param conds 过滤条件列表
+     * @param index_col_names 索引扫描使用的列名列表(索引扫描时有效)
+     * 
+     * 构造函数初始化表的元数据信息，设置过滤条件，并计算记录长度。
+     * 对于索引扫描，还需指定用于扫描的索引列名。
+     */
     ScanPlan(PlanTag tag, SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, std::vector<std::string> index_col_names){
         Plan::tag = tag;
         tab_name_ = std::move(tab_name);
@@ -97,14 +120,32 @@ public:
     }
 };
 
-/*
-* 投影计划，包含一个子计划和需要投影的列
-*/
-class ProjectionPlan : public Plan{
+/**
+ * @brief 投影计划类
+ * 
+ * ProjectionPlan 类表示SQL查询中的投影操作计划，负责从子计划产生的结果中
+ * 选择指定的列输出给用户。在查询执行树中通常位于顶层，用于控制最终返回的结果列。
+ */
+class ProjectionPlan : public Plan {
 public:
-    std::shared_ptr<Plan> subplan_;
-    std::vector<TabCol> sel_cols_;
+    std::shared_ptr<Plan> subplan_;    ///< 子计划，提供数据源
+    std::vector<TabCol> sel_cols_;     ///< 需要投影的列集合，包含表名和列名信息
+    
+    /**
+     * @brief 析构函数
+     */
     ~ProjectionPlan(){}
+    
+    /**
+     * @brief 构造函数
+     * 
+     * @param tag 计划类型标签，通常为T_Projection
+     * @param subplan 子计划，即数据来源
+     * @param sel_cols 需要投影的列集合
+     * 
+     * 投影操作从子计划获取数据，并只保留sel_cols指定的列输出给用户。
+     * 构造函数设置计划类型标签，保存子计划和所需投影的列信息。
+     */
     ProjectionPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols){
         Plan::tag = tag;
         subplan_ = std::move(subplan);
