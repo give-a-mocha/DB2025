@@ -55,25 +55,6 @@ class IndexScanExecutor : public AbstractExecutor {
                                      sm_manager_->get_ix_manager()->open_index(tab_name_, index_col_names_));
         }
 
-        std::function<CompOp(CompOp)> swap_op = [](CompOp op) {
-            switch (op) {
-                case CompOp::OP_EQ:
-                    return CompOp::OP_EQ;
-                case CompOp::OP_NE:
-                    return CompOp::OP_NE;
-                case CompOp::OP_LT:
-                    return CompOp::OP_GT;
-                case CompOp::OP_GT:
-                    return CompOp::OP_LT;
-                case CompOp::OP_LE:
-                    return CompOp::OP_GE;
-                case CompOp::OP_GE:
-                    return CompOp::OP_LE;
-                default:
-                    throw InternalError("Unexpected comparison operator");
-            }
-        };
-
         for (auto &cond : conds_) {
             if (cond.lhs_col.tab_name != tab_name_) {
                 // lhs is on other table, now rhs must be on this table

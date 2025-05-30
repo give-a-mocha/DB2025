@@ -159,33 +159,14 @@ int push_conds(Condition *cond, std::shared_ptr<Plan> plan) {
             return left_res + right_res;
         }
         // 左子节点匹配到条件的右边
-        if (left_res == 2) {
-            // 需要将左右两边的条件变换位置
-            std::function<CompOp(CompOp)> swap_op = [](CompOp op) {
-                switch (op) {
-                    case CompOp::OP_EQ:
-                        return CompOp::OP_EQ;
-                    case CompOp::OP_NE:
-                        return CompOp::OP_NE;
-                    case CompOp::OP_LT:
-                        return CompOp::OP_GT;
-                    case CompOp::OP_GT:
-                        return CompOp::OP_LT;
-                    case CompOp::OP_LE:
-                        return CompOp::OP_GE;
-                    case CompOp::OP_GE:
-                        return CompOp::OP_LE;
-                    default:
-                        throw RMDBError("Unknown comparison operator");
-                }
-            };
+        if (left_res == 2) {     
             std::swap(cond->lhs_col, cond->rhs_col);
             cond->op = swap_op(cond->op);
         }
         x->conds_.emplace_back(std::move(*cond));
         return 3;
     }
-    return false;
+    return 0;
 }
 
 /**
@@ -199,7 +180,7 @@ int push_conds(Condition *cond, std::shared_ptr<Plan> plan) {
  * @param plans 一个包含共享指针的向量，指向多个候选的计划节点。
  * @return 如果找到匹配的 `ScanPlan`，则返回其共享指针；否则返回 `nullptr`。
  */
-std::shared_ptr<Plan> pop_scan(int *scantbl, std::string table, std::vector<std::string> &joined_tables,
+std::shared_ptr<Plan> pop_scan(std::vector<int> &scantbl, std::string table, std::vector<std::string> &joined_tables,
                                std::vector<std::shared_ptr<Plan>> plans) {
     for (size_t i = 0; i < plans.size(); i++) {
         auto x = std::dynamic_pointer_cast<ScanPlan>(plans[i]);
@@ -332,7 +313,7 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
 std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
-    // // Scan table , 生成表算子列表tab_nodes
+    // Scan table , 生成表算子列表tab_nodes
     std::vector<std::shared_ptr<Plan>> table_scan_executors(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
         auto curr_conds = pop_conds(query->conds, tables[i]);
@@ -354,13 +335,22 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
     }
     // 获取where条件
     auto conds = std::move(query->conds);
+    std::vector<JoinNode> jointree = std::move(query->jointree);
+    for(auto &join_node : jointree) {
+        // 将连接条件添加到conds中
+        for (auto &cond : join_node.join_conds) {
+            conds.emplace_back(std::move(cond));
+        }
+    }
     std::shared_ptr<Plan> table_join_executors;
 
-    int scantbl[tables.size()];
+    std::vector<int> scantbl(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
         scantbl[i] = -1;
     }
-    // 假设在ast中已经添加了jointree，这里需要修改的逻辑是，先处理jointree，然后再考虑剩下的部分
+    // 剩下conds中的条件都不是值类型
+    // 多表链接 隐式连接
+    //SELECT * FROM A, B, C WHERE A.id = B.id AND B.id = C.id AND A.name = C.name
     if (conds.size() >= 1) {
         // 有连接条件
 
@@ -420,24 +410,6 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
                                                std::move(table_join_executors), std::vector<Condition>());
             } else if (left_need_to_join_executors != nullptr || right_need_to_join_executors != nullptr) {
                 if (isneedreverse) {
-                    std::function<CompOp(CompOp)> swap_op = [](CompOp op) {
-                        switch (op) {
-                            case CompOp::OP_EQ:
-                                return CompOp::OP_EQ;
-                            case CompOp::OP_NE:
-                                return CompOp::OP_NE;
-                            case CompOp::OP_LT:
-                                return CompOp::OP_GT;
-                            case CompOp::OP_GT:
-                                return CompOp::OP_LT;
-                            case CompOp::OP_LE:
-                                return CompOp::OP_GE;
-                            case CompOp::OP_GE:
-                                return CompOp::OP_LE;
-                            default:
-                                throw RMDBError("Unknown comparison operator");
-                        }
-                    };
                     std::swap(it->lhs_col, it->rhs_col);
                     it->op = swap_op(it->op);
                     left_need_to_join_executors = std::move(right_need_to_join_executors);
@@ -503,13 +475,13 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     auto sel_cols = query->cols;
     //joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
-    if(auto x = std::dynamic_pointer_cast<ScanPlan>(plannerRoot)) {
-        std::cerr<< "这是一个ScanPlan: " << x->tab_name_ << std::endl;
-    }else if(auto x = std::dynamic_pointer_cast<JoinPlan>(plannerRoot)) {
-        std::cerr<< "这是一个JoinPlan:" << std::endl;
-    }else if(auto x = std::dynamic_pointer_cast<SortPlan>(plannerRoot)) {
-        std::cerr<< "这是一个SortPlan: " << std::endl;
-    }
+    // if(auto x = std::dynamic_pointer_cast<ScanPlan>(plannerRoot)) {
+    //     std::cerr<< "这是一个ScanPlan: " << x->tab_name_ << std::endl;
+    // }else if(auto x = std::dynamic_pointer_cast<JoinPlan>(plannerRoot)) {
+    //     std::cerr<< "这是一个JoinPlan:" << std::endl;
+    // }else if(auto x = std::dynamic_pointer_cast<SortPlan>(plannerRoot)) {
+    //     std::cerr<< "这是一个SortPlan: " << std::endl;
+    // }
     plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols));
 
     return plannerRoot;

@@ -13,10 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <memory>
 
-enum JoinType {
-    INNER_JOIN, LEFT_JOIN, RIGHT_JOIN, FULL_JOIN
-};
 namespace ast {
+
+enum JoinType {
+    SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN
+};
 
 enum SvType {
     SV_TYPE_INT, SV_TYPE_FLOAT, SV_TYPE_STRING, SV_TYPE_BOOL
@@ -152,9 +153,13 @@ struct BoolLit : public Value {
 struct Col : public Expr {
     std::string tab_name;
     std::string col_name;
+    std::string alias;  // 列别名
 
     Col(std::string tab_name_, std::string col_name_) :
-            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {}
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias("") {}
+    
+    Col(std::string tab_name_, std::string col_name_, std::string alias_) :
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias(std::move(alias_)) {}
 };
 
 struct SetClause : public TreeNode {
@@ -209,20 +214,28 @@ struct UpdateStmt : public TreeNode {
             tab_name(std::move(tab_name_)), set_clauses(std::move(set_clauses_)), conds(std::move(conds_)) {}
 };
 
+// 表别名结构
+struct TableRef : public TreeNode {
+    std::string tab_name;
+    std::string alias;  // 表别名
+
+    TableRef(std::string tab_name_) : tab_name(std::move(tab_name_)), alias("") {}
+    TableRef(std::string tab_name_, std::string alias_) : tab_name(std::move(tab_name_)), alias(std::move(alias_)) {}
+};
+
 struct JoinExpr : public TreeNode {
-    std::string left;
-    std::string right;
+    std::shared_ptr<TableRef> right;
     std::vector<std::shared_ptr<BinaryExpr>> conds;
     JoinType type;
 
-    JoinExpr(std::string left_, std::string right_,
+    JoinExpr(std::shared_ptr<TableRef> right_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_, JoinType type_) :
-            left(std::move(left_)), right(std::move(right_)), conds(std::move(conds_)), type(type_) {}
+            right(std::move(right_)), conds(std::move(conds_)), type(type_) {}
 };
 
 struct SelectStmt : public TreeNode {
     std::vector<std::shared_ptr<Col>> cols;
-    std::vector<std::string> tabs;
+    std::vector<std::shared_ptr<TableRef>> tabs;  // 改为TableRef以支持别名
     std::vector<std::shared_ptr<BinaryExpr>> conds;
     std::vector<std::shared_ptr<JoinExpr>> jointree;
 
@@ -231,23 +244,29 @@ struct SelectStmt : public TreeNode {
     std::shared_ptr<OrderBy> order;
 
 
+
+
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
-               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<TableRef>> tabs_,
+               std::vector<std::shared_ptr<JoinExpr>> jointree_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::shared_ptr<OrderBy> order_) :
-            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)), 
-            order(std::move(order_)) {
+            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)),
+            jointree(std::move(jointree_)), order(std::move(order_)) {
                 has_sort = (bool)order;
             }
 };
 
 struct ExplainStmt : public SelectStmt {
 
+
+
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_,
-               std::vector<std::string> tabs_,
+               std::vector<std::shared_ptr<TableRef>> tabs_,
+               std::vector<std::shared_ptr<JoinExpr>> jointree_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::shared_ptr<OrderBy> order_) :
-            SelectStmt(std::move(cols_), std::move(tabs_), 
+            SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_),
                       std::move(conds_), std::move(order_)) {
                 
             }
@@ -288,6 +307,9 @@ struct SemValue {
     std::shared_ptr<Col> sv_col;
     std::vector<std::shared_ptr<Col>> sv_cols;
 
+    std::shared_ptr<TableRef> sv_table_ref;  // 添加表引用支持
+    std::vector<std::shared_ptr<TableRef>> sv_table_refs;  // 添加表引用列表支持
+
     std::shared_ptr<SetClause> sv_set_clause;
     std::vector<std::shared_ptr<SetClause>> sv_set_clauses;
 
@@ -295,6 +317,10 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+
+    std::shared_ptr<JoinExpr> sv_join_expr;
+    std::vector<std::shared_ptr<JoinExpr>> sv_join_exprs;
+    JoinType sv_join_type;
 
     SetKnobType sv_setKnobType;
 };

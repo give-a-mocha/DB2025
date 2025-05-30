@@ -60,10 +60,13 @@ public:
     }
 };
 
+
 class Query{
     public:
     std::shared_ptr<ast::TreeNode> parse;
-    // TODO jointree
+    // TODO: jointree
+    // JOIN树 - 存储所有的JOIN操作
+    std::vector<JoinNode> jointree;
     // where条件
     std::vector<Condition> conds;
     // 投影列
@@ -90,12 +93,25 @@ public:
     std::shared_ptr<Query> do_analyze(std::shared_ptr<ast::TreeNode> root);
 
 private:
+    // 检查列是否存在，返回列的元数据
     TabCol check_column(const std::vector<ColMeta> &all_cols, TabCol target);
+
+    // 把表名转换为真实的表名
+    void convert_tabname(TabCol &target, const std::vector<TabRef> &tab_refs);
+
+    // 获取所有列的元数据
     void get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols);
+    
+    //获取where语句条件
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
+    void get_clause_alias(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds, const std::vector<TabRef> &tab_refs);
+    
+    //检查where条件合法性
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
+    // 辅助函数
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
     CompOp convert_sv_comp_op(ast::SvCompOp op);
+    JoinType convert_sv_join_type(ast::JoinType type);
 };
 
