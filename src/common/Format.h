@@ -1,117 +1,55 @@
 #pragma once
-
-#include <stdlib.h>
+#ifndef FORMAT_H_
+#define FORMAT_H_
 
 #include <algorithm>
-#include <iomanip>
-#include <iostream>
+#include <cassert>
 #include <sstream>
 #include <string>
-#include <vector>
 
 namespace util {
-class ArgBase {
-   public:
-    ArgBase() {}
-    virtual ~ArgBase() {}
-    virtual void Format(std::ostringstream& ss, const std::string& fmt) = 0;
-};
 
-template <class T>
-class Arg : public ArgBase {
-   public:
-    Arg(T arg) : m_arg(arg) {}
-    virtual ~Arg() {}
-    virtual void Format(std::ostringstream& ss, const std::string& fmt) { ss << m_arg; }
+template <typename... Args>
+std::string format(std::string fmt, const Args &&...args);
 
-   private:
-    T m_arg;
-};
+namespace detail {
+inline void format_helper(std::stringstream &ss, std::string &fmt) {
+    ss << fmt;
+    fmt.clear();
+}
 
-class ArgArray : public std::vector<ArgBase*> {
-   public:
-    ArgArray() {}
-    ~ArgArray() {
-        std::for_each(begin(), end(), [](ArgBase* p) { delete p; });
-    }
-};
+template <typename T, typename... Args>
+void format_helper(std::stringstream &ss, std::string &fmt, const T &&val, const Args &&...args) {
+    size_t start = fmt.find('{');
+    size_t end = fmt.find('}', start);
 
-static void FormatItem(std::ostringstream& ss, const std::string& item, const ArgArray& args) {
-    int index = 0;
-    int alignment = 0;
-    std::string fmt;
-
-    char* endptr = nullptr;
-    index = strtol(&item[0], &endptr, 10);
-    if (index < 0 || index >= args.size()) {
+    if (start == std::string::npos || end == std::string::npos) {
+        ss << fmt;
+        fmt.clear();
         return;
     }
 
-    if (*endptr == ',') {
-        alignment = strtol(endptr + 1, &endptr, 10);
-        if (alignment > 0) {
-            ss << std::right << std::setw(alignment);
-        } else if (alignment < 0) {
-            ss << std::left << std::setw(-alignment);
-        }
-    }
-
-    if (*endptr == ':') {
-        fmt = endptr + 1;
-    }
-
-    args[index]->Format(ss, fmt);
-
-    return;
+    ss << fmt.substr(0, start);
+    ss << val;
+    fmt = fmt.substr(end + 1);
+    if (sizeof...(args) != 0) format_helper(ss, fmt, std::forward<Args>(args)...);
 }
-
-template <class T>
-static void Transfer(ArgArray& argArray, T t) {
-    argArray.push_back(new Arg<T>(t));
-}
-
-template <class T, typename... Args>
-static void Transfer(ArgArray& argArray, T t, Args&&... args) {
-    Transfer(argArray, t);
-    Transfer(argArray, args...);
-}
+}  // namespace detail
 
 template <typename... Args>
-std::string Format(const std::string& format, Args&&... args) {
+std::string format(std::string fmt, const Args &&...args) {
     if (sizeof...(args) == 0) {
-        return format;
+        return fmt;
     }
 
-    ArgArray argArray;
-    Transfer(argArray, args...);
-    size_t start = 0;
-    size_t pos = 0;
-    std::ostringstream ss;
-    while (true) {
-        pos = format.find('{', start);
-        if (pos == std::string::npos) {
-            ss << format.substr(start);
-            break;
-        }
-
-        ss << format.substr(start, pos - start);
-        if (format[pos + 1] == '{') {
-            ss << '{';
-            start = pos + 2;
-            continue;
-        }
-
-        start = pos + 1;
-        pos = format.find('}', start);
-        if (pos == std::string::npos) {
-            ss << format.substr(start - 1);
-            break;
-        }
-
-        FormatItem(ss, format.substr(start, pos - start), argArray);
-        start = pos + 1;
+    std::stringstream ss;
+    detail::format_helper(ss, fmt, std::forward<Args>(args)...);
+    if (!fmt.empty()) {
+        ss << fmt;
     }
-
     return ss.str();
 }
+
 }  // namespace util
+
+#endif
