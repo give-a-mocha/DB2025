@@ -34,63 +34,25 @@ class ExplainFilterExecutor : public AbstractExecutor {
     ExplainFilterExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<Condition> conds, int offset, Context *context) {
         prev_ = std::move(prev);
         conds_ = std::move(conds);
-        // 多个条件按字典序排序
-        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
-            return a.lhs_col < b.lhs_col;
-        });
         offset_ = offset;
         context_ = context;
-    }
-    std::string compOpToString(CompOp op) const {
-        switch (op) {
-            case CompOp::OP_EQ:
-                return "=";
-            case CompOp::OP_NE:
-                return "!=";
-            case CompOp::OP_GT:
-                return ">";
-            case CompOp::OP_GE:
-                return ">=";
-            case CompOp::OP_LT:
-                return "<";
-            case CompOp::OP_LE:
-                return "<=";
-            default:
-                throw InternalError("Unknown comparison operator");
-        }
     }
     
     std::unique_ptr<RmRecord> Next() override {
         // ! warning 未带越界检查
         StackString<2048, true> output(context_->data_send_ + *context_->offset_);
         output.append(offset_, '\t');
+        // 多个条件按字典序排序
+        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
+            return a.to_string() < b.to_string();
+        });
         output += "Filter(condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {
                 output += ",";
             }
             const auto &cond = conds_[i];
-            output += cond.lhs_col.tab_name;
-            output += ".";
-            output += cond.lhs_col.col_name; 
-            output += compOpToString(cond.op);
-            if (cond.is_rhs_val) {
-                if (cond.rhs_val.type == ColType::TYPE_INT) {
-                    output += std::to_string(cond.rhs_val.int_val);
-                } else if (cond.rhs_val.type == ColType::TYPE_FLOAT) {
-                    output += std::to_string(cond.rhs_val.float_val);
-                } else if (cond.rhs_val.type == ColType::TYPE_STRING) {
-                    output += "'"; 
-                    output += cond.rhs_val.str_val;
-                    output += "'";
-                } else {
-                    throw InternalError("Unknown value type in condition");
-                }
-            } else {
-                output += cond.rhs_col.tab_name;
-                output += ".";
-                output += cond.rhs_col.col_name;
-            }
+            output += cond.to_string();
         }
         output += "])\n";
         *context_->offset_ += output.size();

@@ -54,7 +54,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 // 转换JOIN条件
                 std::vector<Condition> join_conds;
                 get_clause_alias(join_expr->conds, join_conds, tab_refs);
-                
                 // 创建JoinNode
                 JoinType join_type = convert_sv_join_type(join_expr->type);
                 query->jointree.emplace_back(right_tab_name, join_conds, join_type);
@@ -68,13 +67,14 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             query->cols.reserve(all_cols.size());
             for (auto &col : all_cols) {
                 TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+                convert_tabname(sel_col, tab_refs);
                 query->cols.push_back(sel_col);
             }
         }else{
             //把列加入并进行校验，添加表名
             query->cols.reserve(x->cols.size());
             for (auto &sv_sel_col : x->cols) {
-                TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
+                TabCol sel_col = {.tab_alias = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
                 convert_tabname(sel_col, tab_refs);
                 // 列元数据校验
                 sel_col = check_column(all_cols, sel_col); 
@@ -145,15 +145,13 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 }
 // 如果将表的别名转为真名
 void Analyze::convert_tabname(TabCol &target, const std::vector<TabRef> &tab_refs) {
-    if(target.tab_name.empty()) {
-        return ;
-    } else {
-        std::string tab_name = target.tab_name;
+    if(target.tab_alias.empty()){
+        TabRef res = {target.tab_name, target.tab_alias};
         int cnt = 0;
         for (const auto &tab_ref : tab_refs) {
-            if (tab_ref.get_name() == target.tab_name) {
+            if (tab_ref.name == target.tab_name) {
                 cnt++;
-                tab_name = tab_ref.name;
+                res = tab_ref;
                 if(cnt > 1){
                     throw AmbiguousColumnError(target.col_name);
                 }
@@ -162,7 +160,26 @@ void Analyze::convert_tabname(TabCol &target, const std::vector<TabRef> &tab_ref
         if(cnt == 0){
             throw ColumnNotFoundError(target.col_name);
         }
-        target.tab_name = tab_name;
+        target.tab_name = res.name;  // 设置表名
+        target.tab_alias = res.alias;  // 设置表别名
+        return ;
+    } else {
+        TabRef res = {target.tab_name, target.tab_alias};  // 默认表名和别名相同
+        int cnt = 0;
+        for (const auto &tab_ref : tab_refs) {
+            if (tab_ref.get_name() == target.tab_alias) {
+                cnt++;
+                res = tab_ref;
+                if(cnt > 1){
+                    throw AmbiguousColumnError(target.col_name);
+                }
+            }
+        }
+        if(cnt == 0){
+            throw ColumnNotFoundError(target.col_name);
+        }
+        target.tab_name = res.name;
+        target.tab_alias = res.alias;  // 设置表别名
         return ;
     }
 }
@@ -214,7 +231,7 @@ void Analyze::get_clause_alias(const std::vector<std::shared_ptr<ast::BinaryExpr
     conds.reserve(sv_conds.size());
     for (auto &expr : sv_conds) {
         Condition cond;
-        cond.lhs_col = {.tab_name = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
+        cond.lhs_col = {.tab_alias = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
         convert_tabname(cond.lhs_col, tab_refs);
         cond.op = convert_sv_comp_op(expr->op);
         if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
@@ -222,7 +239,7 @@ void Analyze::get_clause_alias(const std::vector<std::shared_ptr<ast::BinaryExpr
             cond.rhs_val = convert_sv_value(rhs_val);
         } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
             cond.is_rhs_val = false;
-            cond.rhs_col = {.tab_name = rhs_col->tab_name, .col_name = rhs_col->col_name};
+            cond.rhs_col = {.tab_alias = rhs_col->tab_name, .col_name = rhs_col->col_name};
             convert_tabname(cond.rhs_col, tab_refs);
         }
         conds.push_back(cond);

@@ -27,6 +27,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/execution_explain_project.h"
 #include "execution/execution_explain_scan.h"
 #include "execution/execution_explain_filter.h"
+#include "execution/execution_explain_join.h"
 
 #include "optimizer/plan.h"
 
@@ -187,19 +188,32 @@ class Portal {
 
     std::unique_ptr<AbstractExecutor> convert_plan_explain_executor(std::shared_ptr<Plan> plan, Context *context, int offset) {
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
-            return std::make_unique<ExplainProjectExecutor>(convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, context);
+            return std::make_unique<ExplainProjectExecutor>(convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, context, x->isStar_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
-            std::cerr << "plan->执行器这是一个ScanPlan: " << x->tab_name_ << std::endl;
             if(x->conds_.empty()){
-                std::cerr << "进入:ScanExecutor" << std::endl;
                 return std::make_unique<ExplainScanExecutor>(x->tab_name_, offset, context);
             }else{
-                std::cerr << "进入:FilterExecutor" << std::endl;
                 auto res =  std::make_unique<ExplainScanExecutor>(x->tab_name_, offset + 1, context);
                 return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset, context);
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
-            
+            auto left = convert_plan_explain_executor(x->left_, context, offset + 1);
+            auto right = convert_plan_explain_executor(x->right_, context, offset + 1);
+            auto get_level = [](const std::unique_ptr<AbstractExecutor>& executor) -> int {
+                if (dynamic_cast<ExplainFilterExecutor*>(executor.get())) {
+                    return 1; // Filter
+                } else if (dynamic_cast<ExplainJoinExecutor*>(executor.get())) {
+                    return 2; // Join
+                } else if (dynamic_cast<ExplainProjectExecutor*>(executor.get())) {
+                    return 3; // Scan or other
+                } else{
+                    return 4;
+                }
+            };
+            if(get_level(left) > get_level(right)) {
+                std::swap(left, right);
+            }
+            return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset, context);
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return convert_plan_explain_executor(x->subplan_, context, offset); 
         }

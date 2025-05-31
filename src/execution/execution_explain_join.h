@@ -24,41 +24,29 @@ See the Mulan PSL v2 for more details. */
 
 class ExplainJoinExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;
+    std::unique_ptr<AbstractExecutor> left_;   // 左儿子节点
+    std::unique_ptr<AbstractExecutor> right_;  // 右儿子节点
     std::vector<std::string> tables_;
     std::vector<Condition> conds_;
     Context *context_;
     int offset_;
 
    public:
-    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> prev,std::vector<std::string>tables, std::vector<Condition> conds, int offset, Context *context) {
-        prev_ = std::move(prev);
+    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> left,std::unique_ptr<AbstractExecutor> right,std::vector<std::string>tables, std::vector<Condition> conds, int offset, Context *context) {
+        left_ = std::move(left);
+        right_ = std::move(right);
         tables_ = std::move(tables);
         conds_ = std::move(conds);
         offset_ = offset;
         context_ = context;
     }
-    std::string compOpToString(CompOp op) const {
-        switch (op) {
-            case CompOp::OP_EQ:
-                return "=";
-            case CompOp::OP_NE:
-                return "!=";
-            case CompOp::OP_GT:
-                return ">";
-            case CompOp::OP_GE:
-                return ">=";
-            case CompOp::OP_LT:
-                return "<";
-            case CompOp::OP_LE:
-                return "<=";
-            default:
-                throw InternalError("Unknown comparison operator");
-        }
-    }
     
     std::unique_ptr<RmRecord> Next() override {
         std::string pre = std::string(offset_, '\t');
+        std::sort(tables_.begin(), tables_.end());
+        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
+            return a.to_string() < b.to_string();
+        });
         std::string output = pre + "Join(tables=[";
         for(size_t i = 0; i < tables_.size(); ++i) {
             if(i != 0) {
@@ -72,20 +60,7 @@ class ExplainJoinExecutor : public AbstractExecutor {
                 output += ",";
             }
             const auto &cond = conds_[i];
-            output += cond.lhs_col.tab_name + "." + cond.lhs_col.col_name + compOpToString(cond.op);
-            if (cond.is_rhs_val) {
-                if (cond.rhs_val.type == ColType::TYPE_INT) {
-                    output += std::to_string(cond.rhs_val.int_val);
-                } else if (cond.rhs_val.type == ColType::TYPE_FLOAT) {
-                    output += std::to_string(cond.rhs_val.float_val);
-                } else if (cond.rhs_val.type == ColType::TYPE_STRING) {
-                    output += "'" + std::string(cond.rhs_val.str_val) + "'";
-                } else {
-                    throw InternalError("Unknown value type in condition");
-                }
-            } else {
-                output += cond.rhs_col.tab_name + "." + cond.rhs_col.col_name;
-            }
+            output += cond.to_string();
         }
         output += "])\n";
         
@@ -94,8 +69,8 @@ class ExplainJoinExecutor : public AbstractExecutor {
             memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
             *context_->offset_ += output.length();
         }
-        
-        prev_->Next();
+        left_->Next();
+        right_->Next();
         return nullptr;
     }
     

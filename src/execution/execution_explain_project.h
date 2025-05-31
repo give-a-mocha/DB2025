@@ -30,26 +30,34 @@ class ExplainProjectExecutor : public AbstractExecutor {
     std::vector<TabCol> cols_;
     Context *context_;
     int offset_;
+    bool isStar_;
 
    public:
-    ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset, Context *context) {
+    ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset, Context *context, bool isStar = false) {
         prev_ = std::move(prev);
         cols_ = std::move(sel_cols);
         offset_ = offset;
         context_ = context;
+        isStar_ = isStar;
     }
     
     std::unique_ptr<RmRecord> Next() override {
         StackString<2048, true> output(context_->data_send_ + *context_->offset_);
         output.append(offset_, '\t');
-        output += "Project(condition=[";
-        for (size_t i = 0; i < cols_.size(); ++i) {
-            if(i != 0) {
-                output += ",";
+        output += "Project(columns=[";
+        if(isStar_) {
+            output += "*";
+        }
+        else {
+            std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
+                return std::make_pair(a.tab_name.empty() ? a.tab_alias : a.tab_name, a.col_name) < std::make_pair(b.tab_name.empty() ? b.tab_alias : b.tab_name, b.col_name);
+            });
+            for (size_t i = 0; i < cols_.size(); ++i) {
+                if(i != 0) {
+                    output += ",";
+                }
+                output += cols_[i].to_string();
             }
-            output += cols_[i].tab_name;
-            output += ".";
-            output += cols_[i].col_name;
         }
         output += "])\n";
         *context_->offset_ += output.size();

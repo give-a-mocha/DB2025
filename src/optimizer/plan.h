@@ -84,6 +84,8 @@ public:
     std::shared_ptr<Plan> right_;
     // 连接条件
     std::vector<Condition> conds_;
+    // 连接的表名
+    std::vector<std::string> tables_;
     // future TODO: 后续可以支持的连接类型
     JoinType type;
 
@@ -102,6 +104,14 @@ public:
         conds_ = std::move(conds);
         this->type = type;
     }
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds, std::vector<std::string> tables){
+        Plan::tag = tag;
+        left_ = std::move(left);
+        right_ = std::move(right);
+        conds_ = std::move(conds);
+        tables_ = std::move(tables);
+        type = JoinType::INNER_JOIN;
+    }
 };
 
 /*
@@ -111,11 +121,13 @@ class ProjectionPlan : public Plan{
 public:
     std::shared_ptr<Plan> subplan_;
     std::vector<TabCol> sel_cols_;
+    bool isStar_ = false; // 是否是*投影
     ~ProjectionPlan(){}
-    ProjectionPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols){
+    ProjectionPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols, bool isStar = false){
         Plan::tag = tag;
         subplan_ = std::move(subplan);
         sel_cols_ = std::move(sel_cols);
+        isStar_ = isStar;
     }
 };
 
