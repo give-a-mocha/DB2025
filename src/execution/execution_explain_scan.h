@@ -25,9 +25,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/StackString.hpp"
 
 class ExplainScanExecutor : public AbstractExecutor {
-   public:
+   private:
     std::string tab_name_;
     int offset_;
+
+   public:
     ExplainScanExecutor(std::string tab_name, int offset) {
         tab_name_ = std::move(tab_name);
         offset_ = offset;

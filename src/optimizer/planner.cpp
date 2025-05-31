@@ -546,20 +546,37 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
         }
     }
     std::map<std::string, std::vector<TabCol>> need_cols;
+    auto push_cols = [&](std::string table, TabCol col) {
+        auto it = need_cols.find(table);
+        if (it == need_cols.end()) {
+            need_cols[table] = std::vector<TabCol>{col};
+        } else {
+            int ok = 1;
+            for(auto &c : it->second) {
+                if(c == col) {
+                    ok = 0; // 重复的列名
+                    break;
+                }
+            }
+            if(ok)it->second.emplace_back(col);
+        }
+    };
     for(auto &cond : query->conds) {
-        need_cols[cond.lhs_col.tab_name].emplace_back(cond.lhs_col);
+        push_cols(cond.lhs_col.tab_name, cond.lhs_col);
         if(cond.is_rhs_val == false) {
-            need_cols[cond.rhs_col.tab_name].emplace_back(cond.rhs_col);
+            push_cols(cond.rhs_col.tab_name, cond.rhs_col);
         }
     }
     for(auto col: query->cols){
-        auto it = need_cols.find(col.tab_name);
-        if(it == need_cols.end()) {
-            need_cols[col.tab_name] = std::vector<TabCol>{col};
-        }else{
-            it->second.emplace_back(col);
-        }
+        push_cols(col.tab_name, col);
     }
+    // for(auto [x, y] : need_cols) {
+    //     std::cerr << "表：" << x << " 需要的列：";
+    //     for(auto &col : y) {
+    //         std::cerr << col.col_name << " ";
+    //     }
+    //     std::cerr << std::endl;
+    // }
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
