@@ -197,8 +197,23 @@ class Portal {
                 return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
-            auto left = convert_plan_explain_executor(x->left_, context, offset + 1);
-            auto right = convert_plan_explain_executor(x->right_, context, offset + 1);
+            std::vector<Condition> solve_conds;
+            std::vector<Condition> conds;
+            for(const auto &cond : x->conds_) {
+                if(cond.op == CompOp::OP_EQ) {
+                    solve_conds.push_back(cond);
+                } else {
+                    conds.push_back(cond);
+                }
+            }
+            int add_offset = 0;
+            if(!conds.empty()) {
+                add_offset = 2;
+            }else{
+                add_offset = 1;
+            }
+            auto left = convert_plan_explain_executor(x->left_, context, offset + add_offset);
+            auto right = convert_plan_explain_executor(x->right_, context, offset + add_offset);
             auto get_level = [](const std::unique_ptr<AbstractExecutor>& executor) -> std::string {
                 if (auto x = dynamic_cast<ExplainFilterExecutor*>(executor.get())) {
                     return "1_" + x->get_conds(); // Filter
@@ -213,7 +228,12 @@ class Portal {
             if(get_level(left) > get_level(right)) {
                 std::swap(left, right);
             }
-            return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset);
+            if(!conds.empty()) {
+                auto res = std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), x->tables_, solve_conds, offset + 1);
+                return std::make_unique<ExplainFilterExecutor>(std::move(res), conds, offset);
+            }else{
+                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset);
+            }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return convert_plan_explain_executor(x->subplan_, context, offset); 
         }

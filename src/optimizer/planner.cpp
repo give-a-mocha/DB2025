@@ -570,13 +570,6 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
     for(auto col: query->cols){
         push_cols(col.tab_name, col);
     }
-    // for(auto [x, y] : need_cols) {
-    //     std::cerr << "表：" << x << " 需要的列：";
-    //     for(auto &col : y) {
-    //         std::cerr << col.col_name << " ";
-    //     }
-    //     std::cerr << std::endl;
-    // }
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
@@ -658,17 +651,6 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
             bool right_in_current = it->rhs_col.tab_name == current_table;
             bool right_in_joined = joined_tables.count(it->rhs_col.tab_name) > 0;
             bool left_in_current = it->lhs_col.tab_name == current_table;
-            // std::cerr << "已连接的表：" << std::endl;
-            // for(auto t : now_tables){
-            //     std::cerr << t << " ";
-            // }
-            // std::cerr << std::endl;
-            // std::cerr << "当前表：" << current_table << std::endl;
-            // std::cerr << "连接条件：" << it->to_string() << std::endl;
-            // std::cerr << "左边表：" << it->lhs_col.tab_name << " 别名：" << it->lhs_col.tab_alias << std::endl;
-            // std::cerr << "左边表的列：" << it->lhs_col.col_name << std::endl;
-            // std::cerr << "left_in_joined: " << left_in_joined << ", right_in_current: " << right_in_current
-            //           << ", right_in_joined: " << right_in_joined << ", left_in_current: " << left_in_current << std::endl;
             if ((left_in_joined && right_in_current) || (right_in_joined && left_in_current)) {
                 // 确保条件的左边是已连接的表，右边是当前表
                 // if (right_in_joined && left_in_current) {
@@ -698,11 +680,8 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     
     // 处理剩余的连接条件（如果有的话理论来说不会有）
     if (!join_conditions.empty()) {
-        // std::cerr << "按道理来说不可能" << std::endl;
         // 将剩余条件下推到结果计划中
         for (auto& cond : join_conditions) {
-            // std:: cerr << "下推" << std::endl;
-            // std::cerr << "剩余条件下推: " << cond.to_string() << std::endl;
             push_conds(&cond, result);
         }
         join_conditions.clear();
