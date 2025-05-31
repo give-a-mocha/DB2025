@@ -52,7 +52,7 @@ class ExplainJoinExecutor : public AbstractExecutor {
             }
             res += tables_[i];
         }
-        res += "],conditions=[";
+        res += "],condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {
                 res += ",";
