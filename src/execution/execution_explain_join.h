@@ -37,14 +37,14 @@ class ExplainJoinExecutor : public AbstractExecutor {
         tables_ = std::move(tables);
         conds_ = std::move(conds);
         offset_ = offset;
-    }
-    
-    std::unique_ptr<RmRecord> Next() override {
-        std::string res = std::string(offset_, '\t');
         std::sort(tables_.begin(), tables_.end());
         std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
             return a.to_string() < b.to_string();
         });
+    }
+    
+    std::unique_ptr<RmRecord> Next() override {
+        std::string res = std::string(offset_, '\t');
         res += "Join(tables=[";
         for(size_t i = 0; i < tables_.size(); ++i) {
             if(i != 0) {

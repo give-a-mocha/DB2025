@@ -33,15 +33,15 @@ class ExplainFilterExecutor : public AbstractExecutor {
     ExplainFilterExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<Condition> conds, int offset) {
         prev_ = std::move(prev);
         conds_ = std::move(conds);
+        // 多个条件按字典序排序
+        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
+            return a.to_string() < b.to_string();
+        });
         offset_ = offset;
     }
     
     std::unique_ptr<RmRecord> Next() override {
         std::string res = std::string(offset_, '\t');
-        // 多个条件按字典序排序
-        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
-            return a.to_string() < b.to_string();
-        });
         res += "Filter(condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {

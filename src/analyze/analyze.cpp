@@ -146,7 +146,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 }
 // 如果将表的别名转为真名
 void Analyze::convert_tabname(TabCol &target, const std::vector<TabRef> &tab_refs) {
-    if(target.tab_alias.empty()){
+    if(target.tab_alias.empty() && !target.tab_name.empty()){
         TabRef res = {target.tab_name, target.tab_alias};
         int cnt = 0;
         for (const auto &tab_ref : tab_refs) {
@@ -159,12 +159,12 @@ void Analyze::convert_tabname(TabCol &target, const std::vector<TabRef> &tab_ref
             }
         }
         if(cnt == 0){
-            throw ColumnNotFoundError(target.col_name);
+            throw TableNotFoundError(target.tab_name);
         }
         target.tab_name = res.name;  // 设置表名
         target.tab_alias = res.alias;  // 设置表别名
         return ;
-    } else {
+    } else if(!target.tab_alias.empty()) {
         TabRef res = {target.tab_name, target.tab_alias};  // 默认表名和别名相同
         int cnt = 0;
         for (const auto &tab_ref : tab_refs) {
@@ -182,6 +182,8 @@ void Analyze::convert_tabname(TabCol &target, const std::vector<TabRef> &tab_ref
         target.tab_name = res.name;
         target.tab_alias = res.alias;  // 设置表别名
         return ;
+    }else{
+        throw ColumnNotFoundError(target.col_name);
     }
 }
 

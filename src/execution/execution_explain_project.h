@@ -37,6 +37,9 @@ class ExplainProjectExecutor : public AbstractExecutor {
         cols_ = std::move(sel_cols);
         offset_ = offset;
         isStar_ = isStar;
+        std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
+            return std::make_pair(a.tab_name.empty() ? a.tab_alias : a.tab_name, a.col_name) < std::make_pair(b.tab_name.empty() ? b.tab_alias : b.tab_name, b.col_name);
+        });
     }
     
     std::unique_ptr<RmRecord> Next() override {
@@ -46,9 +49,6 @@ class ExplainProjectExecutor : public AbstractExecutor {
             res += "*";
         }
         else {
-            std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
-                return std::make_pair(a.tab_name.empty() ? a.tab_alias : a.tab_name, a.col_name) < std::make_pair(b.tab_name.empty() ? b.tab_alias : b.tab_name, b.col_name);
-            });
             for (size_t i = 0; i < cols_.size(); ++i) {
                 if(i != 0) {
                     res += ",";
