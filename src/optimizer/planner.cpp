@@ -506,13 +506,15 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 size_t Planner::get_table_cardinality(const std::string& tab_name) {
     // 通过文件句柄获取表的记录数量
     auto it = sm_manager_->fhs_.find(tab_name);
+    size_t res = 0;
     if (it != sm_manager_->fhs_.end()) {
-        RmFileHdr file_hdr = it->second->get_file_hdr();
-        // 估算记录数量：页面数 * 每页记录数 (简化估算)
-        size_t estimated_records = (file_hdr.num_pages - 1) * file_hdr.num_records_per_page;
-        return std::max(estimated_records, (size_t)1); // 至少返回1避免除零错误
+        RmScan scan(it->second.get());
+        while(!scan.is_end()) {
+            res++;
+            scan.next();
+        }
     }
-    return 1000; // 默认估算值
+    return res; // 默认估算值
 }
 int Planner::get_table_col_num(const std::string& tab_name) {
     // 获取表的列数
