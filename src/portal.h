@@ -205,13 +205,41 @@ class Portal {
                 } else if (dynamic_cast<ExplainJoinExecutor*>(executor.get())) {
                     return 2; // Join
                 } else if (dynamic_cast<ExplainProjectExecutor*>(executor.get())) {
-                    return 3; // Scan or other
+                    return 3; //Project
                 } else{
-                    return 4;
+                    return 4; //Scan
                 }
             };
-            if(get_level(left) > get_level(right)) {
+            int left_level = get_level(left);
+            int right_level = get_level(right);
+            if(left_level > right_level) {
                 std::swap(left, right);
+            }else if(left_level == right_level) {
+                if(left_level == 1){
+                    auto left_ = dynamic_cast<ExplainFilterExecutor*>(left.get());
+                    auto right_ = dynamic_cast<ExplainFilterExecutor*>(right.get());
+                    if(left_->get_conds() > right_->get_conds()) {
+                        std::swap(left, right);
+                    }
+                }else if(left_level == 2){
+                    auto left_ = dynamic_cast<ExplainJoinExecutor*>(left.get());
+                    auto right_ = dynamic_cast<ExplainJoinExecutor*>(right.get());
+                    if(left_->get_tables() > right_->get_tables()) {
+                        std::swap(left, right);
+                    }
+                }else if(left_level == 3){
+                    auto left_ = dynamic_cast<ExplainProjectExecutor*>(left.get());
+                    auto right_ = dynamic_cast<ExplainProjectExecutor*>(right.get());
+                    if(left_->get_cols() > right_->get_cols()) {
+                        std::swap(left, right);
+                    }
+                }else{
+                    auto left_ = dynamic_cast<ExplainScanExecutor*>(left.get());
+                    auto right_ = dynamic_cast<ExplainScanExecutor*>(right.get());
+                    if(left_->get_tab_name() > right_->get_tab_name()) {
+                        std::swap(left, right);
+                    }
+                }
             }
             return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset);
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {

@@ -25,11 +25,9 @@ See the Mulan PSL v2 for more details. */
 #include "common/StackString.hpp"
 
 class ExplainScanExecutor : public AbstractExecutor {
-   private:
+   public:
     std::string tab_name_;
     int offset_;
-
-   public:
     ExplainScanExecutor(std::string tab_name, int offset) {
         tab_name_ = std::move(tab_name);
         offset_ = offset;
@@ -51,4 +49,6 @@ class ExplainScanExecutor : public AbstractExecutor {
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainScanExecutor"; }
+
+    std::string get_tab_name() const { return tab_name_; }
 };

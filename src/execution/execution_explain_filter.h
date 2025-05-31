@@ -63,4 +63,15 @@ class ExplainFilterExecutor : public AbstractExecutor {
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainFilterExecutor"; }
+
+    std::string get_conds() const {
+        std::string res;
+        for (const auto &cond : conds_) {
+            if (!res.empty()) {
+                res += ", ";
+            }
+            res += cond.to_string();
+        }
+        return res;
+    }
 };

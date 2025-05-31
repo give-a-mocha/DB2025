@@ -74,4 +74,15 @@ class ExplainJoinExecutor : public AbstractExecutor {
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainJoinExecutor"; }
+
+    std::string get_tables() const {
+        std::string res;
+        for (const auto &table : tables_) {
+            if (!res.empty()) {
+                res += ", ";
+            }
+            res += table;
+        }
+        return res;
+    }
 };

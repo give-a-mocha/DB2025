@@ -68,4 +68,15 @@ class ExplainProjectExecutor : public AbstractExecutor {
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainProjectExecutor"; }
+
+    std::string get_cols() const {
+        std::string res;
+        for (const auto &col : cols_) {
+            if (!res.empty()) {
+                res += ", ";
+            }
+            res += col.to_string();
+        }
+        return res;
+    }
 };
