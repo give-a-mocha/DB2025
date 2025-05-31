@@ -28,47 +28,44 @@ class ExplainJoinExecutor : public AbstractExecutor {
     std::unique_ptr<AbstractExecutor> right_;  // 右儿子节点
     std::vector<std::string> tables_;
     std::vector<Condition> conds_;
-    Context *context_;
     int offset_;
 
    public:
-    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> left,std::unique_ptr<AbstractExecutor> right,std::vector<std::string>tables, std::vector<Condition> conds, int offset, Context *context) {
+    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> left,std::unique_ptr<AbstractExecutor> right,std::vector<std::string>tables, std::vector<Condition> conds, int offset) {
         left_ = std::move(left);
         right_ = std::move(right);
         tables_ = std::move(tables);
         conds_ = std::move(conds);
         offset_ = offset;
-        context_ = context;
     }
     
     std::unique_ptr<RmRecord> Next() override {
-        std::string pre = std::string(offset_, '\t');
+        std::string res = std::string(offset_, '\t');
         std::sort(tables_.begin(), tables_.end());
         std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
             return a.to_string() < b.to_string();
         });
-        std::string output = pre + "Join(tables=[";
+        res += "Join(tables=[";
         for(size_t i = 0; i < tables_.size(); ++i) {
             if(i != 0) {
-                output += ",";
+                res += ",";
             }
-            output += tables_[i];
+            res += tables_[i];
         }
-        output += "],conditions=[";
+        res += "],conditions=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {
-                output += ",";
+                res += ",";
             }
             const auto &cond = conds_[i];
-            output += cond.to_string();
+            res += cond.to_string();
         }
-        output += "])\n";
+        res += "])\n";
         
-        if (context_ && context_->data_send_ && context_->offset_ &&
-            *context_->offset_ + output.length() < BUFFER_LENGTH) {
-            memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
-            *context_->offset_ += output.length();
-        }
+        std::fstream outfile;
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << res;
+        outfile.close();
         left_->Next();
         right_->Next();
         return nullptr;

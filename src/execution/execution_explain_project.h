@@ -28,25 +28,22 @@ class ExplainProjectExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
     std::vector<TabCol> cols_;
-    Context *context_;
     int offset_;
     bool isStar_;
 
    public:
-    ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset, Context *context, bool isStar = false) {
+    ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset, bool isStar = false) {
         prev_ = std::move(prev);
         cols_ = std::move(sel_cols);
         offset_ = offset;
-        context_ = context;
         isStar_ = isStar;
     }
     
     std::unique_ptr<RmRecord> Next() override {
-        StackString<2048, true> output(context_->data_send_ + *context_->offset_);
-        output.append(offset_, '\t');
-        output += "Project(columns=[";
+        std::string res = std::string(offset_, '\t');
+        res += "Project(columns=[";
         if(isStar_) {
-            output += "*";
+            res += "*";
         }
         else {
             std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
@@ -54,13 +51,16 @@ class ExplainProjectExecutor : public AbstractExecutor {
             });
             for (size_t i = 0; i < cols_.size(); ++i) {
                 if(i != 0) {
-                    output += ",";
+                    res += ",";
                 }
-                output += cols_[i].to_string();
+                res += cols_[i].to_string();
             }
         }
-        output += "])\n";
-        *context_->offset_ += output.size();
+        res += "])\n";
+        std::fstream outfile;
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << res;
+        outfile.close();
         prev_->Next();
         return nullptr;
     }

@@ -27,35 +27,34 @@ class ExplainFilterExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
     std::vector<Condition> conds_;
-    Context *context_;
     int offset_;
 
    public:
-    ExplainFilterExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<Condition> conds, int offset, Context *context) {
+    ExplainFilterExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<Condition> conds, int offset) {
         prev_ = std::move(prev);
         conds_ = std::move(conds);
         offset_ = offset;
-        context_ = context;
     }
     
     std::unique_ptr<RmRecord> Next() override {
-        // ! warning 未带越界检查
-        StackString<2048, true> output(context_->data_send_ + *context_->offset_);
-        output.append(offset_, '\t');
+        std::string res = std::string(offset_, '\t');
         // 多个条件按字典序排序
         std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
             return a.to_string() < b.to_string();
         });
-        output += "Filter(condition=[";
+        res += "Filter(condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
             if(i != 0) {
-                output += ",";
+                res += ",";
             }
             const auto &cond = conds_[i];
-            output += cond.to_string();
+            res += cond.to_string();
         }
-        output += "])\n";
-        *context_->offset_ += output.size();
+        res += "])\n";
+        std::fstream outfile;
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << res;
+        outfile.close();
         prev_->Next();
         return nullptr;
     }

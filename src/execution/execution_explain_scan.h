@@ -27,24 +27,24 @@ See the Mulan PSL v2 for more details. */
 class ExplainScanExecutor : public AbstractExecutor {
    private:
     std::string tab_name_;
-    Context *context_;
     int offset_;
 
    public:
-    ExplainScanExecutor(std::string tab_name, int offset, Context *context) {
+    ExplainScanExecutor(std::string tab_name, int offset) {
         tab_name_ = std::move(tab_name);
-        context_ = context;
         offset_ = offset;
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        StackString<2048, true> output(context_->data_send_ + *context_->offset_);
-        output.append(offset_, '\t');
-        output += "Scan(table=";
-        output += tab_name_;
-        output += ")\n";
+        std::string res = std::string(offset_, '\t');
+        res += "Scan(table=";
+        res += tab_name_;
+        res += ")\n";
 
-        *context_->offset_ += output.size();
+        std::fstream outfile;
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << res;
+        outfile.close();
         return nullptr;
     }
     

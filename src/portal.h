@@ -188,13 +188,13 @@ class Portal {
 
     std::unique_ptr<AbstractExecutor> convert_plan_explain_executor(std::shared_ptr<Plan> plan, Context *context, int offset) {
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
-            return std::make_unique<ExplainProjectExecutor>(convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, context, x->isStar_);
+            return std::make_unique<ExplainProjectExecutor>(convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, x->isStar_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if(x->conds_.empty()){
-                return std::make_unique<ExplainScanExecutor>(x->tab_name_, offset, context);
+                return std::make_unique<ExplainScanExecutor>(x->tab_name_, offset);
             }else{
-                auto res =  std::make_unique<ExplainScanExecutor>(x->tab_name_, offset + 1, context);
-                return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset, context);
+                auto res =  std::make_unique<ExplainScanExecutor>(x->tab_name_, offset + 1);
+                return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
             auto left = convert_plan_explain_executor(x->left_, context, offset + 1);
@@ -213,7 +213,7 @@ class Portal {
             if(get_level(left) > get_level(right)) {
                 std::swap(left, right);
             }
-            return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset, context);
+            return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset);
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return convert_plan_explain_executor(x->subplan_, context, offset); 
         }

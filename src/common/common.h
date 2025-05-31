@@ -26,7 +26,7 @@ struct TabCol {
     TabCol(): tab_name(""), tab_alias(""), col_name("") {}
 
     TabCol(std::string tab_name_, std::string col_name_, std::string tab_alias_ = "")
-        : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), tab_alias(std::move(tab_alias_)) {}
+        : tab_name(std::move(tab_name_)), tab_alias(std::move(tab_alias_)), col_name(std::move(col_name_)) {}
 
     friend bool operator<(const TabCol &x, const TabCol &y) {
         return std::make_pair(x.tab_name, x.col_name) < std::make_pair(y.tab_name, y.col_name);
