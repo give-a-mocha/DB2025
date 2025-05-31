@@ -508,13 +508,9 @@ size_t Planner::get_table_cardinality(const std::string& tab_name) {
     auto it = sm_manager_->fhs_.find(tab_name);
     size_t res = 0;
     if (it != sm_manager_->fhs_.end()) {
-        RmScan scan(it->second.get());
-        while(!scan.is_end()) {
-            res++;
-            scan.next();
-        }
+        res = it->second->get_file_hdr().record_num;
     }
-    return res; // 默认估算值
+    return res;
 }
 int Planner::get_table_col_num(const std::string& tab_name) {
     // 获取表的列数
