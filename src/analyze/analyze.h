@@ -97,14 +97,14 @@ private:
     TabCol check_column(const std::vector<ColMeta> &all_cols, TabCol target);
 
     // 把表名转换为真实的表名
-    void convert_tabname(TabCol &target, const std::vector<TabRef> &tab_refs);
+    void convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs);
 
     // 获取所有列的元数据
     void get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols);
     
     //获取where语句条件
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
-    void get_clause_alias(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds, const std::vector<TabRef> &tab_refs);
+    void get_clause_alias(const std::vector<ColMeta> &all_cols, const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds, const std::vector<TabRef> &tab_refs);
     
     //检查where条件合法性
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
