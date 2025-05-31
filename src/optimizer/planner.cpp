@@ -631,19 +631,10 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     
     result = table_plans[0];
     now_tables.push_back(first_scan->tab_name_);
-    // 依次加入其他表
-    for (size_t i = 1; i < table_plans.size(); i++) {
-        std::shared_ptr<ScanPlan> current_scan;
-        if(auto x = std::dynamic_pointer_cast<ScanPlan>(table_plans[i])){
-            current_scan = x;
-        } else {
-            auto y = std::dynamic_pointer_cast<ProjectionPlan>(table_plans[i]);
-            current_scan = std::dynamic_pointer_cast<ScanPlan>(y->subplan_);
-        }
-        std::string current_table = current_scan->tab_name_;
+    table_plans.erase(table_plans.begin());
+
+    auto join_table = [&](std::string current_table, size_t index) -> void{
         now_tables.push_back(current_table);
-        
-        // 找到与当前已连接表集合相关的连接条件
         std::vector<Condition> applicable_conds;
         auto it = join_conditions.begin();
         while (it != join_conditions.end()) {
@@ -663,19 +654,68 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
                 ++it;
             }
         }
-        
         // 创建连接计划
         if (enable_nestedloop_join && enable_sortmerge_join) {
-            result = std::make_shared<JoinPlan>(PlanTag::T_NestLoop, std::move(result), table_plans[i], applicable_conds, now_tables);
+            result = std::make_shared<JoinPlan>(PlanTag::T_NestLoop, std::move(result), table_plans[index], applicable_conds, now_tables);
         } else if (enable_nestedloop_join) {
-            result = std::make_shared<JoinPlan>(PlanTag::T_NestLoop, std::move(result), table_plans[i], applicable_conds, now_tables);
+            result = std::make_shared<JoinPlan>(PlanTag::T_NestLoop, std::move(result), table_plans[index], applicable_conds, now_tables);
         } else if (enable_sortmerge_join) {
-            result = std::make_shared<JoinPlan>(PlanTag::T_SortMerge, std::move(result), table_plans[i], applicable_conds, now_tables);
+            result = std::make_shared<JoinPlan>(PlanTag::T_SortMerge, std::move(result), table_plans[index], applicable_conds, now_tables);
         } else {
             throw RMDBError("No join executor selected!");
         }
-        
+        table_plans.erase(table_plans.begin() + index);
         joined_tables.insert(current_table);
+    };
+
+    
+    while(!table_plans.empty()) {
+        bool flag = false;
+        for(size_t i = 0; i < table_plans.size(); i++) {
+            std::shared_ptr<ScanPlan> current_scan;
+            if(auto x = std::dynamic_pointer_cast<ScanPlan>(table_plans[i])){
+                current_scan = x;
+            } else {
+                auto y = std::dynamic_pointer_cast<ProjectionPlan>(table_plans[i]);
+                current_scan = std::dynamic_pointer_cast<ScanPlan>(y->subplan_);
+            }
+            std::string current_table = current_scan->tab_name_;
+            
+            // 检查当前表是否已经连接
+            if (joined_tables.count(current_table) > 0) {
+                table_plans.erase(table_plans.begin() + i);
+                flag = true; 
+                break;
+            }
+            // 检查当前表是否可以连接
+            bool can_join = false;
+            for (const auto& cond : join_conditions) {
+                if ((cond.lhs_col.tab_name == current_table && joined_tables.count(cond.rhs_col.tab_name) > 0) ||
+                    (cond.rhs_col.tab_name == current_table && joined_tables.count(cond.lhs_col.tab_name) > 0)) {
+                    can_join = true;
+                    break;
+                }
+            }
+            if (can_join) {
+                // 如果可以连接，执行连接
+                join_table(current_table, i);
+                flag = true;
+                break; 
+            }
+        }
+        if(!flag) {
+            while(!table_plans.empty()) {
+                std::shared_ptr<ScanPlan> current_scan;
+                if(auto x = std::dynamic_pointer_cast<ScanPlan>(table_plans[0])){
+                    current_scan = x;
+                } else {
+                    auto y = std::dynamic_pointer_cast<ProjectionPlan>(table_plans[0]);
+                    current_scan = std::dynamic_pointer_cast<ScanPlan>(y->subplan_);
+                }
+                std::string current_table = current_scan->tab_name_;
+                join_table(current_table, 0);
+            }
+        }
     }
     
     // 处理剩余的连接条件（如果有的话理论来说不会有）
