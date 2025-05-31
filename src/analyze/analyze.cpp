@@ -66,7 +66,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         if(x->cols.empty()){
             query->cols.reserve(all_cols.size());
             for (auto &col : all_cols) {
-                TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+                TabCol sel_col = {col.tab_name, col.name};
                 convert_tabname(sel_col, tab_refs);
                 query->cols.push_back(sel_col);
             }
@@ -74,7 +74,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             //把列加入并进行校验，添加表名
             query->cols.reserve(x->cols.size());
             for (auto &sv_sel_col : x->cols) {
-                TabCol sel_col = {.tab_alias = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
+                TabCol sel_col = {"", sv_sel_col->col_name, sv_sel_col->tab_name};
                 convert_tabname(sel_col, tab_refs);
                 // 列元数据校验
                 sel_col = check_column(all_cols, sel_col); 
@@ -99,7 +99,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 处理set子句
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
-            set_clause.lhs = {.tab_name = x->tab_name, .col_name = sv_set_clause->col_name};
+            set_clause.lhs.tab_name = x->tab_name;
+            set_clause.lhs.col_name = sv_set_clause->col_name;
             set_clause.rhs = convert_sv_value(sv_set_clause->val);
             query->set_clauses.push_back(set_clause);
         }
@@ -231,7 +232,8 @@ void Analyze::get_clause_alias(const std::vector<std::shared_ptr<ast::BinaryExpr
     conds.reserve(sv_conds.size());
     for (auto &expr : sv_conds) {
         Condition cond;
-        cond.lhs_col = {.tab_alias = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
+        cond.lhs_col.tab_alias = expr->lhs->tab_name;
+        cond.lhs_col.col_name = expr->lhs->col_name;
         convert_tabname(cond.lhs_col, tab_refs);
         cond.op = convert_sv_comp_op(expr->op);
         if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
@@ -239,7 +241,8 @@ void Analyze::get_clause_alias(const std::vector<std::shared_ptr<ast::BinaryExpr
             cond.rhs_val = convert_sv_value(rhs_val);
         } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
             cond.is_rhs_val = false;
-            cond.rhs_col = {.tab_alias = rhs_col->tab_name, .col_name = rhs_col->col_name};
+            cond.rhs_col.tab_alias = rhs_col->tab_name;
+            cond.rhs_col.col_name = rhs_col->col_name;
             convert_tabname(cond.rhs_col, tab_refs);
         }
         conds.push_back(cond);
@@ -251,14 +254,16 @@ void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv
     conds.reserve(sv_conds.size());
     for (auto &expr : sv_conds) {
         Condition cond;
-        cond.lhs_col = {.tab_name = expr->lhs->tab_name, .col_name = expr->lhs->col_name};
+        cond.lhs_col.tab_name = expr->lhs->tab_name;
+        cond.lhs_col.col_name = expr->lhs->col_name;
         cond.op = convert_sv_comp_op(expr->op);
         if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
             cond.is_rhs_val = true;
             cond.rhs_val = convert_sv_value(rhs_val);
         } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
             cond.is_rhs_val = false;
-            cond.rhs_col = {.tab_name = rhs_col->tab_name, .col_name = rhs_col->col_name};
+            cond.rhs_col.tab_name = rhs_col->tab_name;
+            cond.rhs_col.col_name = rhs_col->col_name;
         }
         conds.push_back(cond);
     }

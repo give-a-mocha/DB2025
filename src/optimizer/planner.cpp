@@ -358,7 +358,10 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
     }
     TabCol sel_col;
     for (auto &col : all_cols) {
-        if (col.name.compare(x->order->cols->col_name) == 0) sel_col = {.tab_name = col.tab_name, .col_name = col.name};
+        if (col.name.compare(x->order->cols->col_name) == 0) {
+            sel_col.tab_name = col.tab_name;
+            sel_col.col_name = col.name;
+        }
     }
     return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), sel_col,
                                       x->order->orderby_dir == ast::OrderBy_DESC);
