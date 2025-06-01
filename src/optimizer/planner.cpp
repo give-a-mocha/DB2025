@@ -547,31 +547,6 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
             query->conds.emplace_back(std::move(cond));
         }
     }
-    std::map<std::string, std::vector<TabCol>> need_cols;
-    auto push_cols = [&](std::string table, TabCol col) {
-        auto it = need_cols.find(table);
-        if (it == need_cols.end()) {
-            need_cols[table] = std::vector<TabCol>{col};
-        } else {
-            int ok = 1;
-            for(auto &c : it->second) {
-                if(c == col) {
-                    ok = 0; // 重复的列名
-                    break;
-                }
-            }
-            if(ok)it->second.emplace_back(col);
-        }
-    };
-    for(auto &cond : query->conds) {
-        push_cols(cond.lhs_col.tab_name, cond.lhs_col);
-        if(cond.is_rhs_val == false) {
-            push_cols(cond.rhs_col.tab_name, cond.rhs_col);
-        }
-    }
-    for(auto col: query->cols){
-        push_cols(col.tab_name, col);
-    }
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
@@ -586,11 +561,6 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
             scan_plan = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, tables[i], curr_conds, index_col_names);
         } else {  // 存在索引
             scan_plan = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, tables[i], curr_conds, index_col_names);
-        }
-        auto it = need_cols.find(tables[i]);
-        if(it != need_cols.end() && it->second.size() < get_table_col_num(tables[i])) {
-            // 投影下推
-            scan_plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(scan_plan), it->second);
         }
         table_plans_with_cardinality[i] = {std::move(scan_plan), cardinality};
     }
@@ -622,13 +592,7 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     std::shared_ptr<Plan> result = nullptr;
     std::set<std::string> joined_tables;
     // 获取第一个表的名称
-    std::shared_ptr<ScanPlan> first_scan;
-    if(auto x = std::dynamic_pointer_cast<ScanPlan>(table_plans[0])){
-        first_scan = x;
-    } else {
-        auto y = std::dynamic_pointer_cast<ProjectionPlan>(table_plans[0]);
-        first_scan = std::dynamic_pointer_cast<ScanPlan>(y->subplan_);
-    }
+    std::shared_ptr<ScanPlan> first_scan = std::dynamic_pointer_cast<ScanPlan>(table_plans[0]);
     joined_tables.insert(first_scan->tab_name_);
     std::vector<std::string> now_tables;
     
@@ -675,13 +639,7 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     while(!table_plans.empty()) {
         bool flag = false;
         for(size_t i = 0; i < table_plans.size(); i++) {
-            std::shared_ptr<ScanPlan> current_scan;
-            if(auto x = std::dynamic_pointer_cast<ScanPlan>(table_plans[i])){
-                current_scan = x;
-            } else {
-                auto y = std::dynamic_pointer_cast<ProjectionPlan>(table_plans[i]);
-                current_scan = std::dynamic_pointer_cast<ScanPlan>(y->subplan_);
-            }
+            std::shared_ptr<ScanPlan> current_scan = std::dynamic_pointer_cast<ScanPlan>(table_plans[i]);
             std::string current_table = current_scan->tab_name_;
             
             // 检查当前表是否已经连接
