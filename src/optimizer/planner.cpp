@@ -575,6 +575,7 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
+
         auto curr_conds = pop_conds(query->conds, tables[i]);
         std::vector<std::string> index_col_names;
         bool index_exist = get_index_cols(tables[i], curr_conds, index_col_names);
@@ -774,7 +775,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
             }
         }
         if(ok){
-            plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), need_cols);
+            plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
         }
         return plan;
     } else if(auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
@@ -797,7 +798,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
             }
         }
         if(cnt != get_table_col_num(x->tab_name_)) {
-            plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), need_cols);
+            plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
         }
         return plan;
     }
