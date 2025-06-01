@@ -21,7 +21,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     std::unique_ptr<AbstractExecutor> right_;  // 右儿子节点（需要join的表）
     size_t len_;                               // join后获得的每条记录的长度
     std::vector<ColMeta> cols_;                // join后获得的记录的字段
-
+    
     std::vector<Condition> fed_conds_;  // join条件
     bool _is_end;
 
@@ -107,7 +107,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                 _is_end = true;
                 return;
             }
-            
+
             auto rec = std::make_unique<RmRecord>(len_);
             memcpy(rec->data, left_rec->data, left_->tupleLen());
             memcpy(rec->data + left_->tupleLen(), right_rec->data,

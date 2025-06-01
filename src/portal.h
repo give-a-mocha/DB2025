@@ -24,6 +24,11 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_projection.h"
 #include "execution/executor_seq_scan.h"
 #include "execution/executor_update.h"
+#include "execution/execution_explain_project.h"
+#include "execution/execution_explain_scan.h"
+#include "execution/execution_explain_filter.h"
+#include "execution/execution_explain_join.h"
+
 #include "optimizer/plan.h"
 
 typedef enum portalTag {
@@ -31,7 +36,8 @@ typedef enum portalTag {
     PORTAL_ONE_SELECT,
     PORTAL_DML_WITHOUT_SELECT,
     PORTAL_MULTI_QUERY,
-    PORTAL_CMD_UTILITY
+    PORTAL_CMD_UTILITY,
+    PORTAL_EXPLAIN
 } portalTag;
 
 struct PortalStmt {
@@ -107,7 +113,12 @@ class Portal {
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
-
+                case PlanTag::T_explain: {
+                    std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
+                    std::unique_ptr<AbstractExecutor> root = convert_plan_explain_executor(p, context, 0);
+                    return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(p->sel_cols_), std::move(root),
+                                                        plan);
+                }
                 default:
                     throw InternalError("Unexpected field type");
                     break;
@@ -138,6 +149,11 @@ class Portal {
                 ql->run_cmd_utility(portal->plan, txn_id, context);
                 break;
             }
+
+            case PORTAL_EXPLAIN: {
+                ql->run_explain(std::move(portal->root), std::move(portal->sel_cols), context);
+                break;
+            }
             default: {
                 throw InternalError("Unexpected field type");
             }
@@ -166,6 +182,60 @@ class Portal {
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context), x->sel_col_,
                                                   x->is_desc_);
+        }
+        return nullptr;
+    }
+
+    std::unique_ptr<AbstractExecutor> convert_plan_explain_executor(std::shared_ptr<Plan> plan, Context *context, int offset) {
+        if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
+            return std::make_unique<ExplainProjectExecutor>(convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, x->isStar_);
+        } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
+            if(x->conds_.empty()){
+                return std::make_unique<ExplainScanExecutor>(x->tab_name_, offset);
+            }else{
+                auto res =  std::make_unique<ExplainScanExecutor>(x->tab_name_, offset + 1);
+                return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset);
+            }
+        } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
+            std::vector<Condition> solve_conds;
+            std::vector<Condition> conds;
+            for(const auto &cond : x->conds_) {
+                if(cond.op == CompOp::OP_EQ) {
+                    solve_conds.push_back(cond);
+                } else {
+                    conds.push_back(cond);
+                }
+            }
+            int add_offset = 0;
+            if(!conds.empty()) {
+                add_offset = 2;
+            }else{
+                add_offset = 1;
+            }
+            auto left = convert_plan_explain_executor(x->left_, context, offset + add_offset);
+            auto right = convert_plan_explain_executor(x->right_, context, offset + add_offset);
+            auto get_level = [](const std::unique_ptr<AbstractExecutor>& executor) -> std::string {
+                if (auto x = dynamic_cast<ExplainFilterExecutor*>(executor.get())) {
+                    return "1_" + x->get_conds(); // Filter
+                } else if (auto x = dynamic_cast<ExplainJoinExecutor*>(executor.get())) {
+                    return "2_" + x->get_tables(); // Join
+                } else if (auto x = dynamic_cast<ExplainProjectExecutor*>(executor.get())) {
+                    return "3_" + x->get_cols(); // Project
+                } else if (auto x = dynamic_cast<ExplainScanExecutor*>(executor.get())) {
+                    return "4_" + x->get_tab_name(); // Scan
+                }
+            };
+            if(get_level(left) > get_level(right)) {
+                std::swap(left, right);
+            }
+            if(!conds.empty()) {
+                auto res = std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), x->tables_, solve_conds, offset + 1);
+                return std::make_unique<ExplainFilterExecutor>(std::move(res), conds, offset);
+            }else{
+                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right),x->tables_, x->conds_, offset);
+            }
+        } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
+            return convert_plan_explain_executor(x->subplan_, context, offset); 
         }
         return nullptr;
     }

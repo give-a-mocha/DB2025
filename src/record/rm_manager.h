@@ -42,6 +42,7 @@ class RmManager {
         RmFileHdr file_hdr{};
         file_hdr.record_size = record_size;
         file_hdr.num_pages = 1;
+        file_hdr.record_num = 0;
         file_hdr.first_free_page_no = RM_NO_PAGE;
         // We have: sizeof(hdr) + (n + 7) / 8 + n * record_size <= PAGE_SIZE
         file_hdr.num_records_per_page =

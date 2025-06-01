@@ -21,10 +21,35 @@ See the Mulan PSL v2 for more details. */
 
 struct TabCol {
     std::string tab_name;
+    std::string tab_alias;  // 表别名
     std::string col_name;
+    TabCol(): tab_name(""), tab_alias(""), col_name("") {}
+
+    TabCol(std::string tab_name_, std::string col_name_, std::string tab_alias_ = "")
+        : tab_name(std::move(tab_name_)), tab_alias(std::move(tab_alias_)), col_name(std::move(col_name_)) {}
 
     friend bool operator<(const TabCol &x, const TabCol &y) {
-        return std::make_pair(x.tab_name, x.col_name) < std::make_pair(y.tab_name, y.col_name);
+        return std::tie(x.tab_name, x.col_name, x.tab_alias) < std::tie(y.tab_name, y.col_name, y.tab_alias);
+    }
+
+    friend bool operator == (const TabCol &x, const TabCol &y) {
+        return x.tab_name == y.tab_name && x.col_name == y.col_name && x.tab_alias == y.tab_alias;
+    }
+    std::string get_tab_name() const {
+        return tab_alias.empty() ? tab_name : tab_alias;
+    }
+    std::string to_string() const {
+        return get_tab_name() + "." + col_name;
+    }
+};
+
+struct TabRef {
+    std::string name;
+    std::string alias;  // 表别名
+    TabRef(std::string name_, std::string alias_ = "") : name(std::move(name_)), alias(std::move(alias_)) {}
+
+    std::string get_name() const {
+        return alias.empty() ? name : alias;
     }
 };
 
@@ -72,17 +97,85 @@ struct Value {
     }
 };
 
-enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
 
+enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
+enum class JoinType { INNER_JOIN, LEFT_JOIN, RIGHT_JOIN, FULL_JOIN, CROSS_JOIN };
 struct Condition {
     TabCol lhs_col;   // left-hand side column
     CompOp op;        // comparison operator
     bool is_rhs_val;  // true if right-hand side is a value (not a column)
     TabCol rhs_col;   // right-hand side column
     Value rhs_val;    // right-hand side value
+
+    std::string to_string() const {
+        auto compOp2String = [&](CompOp op) -> std::string {
+            switch (op) {
+                case CompOp::OP_EQ:
+                    return "=";
+                case CompOp::OP_NE:
+                    return "!=";
+                case CompOp::OP_GT:
+                    return ">";
+                case CompOp::OP_GE:
+                    return ">=";
+                case CompOp::OP_LT:
+                    return "<";
+                case CompOp::OP_LE:
+                    return "<=";
+                default:
+                    throw InternalError("Unknown comparison operator");
+            }
+        };
+        std::string res = lhs_col.to_string();
+        res += compOp2String(op);
+        if (is_rhs_val) {
+            if (rhs_val.type == ColType::TYPE_INT) {
+                res += std::to_string(rhs_val.int_val);
+            } else if (rhs_val.type == ColType::TYPE_FLOAT) {
+                res += std::to_string(rhs_val.float_val);
+            } else if (rhs_val.type == ColType::TYPE_STRING) {
+                res += "'" + std::string(rhs_val.str_val) + "'";
+            } else {
+                throw InternalError("Unknown value type in condition");
+            }
+        } else {
+            res += rhs_col.to_string();
+        }
+        return res;
+    }
 };
+
+struct JoinNode {
+    std::string tab_name;
+    std::vector<Condition> join_conds;     // JOIN条件
+    JoinType join_type;                    // JOIN类型
+    
+    JoinNode(std::string name_, std::vector<Condition> join_conds_, JoinType join_type_)
+        :tab_name(name_),join_conds(std::move(join_conds_)), join_type(join_type_) {}
+};
+
 
 struct SetClause {
     TabCol lhs;
     Value rhs;
 };
+
+inline CompOp swap_op(CompOp op) {
+    switch (op) {
+        case CompOp::OP_EQ:
+            return CompOp::OP_EQ;
+        case CompOp::OP_NE:
+            return CompOp::OP_NE;
+        case CompOp::OP_LT:
+            return CompOp::OP_GT;
+        case CompOp::OP_GT:
+            return CompOp::OP_LT;
+        case CompOp::OP_LE:
+            return CompOp::OP_GE;
+        case CompOp::OP_GE:
+            return CompOp::OP_LE;
+        default:
+            throw RMDBError("Unknown comparison operator");
+    }
+}
+

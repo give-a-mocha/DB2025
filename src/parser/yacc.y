@@ -1,11 +1,14 @@
 %{
+
 #include "ast.h"
 #include "yacc.tab.h"
 #include <iostream>
 #include <memory>
 
+// 词法分析器接口函数声明
 int yylex(YYSTYPE *yylval, YYLTYPE *yylloc);
 
+// 语法错误处理函数
 void yyerror(YYLTYPE *locp, const char* s) {
     std::cerr << "Parser Error at line " << locp->first_line << " column " << locp->first_column << ": " << s << std::endl;
 }
@@ -13,385 +16,548 @@ void yyerror(YYLTYPE *locp, const char* s) {
 using namespace ast;
 %}
 
-// request a pure (reentrant) parser
+// 生成纯净（可重入）的解析器，支持多线程
 %define api.pure full
-// enable location in error handler
+// 启用位置追踪功能，用于错误报告
 %locations
-// enable verbose syntax error message
+// 启用详细的语法错误信息
 %define parse.error verbose
 
-// keywords
+
+// SQL关键字 - 这些是保留字，在词法分析阶段识别
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
-WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
-// non-keywords
+%token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
+%token EXPLAIN AS
+%token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON
+
+// 复合操作符 - 由多个字符组成的操作符
 %token LEQ NEQ GEQ T_EOF
 
-// type-specific tokens
-%token <sv_str> IDENTIFIER VALUE_STRING
-%token <sv_int> VALUE_INT
-%token <sv_float> VALUE_FLOAT
-%token <sv_bool> VALUE_BOOL
+// 带语义值的Token - 这些Token携带具体的数据
+%token <sv_str> IDENTIFIER VALUE_STRING     // 标识符和字符串字面量
+%token <sv_int> VALUE_INT                   // 整数字面量
+%token <sv_float> VALUE_FLOAT               // 浮点数字面量
+%token <sv_bool> VALUE_BOOL                 // 布尔字面量
 
-// specify types for non-terminal symbol
+
+// 语句类型 - 所有返回TreeNode的语法规则
 %type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
-%type <sv_field> field
-%type <sv_fields> fieldList
-%type <sv_type_len> type
-%type <sv_comp_op> op
-%type <sv_expr> expr
-%type <sv_val> value
-%type <sv_vals> valueList
-%type <sv_str> tbName colName
-%type <sv_strs> tableList colNameList
-%type <sv_col> col
-%type <sv_cols> colList selector
-%type <sv_set_clause> setClause
-%type <sv_set_clauses> setClauses
-%type <sv_cond> condition
-%type <sv_conds> whereClause optWhereClause
-%type <sv_orderby>  order_clause opt_order_clause
-%type <sv_orderby_dir> opt_asc_desc
-%type <sv_setKnobType> set_knob_type
+
+// 表结构相关
+%type <sv_field> field                      // 单个字段定义
+%type <sv_fields> fieldList                 // 字段列表
+
+// 数据类型
+%type <sv_type_len> type                    // 数据类型定义
+
+// 表达式和操作符
+%type <sv_comp_op> op                       // 比较操作符
+%type <sv_expr> expr                        // 表达式
+%type <sv_val> value                        // 值
+%type <sv_vals> valueList                   // 值列表
+
+// 标识符
+%type <sv_str> tbName colName               // 表名和列名
+
+// 列表类型
+%type <sv_strs> colNameList                 // 列名列表
+%type <sv_col> col                          // 列引用
+%type <sv_cols> colList selector            // 列列表和选择器
+%type <sv_table_ref> tableRef               // 表引用（支持别名）
+%type <sv_table_refs> tableList             // 表引用列表
+%type <sv_str> optAlias                     // 可选别名规则
+
+// UPDATE相关
+%type <sv_set_clause> setClause             // SET子句
+%type <sv_set_clauses> setClauses           // SET子句列表
+
+// WHERE相关
+%type <sv_cond> condition                   // 条件表达式
+%type <sv_conds> whereClause optWhereClause // WHERE子句
+
+// ORDER BY相关
+%type <sv_orderby> order_clause opt_order_clause  // ORDER BY子句
+%type <sv_orderby_dir> opt_asc_desc               // 排序方向
+
+// JOIN相关
+%type <sv_join_type> joinType               // JOIN类型
+%type <sv_join_expr> joinExpr               // JOIN表达式
+%type <sv_join_exprs> joinExprs optJoinExprs // JOIN表达式列表
+
+// 配置相关
+%type <sv_setKnobType> set_knob_type        // 配置选项类型
 
 %%
+
+/* 解析入口点 */
 start:
-        stmt ';'
+        stmt ';'                            // 标准SQL语句（以分号结尾）
     {
-        parse_tree = $1;
-        YYACCEPT;
+        parse_tree = $1;                    // 设置解析结果
+        YYACCEPT;                           // 成功完成解析
     }
-    |   HELP
+    |   HELP                                // HELP命令
     {
         parse_tree = std::make_shared<Help>();
         YYACCEPT;
     }
-    |   EXIT
+    |   EXIT                                // EXIT命令
     {
-        parse_tree = nullptr;
+        parse_tree = nullptr;               // 空树表示退出
         YYACCEPT;
     }
-    |   T_EOF
+    |   T_EOF                               // 文件结束
     {
         parse_tree = nullptr;
         YYACCEPT;
     }
     ;
 
+/* 语句分类 - SQL语句的顶层分类 */
 stmt:
-        dbStmt
-    |   ddl
-    |   dml
-    |   txnStmt
-    |   setStmt
+        dbStmt                              // 数据库管理语句
+    |   ddl                                 // 数据定义语言（DDL）
+    |   dml                                 // 数据操作语言（DML）
+    |   txnStmt                             // 事务控制语句
+    |   setStmt                             // 配置设置语句
     ;
 
+/* 事务控制语句 */
 txnStmt:
-        TXN_BEGIN
+        TXN_BEGIN                           // 开始事务
     {
         $$ = std::make_shared<TxnBegin>();
     }
-    |   TXN_COMMIT
+    |   TXN_COMMIT                          // 提交事务
     {
         $$ = std::make_shared<TxnCommit>();
     }
-    |   TXN_ABORT
+    |   TXN_ABORT                           // 中止事务
     {
         $$ = std::make_shared<TxnAbort>();
     }
-    | TXN_ROLLBACK
+    | TXN_ROLLBACK                          // 回滚事务
     {
         $$ = std::make_shared<TxnRollback>();
     }
     ;
 
+/* 数据库管理语句 */
 dbStmt:
-        SHOW TABLES
+        SHOW TABLES                         // 显示所有表
     {
         $$ = std::make_shared<ShowTables>();
     }
-    |   SHOW INDEX FROM tbName
+    |   SHOW INDEX FROM tbName              // 显示指定表的索引
     {
         $$ = std::make_shared<ShowIndex>($4);
     }
     ;
 
+/* 配置设置语句 */
 setStmt:
-        SET set_knob_type '=' VALUE_BOOL
+        SET set_knob_type '=' VALUE_BOOL    // 设置配置选项
     {
         $$ = std::make_shared<SetStmt>($2, $4);
     }
     ;
 
+/* DDL - 数据定义语言 */
 ddl:
-        CREATE TABLE tbName '(' fieldList ')'
+        CREATE TABLE tbName '(' fieldList ')'  // 创建表
     {
         $$ = std::make_shared<CreateTable>($3, $5);
     }
-    |   DROP TABLE tbName
+    |   DROP TABLE tbName                   // 删除表
     {
         $$ = std::make_shared<DropTable>($3);
     }
-    |   DESC tbName
+    |   DESC tbName                         // 描述表结构
     {
         $$ = std::make_shared<DescTable>($2);
     }
-    |   CREATE INDEX tbName '(' colNameList ')'
+    |   CREATE INDEX tbName '(' colNameList ')'  // 创建索引
     {
         $$ = std::make_shared<CreateIndex>($3, $5);
     }
-    |   DROP INDEX tbName '(' colNameList ')'
+    |   DROP INDEX tbName '(' colNameList ')'    // 删除索引
     {
         $$ = std::make_shared<DropIndex>($3, $5);
     }
     ;
 
+/* DML - 数据操作语言 */
 dml:
-        INSERT INTO tbName VALUES '(' valueList ')'
+        INSERT INTO tbName VALUES '(' valueList ')'  // 插入数据
     {
         $$ = std::make_shared<InsertStmt>($3, $6);
     }
-    |   DELETE FROM tbName optWhereClause
+    |   DELETE FROM tbName optWhereClause   // 删除数据
     {
         $$ = std::make_shared<DeleteStmt>($3, $4);
     }
-    |   UPDATE tbName SET setClauses optWhereClause
+    |   UPDATE tbName SET setClauses optWhereClause  // 更新数据
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause
+    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
     }
-    ;
+    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
+    {
+        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8);
+    };
 
+/* 字段列表 - 用于CREATE TABLE */
 fieldList:
-        field
+        field                               // 单个字段
     {
         $$ = std::vector<std::shared_ptr<Field>>{$1};
     }
-    |   fieldList ',' field
+    |   fieldList ',' field                 // 多个字段（递归定义）
     {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向现有列表添加新字段
     }
     ;
 
+/* 列名列表 - 用于索引定义等 */
 colNameList:
-        colName
+        colName                             // 单个列名
     {
         $$ = std::vector<std::string>{$1};
     }
-    | colNameList ',' colName
+    | colNameList ',' colName               // 多个列名（递归定义）
     {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向现有列表添加新列名
     }
     ;
 
+/* 字段定义 - 列名和数据类型的组合 */
 field:
-        colName type
+        colName type                        // 列名 + 数据类型
     {
         $$ = std::make_shared<ColDef>($1, $2);
     }
     ;
 
+/* 数据类型定义 */
 type:
-        INT
+        INT                                 // 整数类型
     {
         $$ = std::make_shared<TypeLen>(SV_TYPE_INT, sizeof(int));
     }
-    |   CHAR '(' VALUE_INT ')'
+    |   CHAR '(' VALUE_INT ')'              // 字符串类型（指定长度）
     {
         $$ = std::make_shared<TypeLen>(SV_TYPE_STRING, $3);
     }
-    |   FLOAT
+    |   FLOAT                               // 浮点数类型
     {
         $$ = std::make_shared<TypeLen>(SV_TYPE_FLOAT, sizeof(float));
     }
     ;
 
+/* 值列表 - 用于INSERT语句 */
 valueList:
-        value
+        value                               // 单个值
     {
         $$ = std::vector<std::shared_ptr<Value>>{$1};
     }
-    |   valueList ',' value
+    |   valueList ',' value                 // 多个值（递归定义）
     {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向现有列表添加新值
     }
     ;
 
+/* 值定义 - 字面量常量 */
 value:
-        VALUE_INT
+        VALUE_INT                           // 整数字面量
     {
         $$ = std::make_shared<IntLit>($1);
     }
-    |   VALUE_FLOAT
+    |   VALUE_FLOAT                         // 浮点数字面量
     {
         $$ = std::make_shared<FloatLit>($1);
     }
-    |   VALUE_STRING
+    |   VALUE_STRING                        // 字符串字面量
     {
         $$ = std::make_shared<StringLit>($1);
     }
-    |   VALUE_BOOL
+    |   VALUE_BOOL                          // 布尔字面量
     {
         $$ = std::make_shared<BoolLit>($1);
     }
     ;
 
+/* 条件表达式 - 用于WHERE子句 */
 condition:
-        col op expr
+        col op expr                         // 列 操作符 表达式
     {
         $$ = std::make_shared<BinaryExpr>($1, $2, $3);
     }
     ;
 
+/* 可选的WHERE子句 */
 optWhereClause:
-        /* epsilon */ { /* ignore*/ }
-    |   WHERE whereClause
+        /* epsilon */                       // 空规则 - 没有WHERE子句
+    { 
+        /* 不做任何操作，保持默认值 */ 
+    }
+    |   WHERE whereClause                   // 有WHERE子句
     {
-        $$ = $2;
+        $$ = $2;                            // 传递WHERE子句的内容
     }
     ;
 
+/* WHERE子句内容 */
 whereClause:
-        condition 
+        condition                           // 单个条件
     {
         $$ = std::vector<std::shared_ptr<BinaryExpr>>{$1};
     }
-    |   whereClause AND condition
+    |   whereClause AND condition           // 多个条件用AND连接
     {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向条件列表添加新条件
     }
     ;
 
+/* 可选别名规则 */
+optAlias:
+        /* epsilon */                       // 没有别名
+    {
+        $$ = "";                            // 空字符串表示没有别名
+    }
+    |   AS IDENTIFIER                       // AS 别名
+    {
+        $$ = $2;                            // 返回别名
+    }
+    |   IDENTIFIER                          // 直接跟别名（省略AS）
+    {
+        $$ = $1;                            // 返回别名
+    }
+    ;
+
+/* 列引用 */
 col:
-        tbName '.' colName
+        tbName '.' colName optAlias         // 表名.列名 [AS 别名]
     {
-        $$ = std::make_shared<Col>($1, $3);
+        $$ = std::make_shared<Col>($1, $3, $4);
     }
-    |   colName
+    |   colName optAlias                    // 列名 [AS 别名]
     {
-        $$ = std::make_shared<Col>("", $1);
+        $$ = std::make_shared<Col>("", $1, $2); // 表名为空字符串
     }
     ;
 
+/* 列列表 - 用于SELECT等 */
 colList:
-        col
+        col                                 // 单个列
     {
         $$ = std::vector<std::shared_ptr<Col>>{$1};
     }
-    |   colList ',' col
+    |   colList ',' col                     // 多个列（递归定义）
     {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向列表添加新列
     }
     ;
 
+/* 比较操作符 */
 op:
-        '='
+        '='                                 // 等于
     {
         $$ = SV_OP_EQ;
     }
-    |   '<'
+    |   '<'                                 // 小于
     {
         $$ = SV_OP_LT;
     }
-    |   '>'
+    |   '>'                                 // 大于
     {
         $$ = SV_OP_GT;
     }
-    |   NEQ
+    |   NEQ                                 // 不等于 (!=)
     {
         $$ = SV_OP_NE;
     }
-    |   LEQ
+    |   LEQ                                 // 小于等于 (<=)
     {
         $$ = SV_OP_LE;
     }
-    |   GEQ
+    |   GEQ                                 // 大于等于 (>=)
     {
         $$ = SV_OP_GE;
     }
     ;
 
+/* 表达式 - 可以是值或列引用 */
 expr:
-        value
+        value                               // 值表达式
     {
         $$ = std::static_pointer_cast<Expr>($1);
     }
-    |   col
+    |   col                                 // 列表达式
     {
         $$ = std::static_pointer_cast<Expr>($1);
     }
     ;
 
+/* SET子句列表 - 用于UPDATE语句 */
 setClauses:
-        setClause
+        setClause                           // 单个SET子句
     {
         $$ = std::vector<std::shared_ptr<SetClause>>{$1};
     }
-    |   setClauses ',' setClause
+    |   setClauses ',' setClause            // 多个SET子句
     {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向列表添加新的SET子句
     }
     ;
 
+/* SET子句 - 列名=值 */
 setClause:
-        colName '=' value
+        colName '=' value                   // 列名 = 新值
     {
         $$ = std::make_shared<SetClause>($1, $3);
     }
     ;
 
+/* 选择器 - SELECT语句中的列选择 */
 selector:
-        '*'
+        '*'                                 // 选择所有列
     {
-        $$ = {};
+        $$ = {};                            // 空向量表示选择所有列
     }
-    |   colList
+    |   colList                             // 选择指定列
     ;
 
+/* 表引用 - 支持别名 */
+tableRef:
+        tbName optAlias                     // 表名 [AS 别名]
+    {
+        
+            $$ = std::make_shared<TableRef>($1, $2);
+        
+    }
+    ;
+
+/* 表列表 - FROM子句中的表 */
 tableList:
-        tbName
+        tableRef                            // 单个表引用
     {
-        $$ = std::vector<std::string>{$1};
+        $$ = std::vector<std::shared_ptr<TableRef>>{$1};
     }
-    |   tableList ',' tbName
+    |   tableList ',' tableRef              // 多个表（逗号分隔）
     {
-        $$.push_back($3);
-    }
-    |   tableList JOIN tbName
-    {
-        $$.push_back($3);
+        $$.push_back($3);                   // 向表列表添加新表
     }
     ;
 
+/* 可选的ORDER BY子句 */
 opt_order_clause:
-    ORDER BY order_clause      
+    ORDER BY order_clause                   // 有ORDER BY子句
     { 
         $$ = $3; 
     }
-    |   /* epsilon */ { /* ignore*/ }
+    |   /* epsilon */                       // 没有ORDER BY子句
+    { 
+        /* 不做任何操作，保持默认值 */ 
+    }
     ;
 
+/* ORDER BY子句内容 */
 order_clause:
-      col  opt_asc_desc 
+      col opt_asc_desc                      // 列名 + 可选的排序方向
     { 
         $$ = std::make_shared<OrderBy>($1, $2);
     }
     ;   
 
+/* 可选的排序方向 */
 opt_asc_desc:
-    ASC          { $$ = OrderBy_ASC;     }
-    |  DESC      { $$ = OrderBy_DESC;    }
-    |       { $$ = OrderBy_DEFAULT; }
+    ASC                                     // 升序
+    { 
+        $$ = OrderBy_ASC; 
+    }
+    |  DESC                                 // 降序
+    { 
+        $$ = OrderBy_DESC; 
+    }
+    |                                       // 默认（通常是升序）
+    { 
+        $$ = OrderBy_DEFAULT; 
+    }
     ;    
 
-set_knob_type:
-    ENABLE_NESTLOOP { $$ = EnableNestLoop; }
-    |   ENABLE_SORTMERGE { $$ = EnableSortMerge; }
+/* 可选的JOIN表达式列表 */
+optJoinExprs:
+        /* epsilon */                       // 没有JOIN
+    {
+        $$ = std::vector<std::shared_ptr<JoinExpr>>{};
+    }
+    |   joinExprs                          // 有JOIN表达式
+    {
+        $$ = $1;
+    }
     ;
 
-tbName: IDENTIFIER;
+/* JOIN表达式列表 */
+joinExprs:
+        joinExpr                           // 单个JOIN表达式
+    {
+        $$ = std::vector<std::shared_ptr<JoinExpr>>{$1};
+    }
+    |   joinExprs joinExpr                 // 多个JOIN表达式
+    {
+        $$.push_back($2);
+    }
+    ;
 
-colName: IDENTIFIER;
+/* JOIN表达式 */
+joinExpr:
+        joinType tableRef ON whereClause   // JOIN类型 表 ON 条件
+    {
+        $$ = std::make_shared<JoinExpr>($2, $4, $1);
+    }
+    ;
+
+/* JOIN类型 */
+joinType:
+        JOIN                               // 默认INNER JOIN
+    {
+        $$ = SV_INNER_JOIN;
+    }
+    |   INNER_JOIN                         // 显式INNER JOIN
+    {
+        $$ = SV_INNER_JOIN;
+    }
+    |   LEFT_JOIN                          // LEFT JOIN
+    {
+        $$ = SV_LEFT_JOIN;
+    }
+    |   RIGHT_JOIN                         // RIGHT JOIN
+    {
+        $$ = SV_RIGHT_JOIN;
+    }
+    |   FULL_JOIN                          // FULL JOIN
+    {
+        $$ = SV_FULL_JOIN;
+    }
+    ;
+
+/* 配置选项类型 */
+set_knob_type:
+    ENABLE_NESTLOOP                         // 启用嵌套循环连接
+    {
+        $$ = EnableNestLoop;
+    }
+    |   ENABLE_SORTMERGE                    // 启用排序合并连接
+    {
+        $$ = EnableSortMerge;
+    }
+    ;
+
+/* 基本标识符规则 */
+tbName: IDENTIFIER;                         // 表名就是标识符
+colName: IDENTIFIER;                        // 列名就是标识符
+
 %%

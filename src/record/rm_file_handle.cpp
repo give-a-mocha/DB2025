@@ -69,7 +69,7 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     // 设置bitmap和更新记录数
     Bitmap::set(page_handle.bitmap, slot_no);
     page_handle.page_hdr->num_records++;
-
+    file_hdr_.record_num++;
     // 如果页面已满,更新空闲页面链表
     if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
@@ -103,6 +103,7 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
     // 设置bitmap和更新记录数
     Bitmap::set(page_handle.bitmap, rid.slot_no);
     page_handle.page_hdr->num_records++;
+    file_hdr_.record_num++;
     if (page_handle.page_hdr->num_records ==
         page_handle.file_hdr->num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
@@ -138,6 +139,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     // 复位bitmap
     Bitmap::reset(page_handle.bitmap, rid.slot_no);
     page_handle.page_hdr->num_records--;
+    file_hdr_.record_num--;
 
     // 如果页面从满变为未满,加入空闲页面链表
     if (page_handle.page_hdr->num_records ==
