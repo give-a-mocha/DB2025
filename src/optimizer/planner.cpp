@@ -100,8 +100,8 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
     std::vector<Condition> solved_conds;
     std::vector<Condition> temp;
     for (auto &it : conds) {
-        if ((it.lhs_col.tab_name.compare(tab_names) == 0 && it.is_rhs_val) ||
-            (it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
+        if (it.lhs_col.tab_name.compare(tab_names) == 0 && 
+            (it.is_rhs_val || it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
             solved_conds.emplace_back(std::move(it));
         } else {
             temp.emplace_back(std::move(it));
