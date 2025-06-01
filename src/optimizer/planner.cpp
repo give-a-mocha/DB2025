@@ -391,7 +391,9 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     // }
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols), x->cols.empty());
-
+    std::vector<TabCol> temp;
+    std::vector<TabCol> temp2;
+    plannerRoot = build_projection_plan(plannerRoot, temp, temp2);
     return plannerRoot;
 }
 
@@ -728,4 +730,75 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     }
     
     return result;
+}
+std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols, std::vector<TabCol> &all_cols) {
+    int siz = need_cols.size();
+    all_cols.clear();
+    if(auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
+        
+        // 拿到需要投影到列
+        for(auto &col : x->sel_cols_) {
+            // 检查是否已经存在
+            if(std::find(need_cols.begin(), need_cols.end(), col) == need_cols.end()) {
+                need_cols.emplace_back(col);
+            }
+        }
+        std::vector<TabCol> temp;
+        build_projection_plan(x->subplan_, need_cols, temp);
+        while(need_cols.size() > siz){
+            need_cols.pop_back();
+        }
+        return plan;
+    } else if(auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
+        for(auto &cond : x->conds_) {
+            if(std::find(need_cols.begin(), need_cols.end(), cond.lhs_col) == need_cols.end()) {
+                need_cols.emplace_back(cond.lhs_col);
+            }
+            if(std::find(need_cols.begin(), need_cols.end(), cond.rhs_col) == need_cols.end()) {
+                need_cols.emplace_back(cond.rhs_col);
+            }
+        }
+        std::vector<TabCol> left, right;
+        x->left_ = build_projection_plan(x->left_, need_cols, left);
+        x->right_ = build_projection_plan(x->right_, need_cols, right);
+        left.insert(left.end(), right.begin(), right.end());
+        while(need_cols.size() > siz){
+            need_cols.pop_back();
+        }
+        bool ok = false;
+        for(auto col : left) {
+            if(std::find(need_cols.begin(), need_cols.end(), col) == need_cols.end()) {
+                ok = true;
+            }else{
+                all_cols.push_back(col);
+            }
+        }
+        if(ok){
+            plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), need_cols);
+        }
+        return plan;
+    } else if(auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
+        for(auto &cond : x->conds_) {
+            if(std::find(need_cols.begin(), need_cols.end(), cond.lhs_col) == need_cols.end()) {
+                need_cols.emplace_back(cond.lhs_col);
+            }
+            if(std::find(need_cols.begin(), need_cols.end(), cond.rhs_col) == need_cols.end()) {
+                need_cols.emplace_back(cond.rhs_col);
+            }
+        }
+        while(need_cols.size() > siz){
+            need_cols.pop_back();
+        }
+        int cnt = 0;
+        for(auto &col : need_cols){
+            if(col.tab_name.compare(x->tab_name_) == 0) {
+                cnt++;
+                all_cols.emplace_back(col);
+            }
+        }
+        if(cnt != get_table_col_num(x->tab_name_)) {
+            plan = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), need_cols);
+        }
+        return plan;
+    }
 }

@@ -132,6 +132,7 @@ class Planner {
      */
     std::shared_ptr<Plan> make_one_rel_optimized(std::shared_ptr<Query> query);
 
+    std::shared_ptr<Plan> build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols, std::vector<TabCol> &all_cols);
     /**
      * @brief 构建左深树连接计划
      * @param table_plans 表扫描计划列表
