@@ -635,6 +635,9 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
         joined_tables.insert(current_table);
     };
 
+    // 先连接基数最小的两个表
+    first_scan = std::dynamic_pointer_cast<ScanPlan>(table_plans[0]);
+    join_table(first_scan->tab_name_, 0);
     
     while(!table_plans.empty()) {
         bool flag = false;
