@@ -691,7 +691,7 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     return result;
 }
 std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols, std::vector<TabCol> &all_cols) {
-    int siz = need_cols.size();
+    size_t siz = need_cols.size();
     all_cols.clear();
     if(auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
         
@@ -721,6 +721,8 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         x->left_ = build_projection_plan(x->left_, need_cols, left);
         x->right_ = build_projection_plan(x->right_, need_cols, right);
         left.insert(left.end(), right.begin(), right.end());
+        sort(left.begin(), left.end());
+        left.erase(std::unique(left.begin(), left.end()), left.end());
         while(need_cols.size() > siz){
             need_cols.pop_back();
         }
