@@ -15,13 +15,13 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/StackString.hpp"
+#include "common/config.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "common/config.h"
-#include "common/StackString.hpp"
 
 class ExplainFilterExecutor : public AbstractExecutor {
    private:
@@ -34,17 +34,16 @@ class ExplainFilterExecutor : public AbstractExecutor {
         prev_ = std::move(prev);
         conds_ = std::move(conds);
         // 多个条件按字典序排序
-        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
-            return a.to_string() < b.to_string();
-        });
+        std::sort(conds_.begin(), conds_.end(),
+                  [](const Condition &a, const Condition &b) { return a.to_string() < b.to_string(); });
         offset_ = offset;
     }
-    
+
     std::unique_ptr<RmRecord> Next() override {
         std::string res = std::string(offset_, '\t');
         res += "Filter(condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
-            if(i != 0) {
+            if (i != 0) {
                 res += ",";
             }
             const auto &cond = conds_[i];
@@ -59,7 +58,6 @@ class ExplainFilterExecutor : public AbstractExecutor {
         return nullptr;
     }
 
-    
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainFilterExecutor"; }

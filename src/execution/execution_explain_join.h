@@ -15,12 +15,12 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/config.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "common/config.h"
 
 class ExplainJoinExecutor : public AbstractExecutor {
    private:
@@ -31,37 +31,37 @@ class ExplainJoinExecutor : public AbstractExecutor {
     int offset_;
 
    public:
-    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> left,std::unique_ptr<AbstractExecutor> right,std::vector<std::string>tables, std::vector<Condition> conds, int offset) {
+    ExplainJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
+                        std::vector<std::string> tables, std::vector<Condition> conds, int offset) {
         left_ = std::move(left);
         right_ = std::move(right);
         tables_ = std::move(tables);
         conds_ = std::move(conds);
         offset_ = offset;
         std::sort(tables_.begin(), tables_.end());
-        std::sort(conds_.begin(), conds_.end(), [](const Condition &a, const Condition &b) {
-            return a.to_string() < b.to_string();
-        });
+        std::sort(conds_.begin(), conds_.end(),
+                  [](const Condition &a, const Condition &b) { return a.to_string() < b.to_string(); });
     }
-    
+
     std::unique_ptr<RmRecord> Next() override {
         std::string res = std::string(offset_, '\t');
         res += "Join(tables=[";
-        for(size_t i = 0; i < tables_.size(); ++i) {
-            if(i != 0) {
+        for (size_t i = 0; i < tables_.size(); ++i) {
+            if (i != 0) {
                 res += ",";
             }
             res += tables_[i];
         }
         res += "],condition=[";
         for (size_t i = 0; i < conds_.size(); ++i) {
-            if(i != 0) {
+            if (i != 0) {
                 res += ",";
             }
             const auto &cond = conds_[i];
             res += cond.to_string();
         }
         res += "])\n";
-        
+
         std::fstream outfile;
         outfile.open("output.txt", std::ios::out | std::ios::app);
         outfile << res;
@@ -70,7 +70,7 @@ class ExplainJoinExecutor : public AbstractExecutor {
         right_->Next();
         return nullptr;
     }
-    
+
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainJoinExecutor"; }

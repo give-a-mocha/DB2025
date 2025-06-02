@@ -9,13 +9,14 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #pragma once
+#include <memory>
+#include <vector>
+
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include <memory>
-#include <vector>
 
 class InsertExecutor : public AbstractExecutor {
    private:
@@ -72,8 +73,8 @@ class InsertExecutor : public AbstractExecutor {
 
     bool insert_index(RmRecord &rec) {
         std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
-        inserted_keys.reserve(tab_.indexes.size());  // 预分配空间以提高性能
-        
+        inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
+
         // Insert into index
         for (size_t i = 0; i < tab_.indexes.size(); ++i) {
             auto &index = tab_.indexes[i];
@@ -89,7 +90,10 @@ class InsertExecutor : public AbstractExecutor {
                 // 回滚已插入的索引
                 for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
                     auto &rollback_index = tab_.indexes[rollback_i];
-                    auto rollback_ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, rollback_index.cols)).get();
+                    auto rollback_ih =
+                        sm_manager_->ihs_
+                            .at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, rollback_index.cols))
+                            .get();
                     rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
                 }
                 return false;

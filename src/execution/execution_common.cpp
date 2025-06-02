@@ -9,6 +9,7 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "execution_common.h"
+
 #include "system/sm.h"
 
 auto ReconstructTuple(const TabMeta *schema, const RmRecord &base_tuple, const TupleMeta &base_meta,
@@ -17,20 +18,20 @@ auto ReconstructTuple(const TabMeta *schema, const RmRecord &base_tuple, const T
     if (base_meta.is_deleted_) {
         return std::nullopt;
     }
-    
+
     // 创建结果记录的副本
     RmRecord result(base_tuple.size);
     memcpy(result.data, base_tuple.data, base_tuple.size);
-    
+
     // 应用撤销日志，从最新到最旧
     for (auto it = undo_logs.rbegin(); it != undo_logs.rend(); ++it) {
         const auto &undo_log = *it;
-        
+
         if (undo_log.is_deleted_) {
             // 如果撤销日志标记为删除，返回空
             return std::nullopt;
         }
-        
+
         // 应用撤销日志中的字段修改
         if (undo_log.tuple_test_) {
             memcpy(result.data, undo_log.tuple_test_->data, result.size);
@@ -47,7 +48,7 @@ auto ReconstructTuple(const TabMeta *schema, const RmRecord &base_tuple, const T
             }
         }
     }
-    
+
     return result;
 }
 
@@ -58,16 +59,14 @@ auto IsWriteWriteConflict(timestamp_t tuple_ts, Transaction *txn) -> bool {
 }
 
 auto message_out(Context *context_, const std::string &output) -> void {
-    if (context_ && context_->data_send_ && context_->offset_ &&
-        *context_->offset_ + output.length() < BUFFER_LENGTH) {
+    if (context_ && context_->data_send_ && context_->offset_ && *context_->offset_ + output.length() < BUFFER_LENGTH) {
         memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
         *context_->offset_ += output.length();
     }
 }
 
 auto message_out(Context *context_, const char *output, size_t output_size) -> void {
-    if (context_ && context_->data_send_ && context_->offset_ &&
-        *context_->offset_ + output_size < BUFFER_LENGTH) {
+    if (context_ && context_->data_send_ && context_->offset_ && *context_->offset_ + output_size < BUFFER_LENGTH) {
         memcpy(context_->data_send_ + *context_->offset_, output, output_size);
         *context_->offset_ += output_size;
     }

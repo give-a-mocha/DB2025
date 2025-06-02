@@ -15,14 +15,14 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/StackString.hpp"
+#include "common/config.h"
+#include "execution_common.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
-#include "execution_common.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "common/config.h"
-#include "common/StackString.hpp"
 
 class ExplainScanExecutor : public AbstractExecutor {
    private:
@@ -47,7 +47,7 @@ class ExplainScanExecutor : public AbstractExecutor {
         outfile.close();
         return nullptr;
     }
-    
+
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainScanExecutor"; }

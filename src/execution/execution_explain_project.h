@@ -15,14 +15,14 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/StackString.hpp"
+#include "common/config.h"
+#include "execution_common.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "common/config.h"
-#include "execution_common.h"
-#include "common/StackString.hpp"
 
 class ExplainProjectExecutor : public AbstractExecutor {
    private:
@@ -32,25 +32,26 @@ class ExplainProjectExecutor : public AbstractExecutor {
     bool isStar_;
 
    public:
-    ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset, bool isStar = false) {
+    ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset,
+                           bool isStar = false) {
         prev_ = std::move(prev);
         cols_ = std::move(sel_cols);
         offset_ = offset;
         isStar_ = isStar;
         std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
-            return std::make_pair(a.tab_name.empty() ? a.tab_alias : a.tab_name, a.col_name) < std::make_pair(b.tab_name.empty() ? b.tab_alias : b.tab_name, b.col_name);
+            return std::make_pair(a.tab_name.empty() ? a.tab_alias : a.tab_name, a.col_name) <
+                   std::make_pair(b.tab_name.empty() ? b.tab_alias : b.tab_name, b.col_name);
         });
     }
-    
+
     std::unique_ptr<RmRecord> Next() override {
         std::string res = std::string(offset_, '\t');
         res += "Project(columns=[";
-        if(isStar_) {
+        if (isStar_) {
             res += "*";
-        }
-        else {
+        } else {
             for (size_t i = 0; i < cols_.size(); ++i) {
-                if(i != 0) {
+                if (i != 0) {
                     res += ",";
                 }
                 res += cols_[i].to_string();
@@ -64,7 +65,7 @@ class ExplainProjectExecutor : public AbstractExecutor {
         prev_->Next();
         return nullptr;
     }
-    
+
     Rid &rid() override { return _abstract_rid; }
 
     std::string getType() override { return "ExplainProjectExecutor"; }
