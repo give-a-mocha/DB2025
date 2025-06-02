@@ -15,6 +15,20 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+/**
+ * @brief 嵌套循环连接执行器，实现两表之间的连接操作
+ *
+ * 主要功能：
+ * 1. 通过嵌套循环的方式实现两个表的连接
+ * 2. 支持等值连接和非等值连接
+ * 3. 根据连接条件过滤记录
+ *
+ * 实现策略：
+ * 1. 外层循环遍历左表的所有记录
+ * 2. 内层循环遍历右表的所有记录
+ * 3. 检查每对记录是否满足连接条件
+ * 4. 将满足条件的记录对合并成新记录
+ */
 class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;   // 左儿子节点（需要join的表）
@@ -26,8 +40,21 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     bool _is_end;
 
    public:
+    /**
+     * @brief 构造函数
+     *
+     * 初始化连接执行器：
+     * 1. 设置左右表的执行器
+     * 2. 计算连接结果的记录长度
+     * 3. 合并左右表的列元数据
+     * 4. 调整右表列的偏移量
+     *
+     * @param left 左表执行器
+     * @param right 右表执行器
+     * @param conds 连接条件
+     */
     NestedLoopJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
-                           std::vector<Condition> conds) {
+                            std::vector<Condition> conds) {
         left_ = std::move(left);
         right_ = std::move(right);
         len_ = left_->tupleLen() + right_->tupleLen();
@@ -42,6 +69,14 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         fed_conds_ = std::move(conds);
     }
 
+    /**
+     * @brief 开始连接操作
+     *
+     * 初始化左右表的扫描并找到第一对满足条件的记录：
+     * 1. 开始扫描左右表
+     * 2. 检查是否有记录可用
+     * 3. 查找第一对满足连接条件的记录
+     */
     void beginTuple() override {
         left_->beginTuple();
         right_->beginTuple();
@@ -52,6 +87,14 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         find_record();
     }
 
+    /**
+     * @brief 移动到下一对满足连接条件的记录
+     *
+     * 使用嵌套循环策略查找下一组记录：
+     * 1. 移动左表记录
+     * 2. 如果左表到达末尾，移动右表记录并重置左表
+     * 3. 继续查找满足条件的记录对
+     */
     void nextTuple() override {
         if (is_end()) return;
         left_->nextTuple();
@@ -62,8 +105,22 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         find_record();
     }
 
+    /**
+     * @brief 检查连接操作是否完成
+     * @return 如果所有记录都已处理完返回true，否则返回false
+     */
     bool is_end() const override { return _is_end; }
 
+    /**
+     * @brief 获取当前连接结果记录
+     *
+     * 将左右表的当前记录合并成一条新记录：
+     * 1. 分别获取左右表的记录
+     * 2. 创建新记录并分配空间
+     * 3. 将左右表的记录数据复制到新记录中
+     *
+     * @return 合并后的记录指针，如果任一表的记录为空则返回nullptr
+     */
     std::unique_ptr<RmRecord> Next() override {
         auto rec = std::make_unique<RmRecord>(len_);
         auto left_rec = left_->Next();
@@ -80,13 +137,36 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         return rec;
     }
 
+    /**
+     * @brief 获取连接结果记录的长度
+     * @return 连接后记录的总字节数（左表记录长度 + 右表记录长度）
+     */
     size_t tupleLen() const override { return len_; }
 
+    /**
+     * @brief 获取连接结果的列元数据
+     * @return 合并后的列元数据向量引用（包含左右表的所有列）
+     */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
+    /**
+     * @brief 获取当前记录的RID
+     * @return 抽象RID的引用（连接结果没有实际的RID）
+     */
     Rid &rid() override { return _abstract_rid; }
 
    private:
+    /**
+     * @brief 查找下一对满足连接条件的记录
+     *
+     * 实现嵌套循环连接的核心逻辑：
+     * 1. 遍历左右表的记录
+     * 2. 合并记录并检查是否满足连接条件
+     * 3. 处理表扫描结束的情况
+     *
+     * 如果找到满足条件的记录对，保持当前位置并返回
+     * 如果遍历完所有记录对，设置结束标志
+     */
     void find_record() {
         while (!is_end()) {
             if (left_->is_end()) {
@@ -117,5 +197,9 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         _is_end = true;
     }
 
+    /**
+     * @brief 获取执行器类型名称
+     * @return 执行器的类型字符串
+     */
     std::string getType() override { return "NestedLoopJoinExecutor"; }
 };

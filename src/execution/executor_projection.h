@@ -15,6 +15,19 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+/**
+ * @brief 投影执行器，负责从输入记录中选择指定的列
+ *
+ * 主要功能：
+ * 1. 从输入记录中抽取指定的列
+ * 2. 重新组织列的布局，调整偏移量
+ * 3. 生成新的包含选定列的记录
+ *
+ * 实现策略：
+ * 1. 在构造时计算新记录的布局
+ * 2. 记录选中列在原记录中的索引
+ * 3. 执行时将选中的列复制到新记录中
+ */
 class ProjectionExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  // 投影节点的儿子节点
@@ -23,6 +36,17 @@ class ProjectionExecutor : public AbstractExecutor {
     std::vector<size_t> sel_idxs_;
 
    public:
+    /**
+     * @brief 构造函数
+     *
+     * 初始化投影执行器：
+     * 1. 设置输入执行器
+     * 2. 计算输出记录的列布局
+     * 3. 记录需要选择的列的索引位置
+     *
+     * @param prev 输入执行器
+     * @param sel_cols 需要投影的列
+     */
     ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol> &sel_cols) {
         prev_ = std::move(prev);
 
@@ -39,12 +63,34 @@ class ProjectionExecutor : public AbstractExecutor {
         len_ = curr_offset;
     }
 
+    /**
+     * @brief 开始处理第一个元组
+     * 调用输入执行器的beginTuple开始扫描
+     */
     void beginTuple() override { prev_->beginTuple(); }
 
+    /**
+     * @brief 移动到下一个元组
+     * 调用输入执行器的nextTuple继续扫描
+     */
     void nextTuple() override { prev_->nextTuple(); }
 
+    /**
+     * @brief 检查是否完成所有元组的处理
+     * @return 如果输入执行器到达末尾则返回true
+     */
     bool is_end() const override { return prev_->is_end(); }
 
+    /**
+     * @brief 获取投影后的下一条记录
+     *
+     * 处理步骤：
+     * 1. 获取输入执行器的下一条记录
+     * 2. 创建新记录并分配空间
+     * 3. 将选中的列从输入记录复制到新记录
+     *
+     * @return 投影后的记录指针，如果输入记录为空则返回nullptr
+     */
     std::unique_ptr<RmRecord> Next() override {
         // Todo:
         // !需要自己实现
@@ -69,11 +115,27 @@ class ProjectionExecutor : public AbstractExecutor {
         return proj_rec;
     }
 
+    /**
+     * @brief 获取投影后记录的长度
+     * @return 投影后记录的总字节数
+     */
     size_t tupleLen() const override { return len_; }
 
+    /**
+     * @brief 获取投影后的列元数据
+     * @return 投影列的元数据向量引用
+     */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
+    /**
+     * @brief 获取当前记录的RID
+     * @return 抽象RID的引用（投影结果没有实际的RID）
+     */
     Rid &rid() override { return _abstract_rid; }
 
+    /**
+     * @brief 获取执行器类型名称
+     * @return 执行器的类型字符串
+     */
     std::string getType() override { return "ProjectionExecutor"; }
 };

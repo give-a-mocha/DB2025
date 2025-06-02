@@ -47,7 +47,15 @@ constexpr const char *help_info =
     "  {* | column [, column ...]}\n";
 constexpr int help_info_len = strlen(help_info);
 
-// 主要负责执行DDL语句
+/**
+ * @brief 执行DDL(数据定义语言)语句
+ *
+ * 该函数负责处理CREATE/DROP TABLE/INDEX等DDL语句。
+ * 根据计划类型调用系统管理器的相应函数执行具体操作。
+ *
+ * @param plan DDL语句的执行计划
+ * @param context 执行上下文
+ */
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
         switch (x->tag) {
@@ -74,7 +82,19 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     }
 }
 
-// 执行help; show tables; desc table; begin; commit; abort;语句
+/**
+ * @brief 执行实用工具命令
+ *
+ * 处理各种实用工具命令，包括：
+ * - help: 显示帮助信息
+ * - show tables: 显示所有表
+ * - desc table: 描述表结构
+ * - begin/commit/abort: 事务控制命令
+ *
+ * @param plan 命令的执行计划
+ * @param txn_id 事务ID指针
+ * @param context 执行上下文
+ */
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
         switch (x->tag) {
@@ -138,9 +158,20 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
     }
 }
 
-// 执行select语句，select语句的输出除了需要返回客户端外，还需要写入output.txt文件中
+/**
+ * @brief 执行SELECT查询语句
+ *
+ * 该函数负责执行SELECT查询并处理结果输出：
+ * 1. 将结果返回给客户端
+ * 2. 同时写入output.txt文件
+ * 输出格式为表格形式，包含列名和分隔符
+ *
+ * @param executorTreeRoot 执行器树的根节点
+ * @param sel_cols 需要查询的列
+ * @param context 执行上下文
+ */
 void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
-                            Context *context) {
+                             Context *context) {
     std::vector<std::string> captions;
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {
@@ -197,10 +228,25 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     RecordPrinter::print_record_count(num_rec, context);
 }
 
-// 执行DML语句
+/**
+ * @brief 执行DML(数据操作语言)语句
+ *
+ * 处理INSERT、UPDATE、DELETE等数据操作语句
+ *
+ * @param exec DML执行器指针
+ */
 void QlManager::run_dml(std::unique_ptr<AbstractExecutor> exec) { exec->Next(); }
 
+/**
+ * @brief 执行EXPLAIN命令
+ *
+ * 显示查询的执行计划，帮助分析和优化查询性能
+ *
+ * @param executorTreeRoot 执行器树的根节点
+ * @param sel_cols 涉及的列
+ * @param context 执行上下文
+ */
 void QlManager::run_explain(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
-                            Context *context) {
+                             Context *context) {
     executorTreeRoot->Next();
 }

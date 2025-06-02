@@ -16,6 +16,16 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+/**
+ * @brief 索引扫描执行器，通过索引快速访问满足条件的记录
+ *
+ * 该执行器使用表的索引结构来高效地访问满足查询条件的记录。主要功能：
+ * 1. 根据查询条件构建索引扫描范围
+ * 2. 利用索引进行范围扫描
+ * 3. 对扫描到的记录进行条件过滤
+ *
+ * 索引扫描比全表扫描更高效，特别是在查询条件命中索引时
+ */
 class IndexScanExecutor : public AbstractExecutor {
    private:
     std::string tab_name_;              // 表名称
@@ -35,6 +45,17 @@ class IndexScanExecutor : public AbstractExecutor {
     SmManager *sm_manager_;
 
    public:
+   /**
+    * @brief 构造函数
+    *
+    * 初始化索引扫描执行器，设置扫描参数和打开必要的文件句柄
+    *
+    * @param sm_manager 系统管理器指针
+    * @param tab_name 要扫描的表名
+    * @param conds 扫描条件
+    * @param index_col_names 索引涉及的列名
+    * @param context 执行上下文
+    */
     IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
                       std::vector<std::string> index_col_names, Context *context) {
         sm_manager_ = sm_manager;
@@ -67,6 +88,14 @@ class IndexScanExecutor : public AbstractExecutor {
         fed_conds_ = conds_;
     }
 
+    /**
+     * @brief 开始扫描第一个元组
+     *
+     * 该方法：
+     * 1. 根据条件构建索引扫描范围
+     * 2. 创建索引扫描器
+     * 3. 定位到第一个满足条件的记录
+     */
     void beginTuple() override {
         // 构建索引查询范围
         auto ih = sm_manager_->ihs_.at(index_name_).get();
@@ -158,6 +187,14 @@ class IndexScanExecutor : public AbstractExecutor {
         }
     }
 
+    /**
+     * @brief 移动到下一个满足条件的元组
+     *
+     * 沿着索引继续扫描，直到找到下一个满足所有条件的记录。
+     * 如果扫描器未初始化，会抛出内部错误。
+     *
+     * @throw InternalError 当扫描器未初始化时
+     */
     void nextTuple() override {
         if (scan_ == nullptr) {
             throw InternalError("Scan not initialized at " + getType());
@@ -176,24 +213,66 @@ class IndexScanExecutor : public AbstractExecutor {
         }
     }
 
+    /**
+     * @brief 检查是否完成所有记录的扫描
+     * @return 如果扫描器为空或已到达末尾则返回true，否则返回false
+     */
     bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
 
+    /**
+     * @brief 获取当前记录
+     * @return 当前记录的智能指针
+     */
     std::unique_ptr<RmRecord> Next() override { return fh_->get_record(rid_, context_); }
 
+    /**
+     * @brief 获取记录长度
+     * @return 记录的字节长度
+     */
     size_t tupleLen() const override { return len_; }
 
+    /**
+     * @brief 获取扫描涉及的所有列元数据
+     * @return 列元数据向量的常量引用
+     */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
+    /**
+     * @brief 获取指定列的元数据
+     * @param target 目标列的表列引用
+     * @return 目标列的元数据
+     */
     ColMeta get_col_offset(const TabCol &target) override {
         auto pos = get_col(cols_, target);
         return *pos;
     }
 
+    /**
+     * @brief 获取当前记录的RID
+     * @return 当前记录的RID引用
+     */
     Rid &rid() override { return rid_; }
 
+    /**
+     * @brief 获取执行器类型名称
+     * @return 执行器的类型字符串
+     */
     std::string getType() override { return "IndexScanExecutor"; }
 
    private:
+    /**
+     * @brief 比较两个值
+     *
+     * 支持多种类型的值比较：
+     * - 数值类型(INT, FLOAT)之间可以互相转换后比较
+     * - 字符串类型按字典序比较
+     *
+     * @param lhs 左操作数
+     * @param rhs 右操作数
+     * @param op 比较操作符
+     * @return 比较结果
+     * @throw IncompatibleTypeError 当比较的类型不兼容时
+     */
     bool compare(Value lhs, Value rhs, CompOp op) {
         bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
         if (lhs.type != rhs.type && !is_numeric) {
