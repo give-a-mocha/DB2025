@@ -110,12 +110,6 @@ class LogRecord {
         printf("log_tid: %ld\n", log_tid_);                        // 打印事务ID
         printf("prev_lsn: %d\n", prev_lsn_);                       // 打印前一条日志的序列号
     }
-
-   private:
-   template <typename... Args>
-    void INFO(std::string_view fmt_str, Args &&...args) {
-        
-    }
 };
 
 /**
@@ -154,7 +148,17 @@ class CommitLogRecord : public LogRecord {
 };
 
 /**
- * TODO: abort操作的日志记录
+ * @brief 事务中止日志记录类
+ *
+ * 用于记录事务的回滚操作，包含以下信息：
+ * - 事务ID：标识被中止的事务
+ * - LSN：日志序列号
+ * - 前序LSN：同一事务的上一条日志记录
+ *
+ * 主要用于：
+ * 1. 标记事务的中止点
+ * 2. 在恢复时识别需要回滚的事务
+ * 3. 维护事务的完整性
  */
 class AbortLogRecord : public LogRecord {
    public:
@@ -229,7 +233,21 @@ class InsertLogRecord : public LogRecord {
 };
 
 /**
- * TODO: delete操作的日志记录
+ * @brief 删除操作日志记录类
+ *
+ * 记录删除操作的详细信息，包含：
+ * 1. 基本信息
+ *    - 事务ID
+ *    - LSN和前序LSN
+ * 2. 删除数据
+ *    - 被删除的记录内容
+ *    - 记录的位置(Rid)
+ *    - 表名
+ *
+ * 用于：
+ * 1. 支持事务回滚
+ * 2. 崩溃恢复时的undo操作
+ * 3. 保证数据一致性
  */
 class DeleteLogRecord : public LogRecord {
    public:
@@ -291,7 +309,22 @@ class DeleteLogRecord : public LogRecord {
 };
 
 /**
- * TODO: update操作的日志记录
+ * @brief 更新操作日志记录类
+ *
+ * 记录更新操作的完整信息，包含：
+ * 1. 基本信息
+ *    - 事务ID
+ *    - LSN和前序LSN
+ * 2. 更新数据
+ *    - 更新前的记录内容
+ *    - 更新后的记录内容
+ *    - 记录的位置(Rid)
+ *    - 表名
+ *
+ * 用于：
+ * 1. 支持事务回滚
+ * 2. 崩溃恢复时的redo/undo操作
+ * 3. 保证数据一致性
  */
 class UpdateLogRecord : public LogRecord {
    public:
@@ -364,7 +397,17 @@ class UpdateLogRecord : public LogRecord {
     size_t table_name_size_;  // 表名称的大小
 };
 
-/* 日志缓冲区，只有一个buffer，因此需要阻塞地去把日志写入缓冲区中 */
+/**
+ * @brief 日志缓冲区类
+ *
+ * 实现了一个简单的日志缓冲区，用于临时存储日志记录。特点：
+ * 1. 使用单一固定大小的缓冲区
+ * 2. 采用顺序写入策略
+ * 3. 当缓冲区满时需要进行刷盘操作
+ * 4. 使用互斥锁保护并发访问
+ *
+ * 注意：由于只有一个缓冲区，写入操作需要阻塞进行
+ */
 
 class LogBuffer {
    public:
@@ -379,20 +422,53 @@ class LogBuffer {
     int offset_;  // 写入log的offset
 };
 
-/* 日志管理器，负责把日志写入日志缓冲区，以及把日志缓冲区中的内容写入磁盘中 */
+/**
+ * @brief 日志管理器类
+ *
+ * 负责管理数据库的日志子系统，主要功能包括：
+ * 1. 日志记录的生成和管理
+ *    - 为新日志分配LSN
+ *    - 管理日志的写入和缓存
+ * 2. 缓冲区管理
+ *    - 控制日志写入缓冲区
+ *    - 维护缓冲区的空间使用
+ * 3. 持久化处理
+ *    - 将缓冲区内容写入磁盘
+ *    - 维护检查点机制
+ * 4. 并发控制
+ *    - 保护共享资源的并发访问
+ *    - 协调多事务的日志写入
+ */
 class LogManager {
    public:
+    /**
+     * @brief 构造函数
+     * @param disk_manager 磁盘管理器指针，用于实际的文件IO操作
+     */
     LogManager(DiskManager* disk_manager) { disk_manager_ = disk_manager; }
 
+    /**
+     * @brief 将日志记录添加到缓冲区
+     * @param log_record 要添加的日志记录
+     * @return 分配给该日志记录的LSN
+     */
     lsn_t add_log_to_buffer(LogRecord* log_record);
+
+    /**
+     * @brief 将缓冲区中的日志刷新到磁盘
+     */
     void flush_log_to_disk();
 
+    /**
+     * @brief 获取日志缓冲区指针
+     * @return 日志缓冲区指针
+     */
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
    private:
-    std::atomic<lsn_t> global_lsn_{0};  // 全局lsn，递增，用于为每条记录分发lsn
-    std::mutex latch_;                  // 用于对log_buffer_的互斥访问
-    LogBuffer log_buffer_;              // 日志缓冲区
-    lsn_t persist_lsn_;                 // 记录已经持久化到磁盘中的最后一条日志的日志号
-    DiskManager* disk_manager_;
+    std::atomic<lsn_t> global_lsn_{0};  // 全局日志序列号生成器
+    std::mutex latch_;                  // 保护日志缓冲区的互斥锁
+    LogBuffer log_buffer_;              // 日志缓冲区实例
+    lsn_t persist_lsn_;                 // 最后一条持久化日志的LSN
+    DiskManager* disk_manager_;         // 底层磁盘管理器
 };

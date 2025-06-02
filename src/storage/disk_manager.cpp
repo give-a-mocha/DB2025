@@ -20,10 +20,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "defs.h"
 
-DiskManager::DiskManager() {
-    std::memset(fd2pageno_, 0,
-                MAX_FD * (sizeof(std::atomic<page_id_t>) / sizeof(char)));
-}
+DiskManager::DiskManager() { std::memset(fd2pageno_, 0, MAX_FD * (sizeof(std::atomic<page_id_t>) / sizeof(char))); }
 /**
  * @description: 将数据写入文件的指定磁盘页面中
  * @param {int} fd 磁盘文件的文件句柄
@@ -31,8 +28,7 @@ DiskManager::DiskManager() {
  * @param {char} *offset 要写入磁盘的数据
  * @param {int} num_bytes 要写入磁盘的数据大小
  */
-void DiskManager::write_page(int fd, page_id_t page_no, const char *offset,
-                             int num_bytes) {
+void DiskManager::write_page(int fd, page_id_t page_no, const char *offset, int num_bytes) {
     // Todo:
     // !1.lseek()定位到文件头，通过(fd,page_no)可以定位指定页面及其在磁盘文件中的偏移量
     // !2.调用write()函数
@@ -61,8 +57,7 @@ void DiskManager::write_page(int fd, page_id_t page_no, const char *offset,
  * @param {char} *offset 读取的内容写入到offset中
  * @param {int} num_bytes 读取的数据量大小
  */
-void DiskManager::read_page(int fd, page_id_t page_no, char *offset,
-                            int num_bytes) {
+void DiskManager::read_page(int fd, page_id_t page_no, char *offset, int num_bytes) {
     // Todo:
     // !1.lseek()定位到文件头，通过(fd,page_no)可以定位指定页面及其在磁盘文件中的偏移量
     // !2.调用read()函数

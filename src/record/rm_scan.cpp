@@ -13,20 +13,36 @@ See the Mulan PSL v2 for more details. */
 #include "rm_file_handle.h"
 
 /**
- * @brief 初始化file_handle和rid
- * @param file_handle
+ * @brief 构造函数，初始化记录扫描器
+ *
+ * 该构造函数完成以下初始化工作：
+ * 1. 保存要扫描的文件句柄
+ * 2. 将rid初始化为第一个记录页的起始位置
+ * 3. 通过调用next()移动到第一个有效记录
+ *
+ * @param file_handle 要扫描的表文件句柄
  */
 RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
     // Todo:
     // !初始化file_handle和rid（指向第一个存放了记录的位置）
 
     rid_.page_no = RM_FIRST_RECORD_PAGE;  // 从第一个记录页开始
-    rid_.slot_no = RM_NO_PAGE;  // 初始化为-1，next()会移动到第一个有效位置
-    next();                     // 移动到第一个有效记录
+    rid_.slot_no = RM_NO_PAGE;            // 初始化为-1，next()会移动到第一个有效位置
+    next();                               // 移动到第一个有效记录
 }
 
 /**
- * @brief 找到文件中下一个存放了记录的位置
+ * @brief 移动到下一个有效记录的位置
+ *
+ * 该函数执行以下操作：
+ * 1. 在当前页面中查找下一个被占用的槽位
+ * 2. 如果当前页面搜索完毕，转到下一页继续查找
+ * 3. 使用位图来判断槽位是否被占用
+ * 4. 更新rid_指向找到的记录位置
+ *
+ * 注意：
+ * - 每次获取页面后都要正确unpin
+ * - 如果找不到有效记录，会将page_no设置为RM_NO_PAGE表示结束
  */
 void RmScan::next() {
     // Todo:
@@ -34,13 +50,11 @@ void RmScan::next() {
 
     while (rid_.page_no < file_handle_->file_hdr_.num_pages) {
         // 获取当前页面句柄
-        RmPageHandle &&page_handle =
-            file_handle_->fetch_page_handle(rid_.page_no);
+        RmPageHandle &&page_handle = file_handle_->fetch_page_handle(rid_.page_no);
 
         // 在当前页面寻找下一个非空slot
-        rid_.slot_no = Bitmap::next_bit(
-            true, page_handle.bitmap,
-            file_handle_->file_hdr_.num_records_per_page, rid_.slot_no);
+        rid_.slot_no =
+            Bitmap::next_bit(true, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page, rid_.slot_no);
         // fetch完别忘了unpin
         file_handle_->buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         if (rid_.slot_no < file_handle_->file_hdr_.num_records_per_page) {
@@ -56,11 +70,22 @@ void RmScan::next() {
 }
 
 /**
- * @brief ​ 判断是否到达文件末尾
+ * @brief 判断扫描是否结束
+ *
+ * 通过检查当前rid_的page_no是否为RM_NO_PAGE来判断
+ * 扫描是否已经遍历完所有有效记录
+ *
+ * @return true 如果已经扫描完所有记录
+ * @return false 如果还有记录未扫描
  */
 bool RmScan::is_end() const { return rid_.page_no == RM_NO_PAGE; }
 
 /**
- * @brief RmScan内部存放的rid
+ * @brief 获取当前记录的标识符
+ *
+ * 返回扫描器当前指向的记录的RID，
+ * 包含页面号和槽位号
+ *
+ * @return Rid 当前记录的标识符
  */
 Rid RmScan::rid() const { return rid_; }

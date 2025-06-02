@@ -81,9 +81,18 @@ void SmManager::drop_db(const std::string& db_name) {
 }
 
 /**
- * @description:
- * 打开数据库，找到数据库对应的文件夹，并加载数据库元数据和相关文件
+ * @description: 打开数据库，加载数据库的元数据和文件
+ *
+ * 该函数完成以下操作：
+ * 1. 检查数据库是否存在
+ * 2. 进入数据库目录
+ * 3. 读取数据库元数据文件
+ * 4. 打开所有表文件的文件句柄
+ * 5. 打开所有索引文件的句柄
+ *
  * @param {string&} db_name 数据库名称，与文件夹同名
+ * @throw DatabaseNotFoundError 如果数据库不存在
+ * @throw UnixError 如果文件系统操作失败
  */
 void SmManager::open_db(const std::string& db_name) {
     //! DO
@@ -105,16 +114,17 @@ void SmManager::open_db(const std::string& db_name) {
         fhs_.emplace(table_name, rm_manager_->open_file(table_name));
         for (auto& index : table_info.indexes) {
             // !索引暂未实现，只是作为占位
-            auto&& index_name =
-                ix_manager_->get_index_name(table_name, index.cols);
-            ihs_.emplace(index_name,
-                         ix_manager_->open_index(index_name, index.cols));
+            auto&& index_name = ix_manager_->get_index_name(table_name, index.cols);
+            ihs_.emplace(index_name, ix_manager_->open_index(index_name, index.cols));
         }
     }
 }
 
 /**
- * @description: 把数据库相关的元数据刷入磁盘中
+ * @description: 将数据库元数据持久化到磁盘
+ *
+ * 该函数将内存中的数据库元数据写入磁盘文件，确保数据库结构的持久性。
+ * 写入操作会清空并重写整个元数据文件。
  */
 void SmManager::flush_meta() {
     // 默认清空文件
@@ -123,17 +133,24 @@ void SmManager::flush_meta() {
 }
 
 /**
- * @description: 关闭数据库并把数据落盘
+ * @description: 关闭当前打开的数据库
+ *
+ * 该函数完成以下操作：
+ * 1. 检查数据库是否存在
+ * 2. 将元数据刷新到磁盘
+ * 3. 清理所有内存中的数据结构（表、索引等）
+ * 4. 返回上级目录
+ *
+ * @throw DatabaseNotFoundError 如果数据库不存在
+ * @throw UnixError 如果文件系统操作失败
  */
 void SmManager::close_db() {
     //! DO
     auto&& db_name = db_.name_;
-    if (!is_dir(db_name))
-    {
+    if (!is_dir(db_name)) {
         throw DatabaseNotFoundError(db_name);
     }
-    if (chdir(db_name.c_str()) < 0)
-    {
+    if (chdir(db_name.c_str()) < 0) {
         throw UnixError();
     }
 
@@ -160,9 +177,15 @@ void SmManager::close_db() {
 }
 
 /**
- * @description:
- * 显示所有的表,通过测试需要将其结果写入到output.txt,详情看题目文档
- * @param {Context*} context
+ * @description: 显示数据库中的所有表
+ *
+ * 该函数将：
+ * 1. 打开输出文件 output.txt
+ * 2. 按照规定格式输出表头
+ * 3. 遍历并展示所有表的名称
+ * 4. 同时在控制台和文件中显示结果
+ *
+ * @param {Context*} context 执行上下文
  */
 void SmManager::show_tables(Context* context) {
     std::fstream outfile;
@@ -180,46 +203,64 @@ void SmManager::show_tables(Context* context) {
     printer.print_separator(context);
     outfile.close();
 }
-//TODO:
+// TODO:
 /**
- * @description: 显示表的索引信息
+ * @description: 显示指定表的所有索引信息
+ *
+ * 该函数将：
+ * 1. 验证表是否存在
+ * 2. 获取表的元数据
+ * 3. 遍历并显示表的所有索引信息，包括：
+ *    - 表名
+ *    - 索引类型（unique）
+ *    - 索引包含的列名
+ *
  * @param {string&} tab_name 表名称
- * @param {Context*} context
+ * @param {Context*} context 执行上下文
+ * @throw TableNotFoundError 如果表不存在
  */
 void SmManager::show_index(const std::string& tab_name, Context* context) {
     // 检查表是否存在
     if (db_.tabs_.find(tab_name) == db_.tabs_.end()) {
         throw TableNotFoundError(tab_name);
     }
-    
+
     TabMeta& tab = db_.get_table(tab_name);
-    
+
     std::fstream outfile;
     outfile.open("output.txt", std::ios::out | std::ios::app);
-    
+
     RecordPrinter printer(1);
     printer.print_separator(context);
     printer.print_record({"index"}, context);
     printer.print_separator(context);
-    
+
     // 遍历表的所有索引
     for (auto& index : tab.indexes) {
         std::string col_names = "(";
         for (size_t i = 0; i < index.cols.size(); ++i) {
-            if(i != 0) col_names += ",";
+            if (i != 0) col_names += ",";
             col_names += index.cols[i].name;
         }
         col_names += ")";
-        outfile << "| " << tab_name << " | " << "unique" << " | " << col_names<< " |\n";
+        outfile << "| " << tab_name << " | " << "unique" << " | " << col_names << " |\n";
     }
     printer.print_separator(context);
     outfile.close();
 }
 
 /**
- * @description: 显示表的元数据
+ * @description: 显示表的详细结构信息
+ *
+ * 该函数展示表的完整元数据信息，包括：
+ * 1. 所有字段的名称
+ * 2. 每个字段的数据类型
+ * 3. 是否建立了索引
+ *
+ * 输出格式为表格形式，包含字段名、类型和索引三列。
+ *
  * @param {string&} tab_name 表名称
- * @param {Context*} context
+ * @param {Context*} context 执行上下文
  */
 void SmManager::desc_table(const std::string& tab_name, Context* context) {
     TabMeta& tab = db_.get_table(tab_name);
@@ -232,8 +273,7 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
     printer.print_separator(context);
     // Print fields
     for (auto& col : tab.cols) {
-        std::vector<std::string> field_info = {col.name, coltype2str(col.type),
-                                               col.index ? "YES" : "NO"};
+        std::vector<std::string> field_info = {col.name, coltype2str(col.type), col.index ? "YES" : "NO"};
         printer.print_record(field_info, context);
     }
     // Print footer
@@ -241,14 +281,24 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
 }
 
 /**
- * @description: 创建表
+ * @description: 创建新表
+ *
+ * 该函数完成以下操作：
+ * 1. 检查表是否已存在
+ * 2. 创建表的元数据结构，包括：
+ *    - 设置表名
+ *    - 计算每个字段的偏移量
+ *    - 构建列的元数据
+ * 3. 创建表的数据文件
+ * 4. 更新数据库的元数据
+ * 5. 打开表文件的句柄
+ *
  * @param {string&} tab_name 表的名称
- * @param {vector<ColDef>&} col_defs 表的字段
- * @param {Context*} context
+ * @param {vector<ColDef>&} col_defs 表的字段定义
+ * @param {Context*} context 执行上下文
+ * @throw TableExistsError 如果表已经存在
  */
-void SmManager::create_table(const std::string& tab_name,
-                             const std::vector<ColDef>& col_defs,
-                             Context* context) {
+void SmManager::create_table(const std::string& tab_name, const std::vector<ColDef>& col_defs, Context* context) {
     if (db_.is_table(tab_name)) {
         throw TableExistsError(tab_name);
     }
@@ -267,8 +317,7 @@ void SmManager::create_table(const std::string& tab_name,
         tab.cols.push_back(col);
     }
     // Create & open record file
-    int record_size =
-        curr_offset;  // record_size就是col meta所占的大小（表的元数据也是以记录的形式进行存储的）
+    int record_size = curr_offset;  // record_size就是col meta所占的大小（表的元数据也是以记录的形式进行存储的）
     rm_manager_->create_file(tab_name, record_size);
     db_.tabs_[tab_name] = tab;
     // fhs_[tab_name] = rm_manager_->open_file(tab_name);
@@ -278,9 +327,20 @@ void SmManager::create_table(const std::string& tab_name,
 }
 
 /**
- * @description: 删除表
+ * @description: 删除指定的表
+ *
+ * 该函数完成以下操作：
+ * 1. 验证表是否存在
+ * 2. 获取表的排他锁（如果在事务中）
+ * 3. 删除表的所有索引
+ * 4. 关闭并清理表的文件句柄
+ * 5. 删除表的数据文件
+ * 6. 从数据库元数据中移除表的信息
+ * 7. 更新元数据到磁盘
+ *
  * @param {string&} tab_name 表的名称
- * @param {Context*} context
+ * @param {Context*} context 执行上下文
+ * @throw TableNotFoundError 如果表不存在
  */
 void SmManager::drop_table(const std::string& tab_name, Context* context) {
     //! DO
@@ -290,8 +350,7 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
     }
 
     if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_table(context->txn_,
-                                                    fhs_[tab_name]->GetFd());
+        context->lock_mgr_->lock_exclusive_on_table(context->txn_, fhs_[tab_name]->GetFd());
     }
 
     // 获取表元数据
@@ -318,23 +377,32 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
 }
 
 /**
- * @description: 创建索引
+ * @description: 在指定表上创建索引
+ *
+ * 该函数完成以下操作：
+ * 1. 获取表的元数据
+ * 2. 检查索引是否已经存在
+ * 3. 获取所有需要建立索引的列的元数据
+ * 4. 创建索引文件
+ * 5. 扫描表中所有记录，将对应的键值对插入B+树
+ * 6. 更新表的元数据，添加索引信息
+ * 7. 持久化元数据变更
+ *
  * @param {string&} tab_name 表的名称
  * @param {vector<string>&} col_names 索引包含的字段名称
- * @param {Context*} context
+ * @param {Context*} context 执行上下文
+ * @throw IndexExistsError 如果索引已存在
  */
-void SmManager::create_index(const std::string& tab_name,
-                             const std::vector<std::string>& col_names,
-                             Context* context) {
+void SmManager::create_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
     //! DO
-    TabMeta &tab = db_.get_table(tab_name);
+    TabMeta& tab = db_.get_table(tab_name);
     // 检查索引是否已经物理存在 (基于文件名)
-    if(ix_manager_->exists(tab_name, col_names)){
+    if (ix_manager_->exists(tab_name, col_names)) {
         throw IndexExistsError(tab_name, col_names);
     }
     std::vector<ColMeta> cols(col_names.size());
     int tot_col_len = 0;
-    for(int i = 0; i < col_names.size(); ++i){
+    for (int i = 0; i < col_names.size(); ++i) {
         auto col_name = col_names[i];
         cols[i] = (*tab.get_col(col_name));
         tot_col_len += cols[i].len;
@@ -344,19 +412,19 @@ void SmManager::create_index(const std::string& tab_name,
     auto ih_ = ix_manager_->open_index(tab_name, cols);
     std::vector<char> key_buffer(tot_col_len);
     char* key = key_buffer.data();
-    //插入B+树，扫描所有的记录
-    for(RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()){
+    // 插入B+树，扫描所有的记录
+    for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         auto record = fh_->get_record(rmScan.rid(), context);
         int offset = 0;
-        for(auto &col : cols){
+        for (auto& col : cols) {
             std::memcpy(key + offset, record.get()->data + col.offset, col.len);
             offset += col.len;
         }
-        //要求该键是唯一索引
+        // 要求该键是唯一索引
         auto res = ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
-        if(res == INVALID_PAGE_ID){
+        if (res == INVALID_PAGE_ID) {
             drop_index(tab_name, col_names, context);
-            return ;
+            return;
         }
     }
 
@@ -368,23 +436,31 @@ void SmManager::create_index(const std::string& tab_name,
 }
 
 /**
- * @description: 删除索引
+ * @description: 删除指定表上的索引
+ *
+ * 该函数完成以下操作：
+ * 1. 验证索引是否存在
+ * 2. 关闭并删除索引文件
+ * 3. 从内存中移除索引句柄
+ * 4. 删除索引的物理文件
+ * 5. 从表的元数据中移除索引信息
+ * 6. 更新元数据到磁盘
+ *
  * @param {string&} tab_name 表名称
  * @param {vector<string>&} col_names 索引包含的字段名称
- * @param {Context*} context
+ * @param {Context*} context 执行上下文
+ * @throw IndexNotFoundError 如果索引不存在
  */
-void SmManager::drop_index(const std::string& tab_name,
-                           const std::vector<std::string>& col_names,
-                           Context* context) {
+void SmManager::drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
     //! DO
-    if(!ix_manager_->exists(tab_name, col_names)){
+    if (!ix_manager_->exists(tab_name, col_names)) {
         throw IndexNotFoundError(tab_name, col_names);
     }
     // 关闭并删除索引文件
     auto index_name = ix_manager_->get_index_name(tab_name, col_names);
     auto it = ihs_.find(index_name);
-    
-    if(it != ihs_.end()) {
+
+    if (it != ihs_.end()) {
         ix_manager_->drop_index(it->second.get());
         ihs_.erase(it);
     }
@@ -398,16 +474,19 @@ void SmManager::drop_index(const std::string& tab_name,
 }
 
 /**
- * @description: 删除索引
+ * @description: 删除索引的重载函数
+ *
+ * 该函数将列元数据转换为列名列表，然后调用另一个删除索引的函数。
+ * 主要用于内部实现，提供了一种使用列元数据直接删除索引的方式。
+ *
  * @param {string&} tab_name 表名称
- * @param {vector<ColMeta>&} 索引包含的字段元数据
- * @param {Context*} context
+ * @param {vector<ColMeta>&} cols 索引包含的字段元数据
+ * @param {Context*} context 执行上下文
  */
-void SmManager::drop_index(const std::string& tab_name,
-                           const std::vector<ColMeta>& cols, Context* context) {
+void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMeta>& cols, Context* context) {
     //! DO
     std::vector<std::string> col_names;
-    for (auto &col : cols){
+    for (auto& col : cols) {
         col_names.push_back(col.name);
     }
     drop_index(tab_name, col_names, context);

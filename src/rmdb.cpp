@@ -19,13 +19,13 @@ See the Mulan PSL v2 for more details. */
 #include <cstdio>
 
 #include "analyze/analyze.h"
+#include "common/print.hpp"
 #include "errors.h"
 #include "optimizer/optimizer.h"
 #include "optimizer/plan.h"
 #include "optimizer/planner.h"
 #include "portal.h"
 #include "recovery/log_recovery.h"
-#include "common/print.hpp"
 
 #define SOCK_PORT 8765
 #define MAX_CONN_LIMIT 8

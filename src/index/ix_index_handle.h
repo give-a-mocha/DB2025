@@ -13,15 +13,29 @@ See the Mulan PSL v2 for more details. */
 #include "ix_defs.h"
 #include "transaction/transaction.h"
 
-enum class Operation { FIND = 0, INSERT, DELETE };  // 三种操作：查找、插入、删除
+/**
+ * @brief 索引操作的类型枚举
+ *
+ * 用于指定对B+树进行的操作类型，主要用于并发控制时的锁定策略
+ */
+enum class Operation {
+    FIND = 0,   // 查找操作
+    INSERT,     // 插入操作
+    DELETE      // 删除操作
+};
 
-static const bool binary_search = false;
+static const bool binary_search = false;  // 是否使用二分查找
 
-/*
-* @return: a < b 返回-1
-*          a = b 返回0
-*          a > b 返回1
-*/
+/**
+ * @brief 比较两个键值的大小
+ *
+ * @param a 第一个键值
+ * @param b 第二个键值
+ * @param type 键值的数据类型
+ * @param col_len 键值的长度
+ * @return int -1表示a<b，0表示a=b，1表示a>b
+ * @throw InternalError 当遇到不支持的数据类型时抛出
+ */
 inline int ix_compare(const char *a, const char *b, ColType type, int col_len) {
     switch (type) {
         case ColType::TYPE_INT: {
@@ -51,7 +65,14 @@ inline int ix_compare(const char* a, const char* b, const std::vector<ColType>& 
     return 0;
 }
 
-/* 管理B+树中的每个节点 */
+/**
+ * @brief B+树节点管理类
+ *
+ * 该类负责管理B+树中的单个节点，提供节点级别的操作接口，包括：
+ * 1. 节点内键值对的插入、删除和查找
+ * 2. 节点属性的访问和修改（如父节点、兄弟节点的设置）
+ * 3. 节点内部数据的组织和管理
+ */
 class IxNodeHandle {
     friend class IxIndexHandle; // 允许 IxIndexHandle 类访问 IxNodeHandle 的私有成员
     friend class IxScan;        // 允许 IxScan 类访问 IxNodeHandle 的私有成员
@@ -196,7 +217,21 @@ class IxNodeHandle {
     }
 };
 
-/* B+树索引的整体句柄，管理整个B+树的操作 */
+/**
+ * @brief B+树索引管理类
+ *
+ * 该类是B+树索引的主要管理类，负责：
+ * 1. 整个B+树的增删改查操作
+ * 2. 维护B+树的结构平衡（分裂、合并等）
+ * 3. 管理并发访问控制
+ * 4. 磁盘文件和缓冲池的交互
+ *
+ * 主要功能包括：
+ * - 插入/删除键值对
+ * - 等值查询和范围查询
+ * - 节点分裂和合并
+ * - 根节点管理
+ */
 class IxIndexHandle {
     friend class IxScan;    // 允许 IxScan 类访问 IxIndexHandle 的私有成员
     friend class IxManager; // 允许 IxManager 类访问 IxIndexHandle 的私有成员
@@ -210,58 +245,130 @@ class IxIndexHandle {
     std::mutex root_latch_;                     // 用于保护根页面并发访问的互斥锁
 
    public:
-    // 构造函数
+    /**
+     * @brief 构造函数
+     * @param disk_manager 磁盘管理器
+     * @param buffer_pool_manager 缓冲池管理器
+     * @param fd 索引文件描述符
+     */
     IxIndexHandle(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager, int fd);
 
-    // 搜索操作
-    // 根据键获取对应的一个或多个记录ID (Rid)
+    /**
+     * @brief 根据键值查找对应的记录ID
+     * @param key 要查找的键值
+     * @param result 存储找到的记录ID
+     * @param transaction 当前事务的指针
+     * @return 是否成功找到记录
+     */
     bool get_value(const char *key, std::vector<Rid> *result, Transaction *transaction);
 
-    // 查找包含给定键的叶节点。
-    // Operation 指定操作类型 (查找、插入、删除)，用于并发控制。
-    // 返回一个 pair，[leaf node] and [root_is_latched] 返回目标叶子结点以及根结点是否加锁
+    /**
+     * @brief 查找包含指定键的叶节点
+     * @param key 目标键值
+     * @param operation 操作类型（查找/插入/删除）
+     * @param transaction 当前事务
+     * @param find_first 是否查找第一个叶节点
+     * @return pair<叶节点句柄, 根节点是否加锁>
+     */
     std::pair<IxNodeHandle *, bool> find_leaf_page(const char *key, Operation operation, Transaction *transaction,
-                                                 bool find_first = false);
+                                                  bool find_first = false);
 
-    // 插入操作
-    // 向B+树中插入一个键值对 (key, value)
+    /**
+     * @brief 插入键值对
+     * @param key 键值
+     * @param value 记录ID
+     * @param transaction 当前事务
+     * @return 插入位置的页面ID
+     */
     page_id_t insert_entry(const char *key, const Rid &value, Transaction *transaction);
 
-    // 分裂一个已满的节点 (node)，返回新创建的兄弟节点句柄
+    /**
+     * @brief 分裂节点
+     * @param node 需要分裂的节点
+     * @return 新创建的兄弟节点
+     */
     IxNodeHandle *split(IxNodeHandle *node);
 
-    // 将分裂产生的键 (key) 和新节点 (new_node) 插入到旧节点 (old_node) 的父节点中
+    /**
+     * @brief 将分裂产生的新键值对插入父节点
+     * @param old_node 原节点
+     * @param key 新键值
+     * @param new_node 新节点
+     * @param transaction 当前事务
+     */
     void insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node, Transaction *transaction);
 
-    // 删除操作
-    // 从B+树中删除与给定键 (key) 关联的条目
+    /**
+     * @brief 删除键值对
+     * @param key 要删除的键值
+     * @param transaction 当前事务
+     * @return 是否成功删除
+     */
     bool delete_entry(const char *key, Transaction *transaction);
 
-    // 当节点 (node) 的键数量低于下限时，尝试与兄弟节点合并 (coalesce) 或进行键的重新分配 (redistribute)
-    // root_is_latched 用于指示根节点的锁是否已被持有 (用于并发控制)
+    /**
+     * @brief 处理节点键值过少的情况
+     * @param node 当前节点
+     * @param transaction 当前事务
+     * @param root_is_latched 根节点是否加锁
+     * @return 是否需要继续处理
+     */
     bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr,
-                                bool *root_is_latched = nullptr);
-    // 如果根节点在删除操作后变为空或只有一个子节点，则调整根节点
+                                 bool *root_is_latched = nullptr);
+
+    /**
+     * @brief 调整根节点
+     * @param old_root_node 当前的根节点
+     * @return 是否进行了调整
+     */
     bool adjust_root(IxNodeHandle *old_root_node);
 
-    // 从兄弟节点 (neighbor_node) 向当前节点 (node) 重新分配键，parent 是它们的父节点，index 是 node 在 parent 中的索引
+    /**
+     * @brief 节点间键值重分配
+     * @param neighbor_node 相邻节点
+     * @param node 当前节点
+     * @param parent 父节点
+     * @param index 当前节点在父节点中的索引
+     */
     void redistribute(IxNodeHandle *neighbor_node, IxNodeHandle *node, IxNodeHandle *parent, int index);
 
-    // 将当前节点 (node) 与其兄弟节点 (neighbor_node) 合并。parent 是它们的父节点，index 是 node 在 parent 中的索引
+    /**
+     * @brief 合并节点
+     * @param neighbor_node 相邻节点指针
+     * @param node 当前节点指针
+     * @param parent 父节点指针
+     * @param index 当前节点在父节点中的索引
+     * @param transaction 当前事务
+     * @param root_is_latched 根节点是否加锁
+     * @return 是否成功合并
+     */
     bool coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index,
-                  Transaction *transaction, bool *root_is_latched);
+                   Transaction *transaction, bool *root_is_latched);
 
-    // 范围查询相关
-    // 查找第一个大于或等于 key 的键的位置 (Iid: 包含page_no和slot_no)
+    /**
+     * @brief 查找大于等于指定键的第一个位置
+     * @param key 目标键值
+     * @return 索引ID（包含页面号和槽位号）
+     */
     Iid lower_bound(const char *key);
 
-    // 查找第一个严格大于 key 的键的位置
+    /**
+     * @brief 查找严格大于指定键的第一个位置
+     * @param key 目标键值
+     * @return 索引ID
+     */
     Iid upper_bound(const char *key);
 
-    // 获取B+树中最后一个叶节点的末尾位置 (用于范围扫描的结束)
+    /**
+     * @brief 获取最后一个叶节点的末尾位置
+     * @return 索引ID
+     */
     Iid leaf_end() const;
 
-    // 获取B+树中第一个叶节点的起始位置 (用于范围扫描的开始)
+    /**
+     * @brief 获取第一个叶节点的起始位置
+     * @return 索引ID
+     */
     Iid leaf_begin() const;
 
    private:

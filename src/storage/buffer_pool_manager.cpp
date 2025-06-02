@@ -11,9 +11,15 @@ See the Mulan PSL v2 for more details. */
 #include "buffer_pool_manager.h"
 
 /**
- * @description: 从free_list或replacer中得到可淘汰帧页的 *frame_id
- * @return {bool} true: 可替换帧查找成功 , false: 可替换帧查找失败
- * @param {frame_id_t*} frame_id 帧页id指针,返回成功找到的可替换帧id
+ * @description: 查找可以被替换的缓冲池页面
+ *
+ * 该函数按以下顺序查找可替换页面：
+ * 1. 首先检查空闲链表(free_list_)是否有空闲帧
+ * 2. 如果没有空闲帧，则使用替换策略(LRU)选择牺牲页面
+ *
+ * @param {frame_id_t*} frame_id 输出参数，返回找到的可替换帧的ID
+ * @return {bool} true表示找到可替换帧，false表示没有可替换的帧
+ * @note 该函数在调用时需要持有缓冲池的互斥锁
  */
 bool BufferPoolManager::find_victim_page(frame_id_t* frame_id) {
     // Todo:
@@ -34,15 +40,25 @@ bool BufferPoolManager::find_victim_page(frame_id_t* frame_id) {
 }
 
 /**
- * @description: 更新页面数据,
- * 如果为脏页则需写入磁盘，再更新为新页面，更新page元数据(data, is_dirty,
- * page_id)和page table
- * @param {Page*} page 写回页指针
- * @param {PageId} new_page_id 新的page_id
- * @param {frame_id_t} new_frame_id 新的帧frame_id
+ * @description: 更新页面的元数据和内容
+ *
+ * 该函数执行以下操作：
+ * 1. 如果当前页面是脏页：
+ *    - 将页面内容写回磁盘
+ *    - 重置脏页标志
+ * 2. 更新页表映射：
+ *    - 删除旧的页面ID到帧的映射
+ *    - 添加新的页面ID到帧的映射
+ * 3. 重置页面内容：
+ *    - 更新页面ID
+ *    - 清空页面数据
+ *
+ * @param {Page*} page 要更新的页面指针
+ * @param {PageId} new_page_id 新的页面ID
+ * @param {frame_id_t} new_frame_id 新的帧ID
+ * @note 调用者必须确保传入参数的有效性
  */
-void BufferPoolManager::update_page(Page* page, PageId new_page_id,
-                                    frame_id_t new_frame_id) {
+void BufferPoolManager::update_page(Page* page, PageId new_page_id, frame_id_t new_frame_id) {
     // Todo:
     // !1 如果是脏页，写回磁盘，并且把dirty置为false
     // !2 更新page table
@@ -50,8 +66,7 @@ void BufferPoolManager::update_page(Page* page, PageId new_page_id,
 
     // 如果是脏页,写回磁盘
     if (page->is_dirty_) {
-        disk_manager_->write_page(page->id_.fd, page->id_.page_no, page->data_,
-                                  PAGE_SIZE);
+        disk_manager_->write_page(page->id_.fd, page->id_.page_no, page->data_, PAGE_SIZE);
         page->is_dirty_ = false;
     }
 
@@ -67,12 +82,24 @@ void BufferPoolManager::update_page(Page* page, PageId new_page_id,
 }
 
 /**
- * @description: 从buffer pool获取需要的页。
- *              如果页表中存在page_id（说明该page在缓冲池中），并且pin_count++。
- *              如果页表不存在page_id（说明该page在磁盘中），则找缓冲池victim
- * page，将其替换为磁盘中读取的page，pin_count置1。
- * @return {Page*} 若获得了需要的页则将其返回，否则返回nullptr
- * @param {PageId} page_id 需要获取的页的PageId
+ * @description: 获取指定的页面
+ *
+ * 该函数实现以下逻辑：
+ * 1. 如果目标页面在缓冲池中：
+ *    - 增加页面的引用计数(pin_count)
+ *    - 如果页面之前未被固定，在替换器中标记为固定
+ *    - 直接返回页面
+ * 2. 如果目标页面不在缓冲池中：
+ *    - 查找可替换的帧页
+ *    - 如果没有可替换帧，返回nullptr
+ *    - 处理可能的脏页写回
+ *    - 从磁盘读取目标页面
+ *    - 更新页面元数据和页表
+ *    - 初始化引用计数为1
+ *
+ * @param {PageId} page_id 需要获取的页面ID
+ * @return {Page*} 获取的页面指针，如果无法获取则返回nullptr
+ * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolManager::fetch_page(PageId page_id) {
     // Todo:
@@ -95,7 +122,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
         // 页面在缓冲池中,增加pin_count并返回
         frame_id_t frame_id = iter->second;
         Page* page = &pages_[frame_id];
-        if(page->pin_count_ == 0){
+        if (page->pin_count_ == 0) {
             // 如果pin_count为0说明是新取出的页
             // 需要在replacer中固定该页
             replacer_->pin(frame_id);
@@ -114,8 +141,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     // 获取victim frame对应的页面
     Page* page = &pages_[frame_id];
     update_page(page, page_id, frame_id);
-    disk_manager_->read_page(page_id.fd, page_id.page_no, page->data_,
-                             PAGE_SIZE);
+    disk_manager_->read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
@@ -123,10 +149,19 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
 }
 
 /**
- * @description: 取消固定pin_count>0的在缓冲池中的page
- * @return {bool} 如果目标页的pin_count<=0则返回false，否则返回true
- * @param {PageId} page_id 目标page的page_id
- * @param {bool} is_dirty 若目标page应该被标记为dirty则为true，否则为false
+ * @description: 取消固定一个页面
+ *
+ * 该函数完成以下操作：
+ * 1. 在页表中查找目标页面
+ * 2. 如果页面不存在或已经完全解除固定(pin_count=0)，返回false
+ * 3. 减少页面的引用计数：
+ *    - 如果引用计数降为0，在替换器中标记为可替换
+ * 4. 根据is_dirty参数更新页面的脏页标记
+ *
+ * @param {PageId} page_id 目标页面的ID
+ * @param {bool} is_dirty 是否将页面标记为脏页
+ * @return {bool} true表示成功解除固定，false表示操作失败
+ * @note 该函数使用互斥锁保护并发访问
  */
 bool BufferPoolManager::unpin_page(PageId page_id, bool is_dirty) {
     // Todo:
@@ -197,8 +232,7 @@ bool BufferPoolManager::flush_page(PageId page_id) {
     Page* page = &pages_[frame_id];
 
     // 写回磁盘
-    disk_manager_->write_page(page_id.fd, page_id.page_no, page->data_,
-                              PAGE_SIZE);
+    disk_manager_->write_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
 
     // 更新dirty标记
     page->is_dirty_ = false;
@@ -207,10 +241,23 @@ bool BufferPoolManager::flush_page(PageId page_id) {
 }
 
 /**
- * @description:
- * 创建一个新的page，即从磁盘中移动一个新建的空page到缓冲池某个位置。
- * @return {Page*} 返回新创建的page，若创建失败则返回nullptr
- * @param {PageId*} page_id 当成功创建一个新的page时存储其page_id
+ * @description: 创建新页面
+ *
+ * 该函数实现以下逻辑：
+ * 1. 在缓冲池中查找可用帧：
+ *    - 优先使用空闲帧
+ *    - 如果没有空闲帧，使用替换策略选择牺牲页面
+ * 2. 在磁盘上分配新的页面空间
+ * 3. 处理缓冲池中选中帧的更新：
+ *    - 处理可能的脏页写回
+ *    - 更新页面元数据和页表
+ * 4. 初始化新页面：
+ *    - 设置引用计数为1
+ *    - 在替换器中标记为固定
+ *
+ * @param {PageId*} page_id 输出参数，存储新创建页面的ID
+ * @return {Page*} 新创建的页面指针，如果创建失败则返回nullptr
+ * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolManager::new_page(PageId* page_id) {
     // Todo:
@@ -271,8 +318,7 @@ bool BufferPoolManager::delete_page(PageId page_id) {
 
     // 如果是脏页写回磁盘
     if (page->is_dirty_) {
-        disk_manager_->write_page(page_id.fd, page_id.page_no, page->data_,
-                                  PAGE_SIZE);
+        disk_manager_->write_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     }
 
     // 重置页面元数据
@@ -291,8 +337,15 @@ bool BufferPoolManager::delete_page(PageId page_id) {
 }
 
 /**
- * @description: 将buffer_pool中的所有页写回到磁盘
- * @param {int} fd 文件句柄
+ * @description: 将指定文件的所有缓冲页刷新到磁盘
+ *
+ * 该函数执行以下操作：
+ * 1. 遍历页表查找属于指定文件的所有页面
+ * 2. 将找到的页面写回磁盘，不论是否为脏页
+ * 3. 重置页面的脏页标记
+ *
+ * @param {int} fd 要刷新的文件描述符
+ * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolManager::flush_all_pages(int fd) {
     std::scoped_lock lock{latch_};
@@ -311,8 +364,19 @@ void BufferPoolManager::flush_all_pages(int fd) {
 }
 
 /**
- * @description: 删除buffer_pool中指定文件的所有页面
- * @param {int} fd 文件句柄
+ * @description: 从缓冲池中删除指定文件的所有页面
+ *
+ * 该函数执行以下操作：
+ * 1. 遍历页表收集指定文件的所有页面
+ * 2. 对每个页面：
+ *    - 强制解除固定状态（如果被固定）
+ *    - 处理脏页写回
+ *    - 重置页面元数据
+ *    - 从页表中删除
+ *    - 将对应的帧添加到空闲列表
+ *
+ * @param {int} fd 要删除的文件描述符
+ * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolManager::delete_all_pages(int fd) {
     std::scoped_lock lock{latch_};

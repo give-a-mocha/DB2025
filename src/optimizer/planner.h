@@ -13,10 +13,10 @@ See the Mulan PSL v2 for more details. */
 #include <cassert>
 #include <cstring>
 #include <memory>
-#include <string>
-#include <vector>
 #include <set>
+#include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "analyze/analyze.h"
 #include "common/common.h"
@@ -117,13 +117,13 @@ class Planner {
      * @param tab_name 表名
      * @return 表的列数
      */
-    int get_table_col_num(const std::string& tab_name);
+    int get_table_col_num(const std::string &tab_name);
     /**
      * @brief 获取表的基数（记录数量）
      * @param tab_name 表名
      * @return 表中记录的数量
      */
-    size_t get_table_cardinality(const std::string& tab_name);
+    size_t get_table_cardinality(const std::string &tab_name);
 
     /**
      * @brief 使用贪心算法优化多表连接顺序
@@ -132,16 +132,16 @@ class Planner {
      */
     std::shared_ptr<Plan> make_one_rel_optimized(std::shared_ptr<Query> query);
 
-    std::shared_ptr<Plan> build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols, std::vector<TabCol> &all_cols);
+    std::shared_ptr<Plan> build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols,
+                                                std::vector<TabCol> &all_cols);
     /**
      * @brief 构建左深树连接计划
      * @param table_plans 表扫描计划列表
      * @param join_conditions 连接条件
      * @return 连接计划
      */
-    std::shared_ptr<Plan> build_left_deep_join_tree(
-        std::vector<std::shared_ptr<Plan>>& table_plans,
-        std::vector<Condition>& join_conditions);
+    std::shared_ptr<Plan> build_left_deep_join_tree(std::vector<std::shared_ptr<Plan>> &table_plans,
+                                                    std::vector<Condition> &join_conditions);
 
     /**
      * @brief 将 AST 中的数据类型转换为系统内部的列类型。
