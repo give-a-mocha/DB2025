@@ -16,12 +16,12 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/common.h"
 #include "parser/parser.h"
 #include "system/sm.h"
-#include "common/common.h"
 
 class ColCheck {
-public:
+   public:
     std::map<std::string, std::vector<std::string>> mp;
     std::map<std::pair<std::string, std::string>, int> cols;
     ColCheck(const std::vector<ColMeta> &all_cols) {
@@ -30,8 +30,8 @@ public:
             auto it = mp.find(col.name);
             if (it == mp.end()) {
                 mp[col.name] = std::vector<std::string>({col.tab_name});
-            }else{
-                if(it->second.size() < 2){
+            } else {
+                if (it->second.size() < 2) {
                     it->second.push_back(col.tab_name);
                 }
             }
@@ -60,9 +60,8 @@ public:
     }
 };
 
-
-class Query{
-    public:
+class Query {
+   public:
     std::shared_ptr<ast::TreeNode> parse;
     // TODO: jointree
     // JOIN树 - 存储所有的JOIN操作
@@ -75,24 +74,23 @@ class Query{
     std::vector<std::string> tables;
     // update 的set 值
     std::vector<SetClause> set_clauses;
-    //insert 的values值
+    // insert 的values值
     std::vector<Value> values;
 
     Query() = default;
-
 };
 
-class Analyze
-{
-private:
+class Analyze {
+   private:
     SmManager *sm_manager_;
-public:
-    Analyze(SmManager *sm_manager) : sm_manager_(sm_manager){}
-    ~Analyze(){}
+
+   public:
+    Analyze(SmManager *sm_manager) : sm_manager_(sm_manager) {}
+    ~Analyze() {}
 
     std::shared_ptr<Query> do_analyze(std::shared_ptr<ast::TreeNode> root);
 
-private:
+   private:
     // 检查列是否存在，返回列的元数据
     TabCol check_column(const std::vector<ColMeta> &all_cols, TabCol target);
 
@@ -101,12 +99,14 @@ private:
 
     // 获取所有列的元数据
     void get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols);
-    
-    //获取where语句条件
+
+    // 获取where语句条件
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
-    void get_clause_alias(const std::vector<ColMeta> &all_cols, const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds, const std::vector<TabRef> &tab_refs);
-    
-    //检查where条件合法性
+    void get_clause_alias(const std::vector<ColMeta> &all_cols,
+                          const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds,
+                          const std::vector<TabRef> &tab_refs);
+
+    // 检查where条件合法性
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
     // 辅助函数
@@ -114,4 +114,3 @@ private:
     CompOp convert_sv_comp_op(ast::SvCompOp op);
     JoinType convert_sv_join_type(ast::JoinType type);
 };
-

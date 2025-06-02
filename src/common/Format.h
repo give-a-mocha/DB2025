@@ -2,7 +2,6 @@
 #ifndef FORMAT_H_
 #define FORMAT_H_
 
-
 #include <algorithm>
 #include <cassert>
 #include <sstream>

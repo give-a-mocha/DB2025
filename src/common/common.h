@@ -15,15 +15,15 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <string>
 #include <vector>
+
 #include "defs.h"
 #include "record/rm_defs.h"
-
 
 struct TabCol {
     std::string tab_name;
     std::string tab_alias;  // 表别名
     std::string col_name;
-    TabCol(): tab_name(""), tab_alias(""), col_name("") {}
+    TabCol() : tab_name(""), tab_alias(""), col_name("") {}
 
     TabCol(std::string tab_name_, std::string col_name_, std::string tab_alias_ = "")
         : tab_name(std::move(tab_name_)), tab_alias(std::move(tab_alias_)), col_name(std::move(col_name_)) {}
@@ -32,15 +32,11 @@ struct TabCol {
         return std::tie(x.tab_name, x.col_name, x.tab_alias) < std::tie(y.tab_name, y.col_name, y.tab_alias);
     }
 
-    friend bool operator == (const TabCol &x, const TabCol &y) {
+    friend bool operator==(const TabCol &x, const TabCol &y) {
         return x.tab_name == y.tab_name && x.col_name == y.col_name && x.tab_alias == y.tab_alias;
     }
-    std::string get_tab_name() const {
-        return tab_alias.empty() ? tab_name : tab_alias;
-    }
-    std::string to_string() const {
-        return get_tab_name() + "." + col_name;
-    }
+    std::string get_tab_name() const { return tab_alias.empty() ? tab_name : tab_alias; }
+    std::string to_string() const { return get_tab_name() + "." + col_name; }
 };
 
 struct TabRef {
@@ -48,9 +44,7 @@ struct TabRef {
     std::string alias;  // 表别名
     TabRef(std::string name_, std::string alias_ = "") : name(std::move(name_)), alias(std::move(alias_)) {}
 
-    std::string get_name() const {
-        return alias.empty() ? name : alias;
-    }
+    std::string get_name() const { return alias.empty() ? name : alias; }
 };
 
 struct Value {
@@ -96,7 +90,6 @@ struct Value {
         }
     }
 };
-
 
 enum class CompOp { OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE };
 enum class JoinType { INNER_JOIN, LEFT_JOIN, RIGHT_JOIN, FULL_JOIN, CROSS_JOIN };
@@ -147,13 +140,12 @@ struct Condition {
 
 struct JoinNode {
     std::string tab_name;
-    std::vector<Condition> join_conds;     // JOIN条件
-    JoinType join_type;                    // JOIN类型
-    
-    JoinNode(std::string name_, std::vector<Condition> join_conds_, JoinType join_type_)
-        :tab_name(name_),join_conds(std::move(join_conds_)), join_type(join_type_) {}
-};
+    std::vector<Condition> join_conds;  // JOIN条件
+    JoinType join_type;                 // JOIN类型
 
+    JoinNode(std::string name_, std::vector<Condition> join_conds_, JoinType join_type_)
+        : tab_name(name_), join_conds(std::move(join_conds_)), join_type(join_type_) {}
+};
 
 struct SetClause {
     TabCol lhs;
@@ -178,4 +170,3 @@ inline CompOp swap_op(CompOp op) {
             throw RMDBError("Unknown comparison operator");
     }
 }
-
