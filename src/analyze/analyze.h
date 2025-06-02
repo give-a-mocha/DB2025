@@ -78,7 +78,7 @@ class Query{
     //insert 的values值
     std::vector<Value> values;
 
-    Query(){}
+    Query() = default;
 
 };
 

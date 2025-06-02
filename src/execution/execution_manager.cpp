@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_update.h"
 #include "index/ix.h"
 #include "record_printer.h"
+#include "common/print.hpp"
 
 constexpr const char *help_info =
     "Supported SQL syntax:\n"

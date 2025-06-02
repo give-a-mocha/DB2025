@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 
 #include "common/common.h"
+#include "common/print.hpp"
 #include "execution/execution_sort.h"
 #include "execution/executor_abstract.h"
 #include "execution/executor_delete.h"

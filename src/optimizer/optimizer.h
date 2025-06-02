@@ -20,6 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "transaction/transaction_manager.h"
 #include "planner.h"
 #include "plan.h"
+#include "common/print.hpp"
 
 class Optimizer {
    private:
