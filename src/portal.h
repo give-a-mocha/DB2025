@@ -64,7 +64,6 @@ class Portal {
     std::shared_ptr<PortalStmt> start(std::shared_ptr<Plan> plan, Context *context) {
         // 这里可以将select进行拆分，例如：一个select，带有return的select等
         if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
-            LOG("Portal: hit OtherPlan");
             return std::make_shared<PortalStmt>(PORTAL_CMD_UTILITY, std::vector<TabCol>(),
                                                 std::unique_ptr<AbstractExecutor>(), plan);
         } else if (auto x = std::dynamic_pointer_cast<SetKnobPlan>(plan)) {
@@ -147,7 +146,6 @@ class Portal {
                 break;
             }
             case PORTAL_CMD_UTILITY: {
-                LOG("run: PORTAL_CMD_UTILITY");
                 ql->run_cmd_utility(portal->plan, txn_id, context);
                 break;
             }

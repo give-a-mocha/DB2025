@@ -2,15 +2,17 @@
 #ifndef FORMAT_H_
 #define FORMAT_H_
 
+
 #include <algorithm>
 #include <cassert>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace util {
 
 template <typename... Args>
-std::string format(std::string fmt, const Args &&...args);
+std::string format(std::string fmt, Args &&...args);
 
 namespace detail {
 inline void format_helper(std::stringstream &ss, std::string &fmt) {
@@ -19,7 +21,7 @@ inline void format_helper(std::stringstream &ss, std::string &fmt) {
 }
 
 template <typename T, typename... Args>
-void format_helper(std::stringstream &ss, std::string &fmt, const T &&val, const Args &&...args) {
+void format_helper(std::stringstream &ss, std::string &fmt, T &&val, Args &&...args) {
     size_t start = fmt.find('{');
     size_t end = fmt.find('}', start);
 
@@ -30,14 +32,14 @@ void format_helper(std::stringstream &ss, std::string &fmt, const T &&val, const
     }
 
     ss << fmt.substr(0, start);
-    ss << val;
+    ss << std::forward<T>(val);
     fmt = fmt.substr(end + 1);
     if (sizeof...(args) != 0) format_helper(ss, fmt, std::forward<Args>(args)...);
 }
 }  // namespace detail
 
 template <typename... Args>
-std::string format(std::string fmt, const Args &&...args) {
+std::string format(std::string fmt, Args &&...args) {
     if (sizeof...(args) == 0) {
         return fmt;
     }

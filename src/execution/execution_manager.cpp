@@ -96,7 +96,6 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
                 break;
             }
             case PlanTag::T_Transaction_begin: {
-                LOG("PlanTag::T_Transaction_begin");
                 // 显示开启一个事务
                 context->txn_->set_txn_mode(true);
                 break;
@@ -120,7 +119,6 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
                 throw InternalError("Unexpected field type");
                 break;
         }
-        LOG("PlanTag::ok");
 
     } else if (auto x = std::dynamic_pointer_cast<SetKnobPlan>(plan)) {
         switch (x->set_knob_type_) {

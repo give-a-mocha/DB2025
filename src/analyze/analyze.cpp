@@ -140,7 +140,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
     } else {
         // do nothing
-        LOG("analyze: do nothing");
     }
     query->parse = std::move(parse);
     return query;

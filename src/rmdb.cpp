@@ -157,7 +157,6 @@ void *client_handler(void *sock_fd) {
                     std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context.get());
                     portal->run(portalStmt, ql_manager.get(), &txn_id, context.get());
                     portal->drop();
-                    LOG("main: ok");
                 } catch (TransactionAbortException &e) {
                     // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
                     std::string str = "abort\n";

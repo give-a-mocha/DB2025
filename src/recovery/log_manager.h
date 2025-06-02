@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <vector>
 
 #include "common/config.h"
+#include "common/print.hpp"
 #include "log_defs.h"
 #include "record/rm_defs.h"
 
@@ -108,6 +109,12 @@ class LogRecord {
         printf("log_tot_len: %d\n", log_tot_len_);                 // 打印日志总长度
         printf("log_tid: %ld\n", log_tid_);                        // 打印事务ID
         printf("prev_lsn: %d\n", prev_lsn_);                       // 打印前一条日志的序列号
+    }
+
+   private:
+   template <typename... Args>
+    void INFO(std::string_view fmt_str, Args &&...args) {
+        
     }
 };
 

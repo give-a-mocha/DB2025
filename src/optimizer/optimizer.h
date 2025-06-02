@@ -47,7 +47,6 @@ class Optimizer {
             return std::make_shared<OtherPlan>(PlanTag::T_DescTable, x->tab_name);
         } else if (auto x = std::dynamic_pointer_cast<ast::TxnBegin>(query->parse)) {
             // begin;
-            LOG("optimizer: begin");
             return std::make_shared<OtherPlan>(PlanTag::T_Transaction_begin, std::string());
         } else if (auto x = std::dynamic_pointer_cast<ast::TxnAbort>(query->parse)) {
             // abort;
