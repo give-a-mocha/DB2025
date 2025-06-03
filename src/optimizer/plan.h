@@ -157,13 +157,30 @@ public:
     }
 };
 
-class SortPlan : public Plan{
+/**
+ * @brief 排序计划节点类
+ *
+ * 实现ORDER BY子句的排序功能:
+ * - 支持升序和降序排序
+ * - 基于指定列进行排序
+ * - 作为其他操作的输入提供有序数据
+ */
+class SortPlan : public Plan {
 public:
-    std::shared_ptr<Plan> subplan_;
-    TabCol sel_col_;
-    bool is_desc_;
-    ~SortPlan(){}
-    SortPlan(PlanTag tag, std::shared_ptr<Plan> subplan, TabCol sel_col, bool is_desc){
+    std::shared_ptr<Plan> subplan_;  ///< 子计划
+    TabCol sel_col_;                 ///< 用于排序的列
+    bool is_desc_;                   ///< 是否为降序排序
+
+    ~SortPlan() {}
+
+    /**
+     * @brief 构造排序计划节点
+     * @param tag 计划类型(T_Sort)
+     * @param subplan 子计划
+     * @param sel_col 排序列
+     * @param is_desc 是否降序
+     */
+    SortPlan(PlanTag tag, std::shared_ptr<Plan> subplan, TabCol sel_col, bool is_desc) {
         Plan::tag = tag;
         subplan_ = std::move(subplan);
         sel_col_ = sel_col;
@@ -171,18 +188,37 @@ public:
     }
 };
 
-// dml语句，包括insert; delete; update; select语句　
-class DMLPlan : public Plan{
+/**
+ * @brief DML操作计划节点类
+ *
+ * 处理数据操作语言(DML)语句，包括：
+ * - INSERT: 插入数据
+ * - DELETE: 删除数据
+ * - UPDATE: 更新数据
+ * - SELECT: 查询数据
+ */
+class DMLPlan : public Plan {
 public:
-    std::shared_ptr<Plan> subplan_;
-    std::string tab_name_;
-    std::vector<Value> values_;
-    std::vector<Condition> conds_;
-    std::vector<SetClause> set_clauses_;
-    ~DMLPlan(){}
-    DMLPlan(PlanTag tag, std::shared_ptr<Plan> subplan,std::string tab_name,
+    std::shared_ptr<Plan> subplan_;          ///< 子计划(用于SELECT或复杂查询)
+    std::string tab_name_;                   ///< 目标表名
+    std::vector<Value> values_;              ///< 插入的值列表(INSERT使用)
+    std::vector<Condition> conds_;           ///< 条件列表(WHERE子句)
+    std::vector<SetClause> set_clauses_;     ///< 更新子句列表(UPDATE使用)
+
+    ~DMLPlan() {}
+
+    /**
+     * @brief 构造DML计划节点
+     * @param tag 计划类型(T_Insert/T_Delete/T_Update/T_select)
+     * @param subplan 子计划
+     * @param tab_name 目标表名
+     * @param values 插入值列表
+     * @param conds 条件列表
+     * @param set_clauses 更新子句列表
+     */
+    DMLPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::string tab_name,
             std::vector<Value> values, std::vector<Condition> conds,
-            std::vector<SetClause> set_clauses){
+            std::vector<SetClause> set_clauses) {
         Plan::tag = tag;
         subplan_ = std::move(subplan);
         tab_name_ = std::move(tab_name);
@@ -192,14 +228,31 @@ public:
     }
 };
 
-// ddl语句, 包括create/drop table; create/drop index;
-class DDLPlan : public Plan{
+/**
+ * @brief DDL操作计划节点类
+ *
+ * 处理数据定义语言(DDL)语句，包括：
+ * - CREATE TABLE: 创建表
+ * - DROP TABLE: 删除表
+ * - CREATE INDEX: 创建索引
+ * - DROP INDEX: 删除索引
+ */
+class DDLPlan : public Plan {
 public:
-    std::string tab_name_;
-    std::vector<std::string> tab_col_names_;
-    std::vector<ColDef> cols_;
-    ~DDLPlan(){}
-    DDLPlan(PlanTag tag, std::string tab_name, std::vector<std::string> col_names, std::vector<ColDef> cols){
+    std::string tab_name_;                    ///< 目标表名
+    std::vector<std::string> tab_col_names_;  ///< 列名列表(用于索引操作)
+    std::vector<ColDef> cols_;                ///< 列定义列表(用于建表)
+
+    ~DDLPlan() {}
+
+    /**
+     * @brief 构造DDL计划节点
+     * @param tag 计划类型(T_CreateTable/T_DropTable/T_CreateIndex/T_DropIndex)
+     * @param tab_name 目标表名
+     * @param col_names 列名列表
+     * @param cols 列定义列表
+     */
+    DDLPlan(PlanTag tag, std::string tab_name, std::vector<std::string> col_names, std::vector<ColDef> cols) {
         Plan::tag = tag;
         tab_name_ = std::move(tab_name);
         cols_ = std::move(cols);
@@ -207,22 +260,50 @@ public:
     }
 };
 
-// help; show tables; desc tables; begin; abort; commit; rollback语句对应的plan
-class OtherPlan : public Plan{
+/**
+ * @brief 其他操作计划节点类
+ *
+ * 处理辅助性质的数据库操作，包括：
+ * - HELP: 显示帮助信息
+ * - SHOW TABLES: 显示所有表
+ * - DESC TABLE: 显示表结构
+ * - BEGIN/COMMIT/ABORT/ROLLBACK: 事务控制
+ */
+class OtherPlan : public Plan {
 public:
-    std::string tab_name_;
-    ~OtherPlan(){}
-    OtherPlan(PlanTag tag, std::string tab_name){
+    std::string tab_name_;    ///< 目标表名(用于DESC TABLE等操作)
+
+    ~OtherPlan() {}
+
+    /**
+     * @brief 构造其他操作计划节点
+     * @param tag 计划类型(T_Help/T_ShowTable等)
+     * @param tab_name 目标表名
+     */
+    OtherPlan(PlanTag tag, std::string tab_name) {
         Plan::tag = tag;
-        tab_name_ = std::move(tab_name);            
+        tab_name_ = std::move(tab_name);
     }
 };
 
-// Set Knob Plan
-class SetKnobPlan : public Plan{
+/**
+ * @brief 系统参数设置计划节点类
+ *
+ * 用于设置数据库系统的运行参数，如：
+ * - 开启/关闭某些优化特性
+ * - 调整系统运行模式
+ * - 配置执行选项
+ */
+class SetKnobPlan : public Plan {
 public:
-    ast::SetKnobType set_knob_type_;
-    bool bool_value_;
+    ast::SetKnobType set_knob_type_;    ///< 要设置的参数类型
+    bool bool_value_;                    ///< 参数值(布尔类型)
+
+    /**
+     * @brief 构造参数设置计划节点
+     * @param knob_type 参数类型
+     * @param bool_value 参数值
+     */
     SetKnobPlan(ast::SetKnobType knob_type, bool bool_value) {
         Plan::tag = PlanTag::T_SetKnob;
         set_knob_type_ = knob_type;
@@ -230,14 +311,28 @@ public:
     }
 };
 
-class plannerInfo{
+/**
+ * @brief 查询计划生成器辅助信息类
+ *
+ * 在生成查询执行计划过程中存储和传递必要的信息：
+ * - 解析后的SELECT语句
+ * - WHERE条件
+ * - 投影列
+ * - 扫描计划
+ * - 更新子句等
+ */
+class plannerInfo {
 public:
-    std::shared_ptr<ast::SelectStmt> parse;
-    std::vector<Condition> where_conds;
-    std::vector<TabCol> sel_cols;
-    std::shared_ptr<Plan> plan;
-    std::vector<std::shared_ptr<Plan>> table_scan_executors;
-    std::vector<SetClause> set_clauses;
-    plannerInfo(std::shared_ptr<ast::SelectStmt> parse_):parse(std::move(parse_)){}
+    std::shared_ptr<ast::SelectStmt> parse;                  ///< 解析后的SELECT语句
+    std::vector<Condition> where_conds;                      ///< WHERE条件列表
+    std::vector<TabCol> sel_cols;                           ///< 投影列列表
+    std::shared_ptr<Plan> plan;                             ///< 生成的执行计划
+    std::vector<std::shared_ptr<Plan>> table_scan_executors; ///< 表扫描执行器列表
+    std::vector<SetClause> set_clauses;                     ///< 更新子句列表
 
+    /**
+     * @brief 构造计划生成器信息对象
+     * @param parse_ 解析后的SELECT语句
+     */
+    plannerInfo(std::shared_ptr<ast::SelectStmt> parse_) : parse(std::move(parse_)) {}
 };

@@ -22,11 +22,22 @@ See the Mulan PSL v2 for more details. */
 
 DiskManager::DiskManager() { std::memset(fd2pageno_, 0, MAX_FD * (sizeof(std::atomic<page_id_t>) / sizeof(char))); }
 /**
- * @description: 将数据写入文件的指定磁盘页面中
- * @param {int} fd 磁盘文件的文件句柄
- * @param {page_id_t} page_no 写入目标页面的page_id
- * @param {char} *offset 要写入磁盘的数据
- * @param {int} num_bytes 要写入磁盘的数据大小
+ * @brief 将数据写入文件的指定页面
+ *
+ * @param fd 磁盘文件的文件句柄
+ * @param page_no 写入目标页面的page_id
+ * @param offset 要写入磁盘的数据指针
+ * @param num_bytes 要写入的数据大小
+ *
+ * @throw InternalError 写入失败时抛出以下异常：
+ * 1. 无效的文件描述符
+ * 2. 磁盘空间不足
+ * 3. 其他IO错误
+ *
+ * @note 实现说明：
+ * 1. 使用pwrite原子写入，避免竞态
+ * 2. 检查写入字节数确保完整性
+ * 3. 区分不同类型的IO错误
  */
 void DiskManager::write_page(int fd, page_id_t page_no, const char *offset, int num_bytes) {
     // Todo:
@@ -51,11 +62,22 @@ void DiskManager::write_page(int fd, page_id_t page_no, const char *offset, int 
 }
 
 /**
- * @description: 读取文件中指定编号的页面中的部分数据到内存中
- * @param {int} fd 磁盘文件的文件句柄
- * @param {page_id_t} page_no 指定的页面编号
- * @param {char} *offset 读取的内容写入到offset中
- * @param {int} num_bytes 读取的数据量大小
+ * @brief 从文件的指定页面读取数据
+ *
+ * @param fd 磁盘文件的文件句柄
+ * @param page_no 目标页面编号
+ * @param offset 读取数据存储位置
+ * @param num_bytes 要读取的字节数
+ *
+ * @throw InternalError 在以下情况抛出：
+ * 1. 无效的文件描述符
+ * 2. 读取过程中发生IO错误
+ * 3. 未读取到预期数量的字节
+ *
+ * @note 实现说明：
+ * 1. 使用pread避免多线程干扰
+ * 2. 严格校验读取字节数
+ * 3. 保证数据完整性
  */
 void DiskManager::read_page(int fd, page_id_t page_no, char *offset, int num_bytes) {
     // Todo:
@@ -171,9 +193,21 @@ void DiskManager::destroy_dir(const std::string &path) {
 }
 
 /**
- * @description: 判断指定路径文件是否存在
- * @return {bool} 若指定路径文件存在则返回true
- * @param {string} &path 指定路径文件
+ * @brief 检查指定路径的文件是否存在
+ *
+ * @param path 要检查的文件路径
+ * @return true 文件存在且是普通文件
+ * @return false 文件不存在或不是普通文件
+ *
+ * @details 实现步骤：
+ * 1. 使用stat获取文件信息
+ * 2. 检查文件类型是否为普通文件
+ * 3. 处理stat可能的错误
+ *
+ * @note 使用场景：
+ * 1. 创建文件前的检查
+ * 2. 删除文件前的验证
+ * 3. 打开文件前的确认
  */
 bool DiskManager::is_file(const std::string &path) {
     // 用struct stat获取文件信息
@@ -332,11 +366,23 @@ int DiskManager::get_file_fd(const std::string &file_name) {
 }
 
 /**
- * @description:  读取日志文件内容
- * @return {int} 返回读取的数据量，若为-1说明读取数据的起始位置超过了文件大小
- * @param {char} *log_data 读取内容到log_data中
- * @param {int} size 读取的数据量大小
- * @param {int} offset 读取的内容在文件中的位置
+ * @brief 读取日志文件内容
+ *
+ * @param log_data 读取内容的目标缓冲区
+ * @param size 要读取的数据量
+ * @param offset 读取的起始位置
+ * @return int 实际读取的字节数，-1表示偏移超出文件大小
+ *
+ * @details 实现步骤：
+ * 1. 检查并打开日志文件（如果未打开）
+ * 2. 获取文件大小并验证偏移值
+ * 3. 计算实际可读取的数据量
+ * 4. 定位到指定偏移并读取数据
+ *
+ * @note 优化说明：
+ * 1. 自动维护日志文件句柄
+ * 2. 避免读取超出文件范围
+ * 3. 确保原子性读取
  */
 int DiskManager::read_log(char *log_data, int size, int offset) {
     // read log file from the previous end

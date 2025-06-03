@@ -13,7 +13,9 @@ See the Mulan PSL v2 for more details. */
 #include <cinttypes>
 #include <cstring>
 
+// 定义位图的基本单位为字节(8位)
 static constexpr int BITMAP_WIDTH = 8;
+// 定义最高位的掩码(10000000)，用于位操作
 static constexpr unsigned BITMAP_HIGHEST_BIT = 0x80u;  // 128 (2^7)
 
 class Bitmap {
@@ -55,7 +57,21 @@ class Bitmap {
     // rid_.slot_no); int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
 
    private:
+    /**
+     * @brief 计算给定位置所在的字节偏移
+     * @param pos 位的绝对位置
+     * @return 该位所在的字节偏移
+     */
     static int get_bucket(int pos) { return pos / BITMAP_WIDTH; }
 
+    /**
+     * @brief 计算给定位置的位掩码
+     * @param pos 位的绝对位置
+     * @return 对应的位掩码，用于位操作
+     *
+     * @note 实现原理:
+     * 1. pos % BITMAP_WIDTH 得到字节内的偏移(0-7)
+     * 2. BITMAP_HIGHEST_BIT 右移该偏移得到对应位的掩码
+     */
     static char get_bit(int pos) { return BITMAP_HIGHEST_BIT >> static_cast<char>(pos % BITMAP_WIDTH); }
 };

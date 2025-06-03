@@ -1,28 +1,43 @@
 /**
  * @file ix_defs.h
  * @author RMDB Development Team
- * @brief B+树索引的关键数据结构定义
+ * @brief B+树索引的核心数据结构定义
  * @version 0.1
  * @date 2023-12-01
  *
  * @copyright Copyright (c) 2023 Renmin University of China
  * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
  *
- * 定义了B+树索引的核心数据结构：
- * 1. 文件组织
- *    - 文件头：存储索引的元数据
- *    - 页面头：存储节点的元数据
- *    - 叶节点链表：支持范围查询
+ * 主要内容：
+ * 1. 文件存储结构
+ *    - 文件头页面：存储整个索引的元数据信息
+ *    - 页面头部：每个节点的控制信息
+ *    - 叶子节点链表：支持高效的范围查询
  *
- * 2. 内存布局
- *    - 序列化/反序列化支持
- *    - 页面内数据紧凑存储
- *    - 变长字段处理
+ * 2. 内存数据组织
+ *    - 提供序列化/反序列化功能
+ *    - 实现页面内紧凑数据存储
+ *    - 支持变长字段的处理
  *
- * 3. B+树参数
- *    - 阶数动态计算
- *    - 页面大小限制
- *    - 键值大小限制
+ * 3. B+树关键参数
+ *    - 根据页面大小动态计算树的阶数
+ *    - 实现页面空间使用的限制
+ *    - 控制索引键值的大小范围
+ *
+ * 核心组件：
+ * 1. IxFileHdr：文件头结构
+ *    - 维护整个索引文件的元数据
+ *    - 记录B+树的关键参数
+ *    - 管理空闲页面链表
+ *
+ * 2. IxPageHdr：节点页面头
+ *    - 存储节点的类型和状态
+ *    - 维护节点间的父子关系
+ *    - 管理叶子节点双向链表
+ *
+ * 3. Iid：索引项标识符
+ *    - 唯一标识索引中的位置
+ *    - 支持范围查询的定位
  */
 
 #pragma once
@@ -76,9 +91,9 @@ constexpr int IX_MAX_COL_LEN = 512;
 class IxFileHdr {
    public:
     page_id_t first_free_page_no_;    // 空闲页面链表的头节点页号
-    int num_pages_;                    // 文件中的总页面数
+    int num_pages_;                   // 文件中的总页面数
     page_id_t root_page_;             // 根节点页号
-    int col_num_;                      // 联合索引的列数
+    int col_num_;                     // 联合索引的列数
     std::vector<ColType> col_types_;  // 各列的数据类型
     std::vector<int> col_lens_;       // 各列的长度(字节数)
     int col_tot_len_;                 // 键值的总长度
@@ -157,11 +172,11 @@ class IxFileHdr {
      */
     void serialize(char *dest) {
         int offset = 0;
-        
+
         // 1. 序列化总长度
         memcpy(dest + offset, &tot_len_, sizeof(int));
         offset += sizeof(int);
-        
+
         // 2. 序列化基本字段
         memcpy(dest + offset, &first_free_page_no_, sizeof(page_id_t));
         offset += sizeof(page_id_t);
@@ -171,7 +186,7 @@ class IxFileHdr {
         offset += sizeof(page_id_t);
         memcpy(dest + offset, &col_num_, sizeof(int));
         offset += sizeof(int);
-        
+
         // 3. 序列化列信息
         // 3.1 列的类型
         for (int i = 0; i < col_num_; ++i) {
@@ -183,7 +198,7 @@ class IxFileHdr {
             memcpy(dest + offset, &col_lens_[i], sizeof(int));
             offset += sizeof(int);
         }
-        
+
         // 4. 序列化其他参数
         memcpy(dest + offset, &col_tot_len_, sizeof(int));
         offset += sizeof(int);
@@ -195,7 +210,7 @@ class IxFileHdr {
         offset += sizeof(page_id_t);
         memcpy(dest + offset, &last_leaf_, sizeof(page_id_t));
         offset += sizeof(page_id_t);
-        
+
         // 验证序列化的完整性
         assert(offset == tot_len_);
     }
@@ -225,11 +240,11 @@ class IxFileHdr {
      */
     void deserialize(char *src) {
         int offset = 0;
-        
+
         // 1. 读取总长度
         tot_len_ = *reinterpret_cast<const int *>(src + offset);
         offset += sizeof(int);
-        
+
         // 2. 读取基本字段
         first_free_page_no_ = *reinterpret_cast<const page_id_t *>(src + offset);
         offset += sizeof(int);
@@ -239,23 +254,23 @@ class IxFileHdr {
         offset += sizeof(page_id_t);
         col_num_ = *reinterpret_cast<const int *>(src + offset);
         offset += sizeof(int);
-        
+
         // 3. 分配向量空间并读取列信息
         col_types_.resize(col_num_);
         col_lens_.resize(col_num_);
-        
+
         // 3.1 读取列类型
         for (int i = 0; i < col_num_; ++i) {
             col_types_[i] = *reinterpret_cast<const ColType *>(src + offset);
             offset += sizeof(ColType);
         }
-        
+
         // 3.2 读取列长度
         for (int i = 0; i < col_num_; ++i) {
             col_lens_[i] = *reinterpret_cast<const int *>(src + offset);
             offset += sizeof(int);
         }
-        
+
         // 4. 读取其他参数
         col_tot_len_ = *reinterpret_cast<const int *>(src + offset);
         offset += sizeof(int);
@@ -267,7 +282,7 @@ class IxFileHdr {
         offset += sizeof(page_id_t);
         last_leaf_ = *reinterpret_cast<const page_id_t *>(src + offset);
         offset += sizeof(page_id_t);
-        
+
         // 验证读取的完整性
         assert(offset == tot_len_);
     }
@@ -328,8 +343,8 @@ class IxPageHdr {
  */
 class Iid {
    public:
-    int page_no;    // B+树节点的页面号
-    int slot_no;    // 节点内的槽位编号
+    int page_no;  // B+树节点的页面号
+    int slot_no;  // 节点内的槽位编号
 
     /**
      * @brief 判断两个索引项标识符是否相等

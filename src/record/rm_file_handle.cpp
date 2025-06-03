@@ -24,8 +24,7 @@ See the Mulan PSL v2 for more details. */
  * @return {unique_ptr<RmRecord>} 记录对象的智能指针
  * @throw RecordNotFoundError 如果记录不存在
  */
-std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid,
-                                                   Context* context) const {
+std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* context) const {
     // Todo:
     // !1. 获取指定记录所在的page handle
     // !2. 初始化一个指向RmRecord的指针（赋值其内部的data和size）
@@ -62,12 +61,13 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid,
  * @return {Rid} 新插入记录的标识符
  */
 Rid RmFileHandle::insert_record(char* buf, Context* context) {
-    // Todo:
-    // !1. 获取当前未满的page handle
-    // !2. 在page handle中找到空闲slot位置
-    // !3. 将buf复制到空闲slot位置
-    // !4. 更新page_handle.page_hdr中的数据结构
-    // !注意考虑插入一条记录后页面已满的情况，需要更新file_hdr_.first_free_page_no
+    // 插入记录的步骤：
+    // 1. 获取或创建一个有空闲空间的页面句柄
+    // 2. 使用位图找到页面中第一个空闲槽位
+    // 3. 将记录数据复制到找到的槽位
+    // 4. 更新页面头部信息(记录数等)
+    // 5. 如果页面已满，更新文件头的空闲页面链表
+    // 6. 返回新记录的RID标识符
 
     if (context != nullptr) {
         context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
@@ -77,8 +77,7 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     RmPageHandle page_handle = create_page_handle();
 
     // 找到空闲slot
-    int slot_no = Bitmap::first_bit(false, page_handle.bitmap,
-                                    file_hdr_.num_records_per_page);
+    int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
     // 复制数据到slot
     char* slot = page_handle.get_slot(slot_no);
     memcpy(slot, buf, file_hdr_.record_size);
@@ -103,7 +102,7 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
  * @param {char*} buf 要插入记录的数据
  */
 void RmFileHandle::insert_record(const Rid& rid, char* buf) {
-    // Todo: 我上下文呢？
+    // 注：需要考虑事务上下文和并发控制
 
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
@@ -121,8 +120,7 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
     Bitmap::set(page_handle.bitmap, rid.slot_no);
     page_handle.page_hdr->num_records++;
     file_hdr_.record_num++;
-    if (page_handle.page_hdr->num_records ==
-        page_handle.file_hdr->num_records_per_page) {
+    if (page_handle.page_hdr->num_records == page_handle.file_hdr->num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
 
@@ -144,10 +142,12 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
  * @throw RecordNotFoundError 如果记录不存在
  */
 void RmFileHandle::delete_record(const Rid& rid, Context* context) {
-    // Todo:
-    // !1. 获取指定记录所在的page handle
-    // !2. 更新page_handle.page_hdr中的数据结构
-    // !注意考虑删除一条记录后页面未满的情况，需要调用release_page_handle()
+    // 删除记录的步骤：
+    // 1. 获取记录所在页面的句柄
+    // 2. 将对应槽位在位图中标记为空闲
+    // 3. 更新页面头部信息(减少记录数)
+    // 4. 如果页面从满变为非满，需要将其加入空闲页面链表
+    // 5. 更新文件头的记录总数
 
     if (context != nullptr) {
         context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
@@ -168,8 +168,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     file_hdr_.record_num--;
 
     // 如果页面从满变为未满,加入空闲页面链表
-    if (page_handle.page_hdr->num_records ==
-        file_hdr_.num_records_per_page - 1) {
+    if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page - 1) {
         release_page_handle(page_handle);
     }
 
@@ -191,9 +190,11 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
  * @throw RecordNotFoundError 如果记录不存在
  */
 void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
-    // Todo:
-    // !1. 获取指定记录所在的page handle
-    // !2. 更新记录
+    // 更新记录的步骤：
+    // 1. 获取记录所在页面的句柄
+    // 2. 验证记录是否存在
+    // 3. 用新数据覆盖原记录
+    // 4. 标记页面为脏页以便后续写回磁盘
 
     if (context != nullptr) {
         context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
@@ -261,8 +262,7 @@ RmPageHandle RmFileHandle::create_new_page_handle() {
     PageId new_page_id = {fd_, INVALID_PAGE_ID};
     Page* page = buffer_pool_manager_->new_page(&new_page_id);
     if (page == nullptr) {
-        throw PageNotExistError(disk_manager_->get_file_name(fd_),
-                                new_page_id.page_no);
+        throw PageNotExistError(disk_manager_->get_file_name(fd_), new_page_id.page_no);
     }
 
     // 初始化页面头信息

@@ -29,9 +29,9 @@
 #include <memory>
 #include <string>
 
-#include "system/sm_meta.h"
 #include "ix_defs.h"
 #include "ix_index_handle.h"
+#include "system/sm_meta.h"
 
 /**
  * @brief 索引管理器类
@@ -53,7 +53,7 @@
  */
 class IxManager {
    private:
-    DiskManager *disk_manager_;            // 磁盘管理器
+    DiskManager *disk_manager_;               // 磁盘管理器
     BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器
 
    public:
@@ -71,38 +71,36 @@ class IxManager {
      * 2. 以.idx作为文件扩展名
      * 3. 支持多列联合索引
      */
-    std::string get_index_name(const std::string &filename, const std::vector<std::string>& index_cols) {
+    std::string get_index_name(const std::string &filename, const std::vector<std::string> &index_cols) {
         std::string index_name = filename;
-        for(size_t i = 0; i < index_cols.size(); ++i) 
-            index_name += "_" + index_cols[i];
+        for (size_t i = 0; i < index_cols.size(); ++i) index_name += "_" + index_cols[i];
         index_name += ".idx";
 
         return index_name;
     }
     /*
-    * @description: 获取索引文件名通过表名和索引列元数据
-    */
-    std::string get_index_name(const std::string &filename, const std::vector<ColMeta>& index_cols) {
+     * @description: 获取索引文件名通过表名和索引列元数据
+     */
+    std::string get_index_name(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string index_name = filename;
-        for(size_t i = 0; i < index_cols.size(); ++i) 
-            index_name += "_" + index_cols[i].name;
+        for (size_t i = 0; i < index_cols.size(); ++i) index_name += "_" + index_cols[i].name;
         index_name += ".idx";
 
         return index_name;
     }
 
     /*
-    * @description: 检查索引文件是否存在通过表名和索引列元数据
-    */
-    bool exists(const std::string &filename, const std::vector<ColMeta>& index_cols) {
+     * @description: 检查索引文件是否存在通过表名和索引列元数据
+     */
+    bool exists(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
         return disk_manager_->is_file(ix_name);
     }
 
     /*
-    * @description: 检查索引文件是否存在通过表名和索引列
-    */
-    bool exists(const std::string &filename, const std::vector<std::string>& index_cols) {
+     * @description: 检查索引文件是否存在通过表名和索引列
+     */
+    bool exists(const std::string &filename, const std::vector<std::string> &index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
         return disk_manager_->is_file(ix_name);
     }
@@ -132,7 +130,7 @@ class IxManager {
      * @note B+树阶数计算公式：
      * (页面大小 - 页面头大小) = (键长 + RID大小) * (阶数 + 1)
      */
-    void create_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
+    void create_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         // 创建索引文件
         disk_manager_->create_file(ix_name);
@@ -147,7 +145,7 @@ class IxManager {
         // |page_hdr| + (|attr| + |rid|) * (n + 1) <= PAGE_SIZE
         int col_tot_len = 0;
         int col_num = index_cols.size();
-        for(auto& col: index_cols) {
+        for (auto &col : index_cols) {
             col_tot_len += col.len;
         }
         if (col_tot_len > IX_MAX_COL_LEN) {
@@ -159,15 +157,15 @@ class IxManager {
         assert(btree_order > 2);
 
         // Create file header and write to file
-        IxFileHdr* fhdr = new IxFileHdr(IX_NO_PAGE, IX_INIT_NUM_PAGES, IX_INIT_ROOT_PAGE,
-                                col_num, col_tot_len, btree_order, (btree_order + 1) * col_tot_len,
-                                IX_INIT_ROOT_PAGE, IX_INIT_ROOT_PAGE);
-        for(int i = 0; i < col_num; ++i) {
+        IxFileHdr *fhdr =
+            new IxFileHdr(IX_NO_PAGE, IX_INIT_NUM_PAGES, IX_INIT_ROOT_PAGE, col_num, col_tot_len, btree_order,
+                          (btree_order + 1) * col_tot_len, IX_INIT_ROOT_PAGE, IX_INIT_ROOT_PAGE);
+        for (int i = 0; i < col_num; ++i) {
             fhdr->col_types_[i] = (index_cols[i].type);
             fhdr->col_lens_[i] = (index_cols[i].len);
         }
-        
-        char* data = new char[fhdr->tot_len_];
+
+        char *data = new char[fhdr->tot_len_];
         fhdr->serialize(data);
 
         disk_manager_->write_page(fd, IX_FILE_HDR_PAGE, data, fhdr->tot_len_);
@@ -212,18 +210,16 @@ class IxManager {
         disk_manager_->close_file(fd);
     }
 
-    void destroy_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
+    void destroy_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         disk_manager_->destroy_file(ix_name);
     }
 
-    void destroy_index(const std::string &filename, const std::vector<std::string>& index_cols) {
+    void destroy_index(const std::string &filename, const std::vector<std::string> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         disk_manager_->destroy_file(ix_name);
     }
-    void destroy_index(const std::string &index_name) {
-        disk_manager_->destroy_file(index_name);
-    }
+    void destroy_index(const std::string &index_name) { disk_manager_->destroy_file(index_name); }
 
     /**
      * @brief 打开索引文件并创建索引句柄
@@ -238,14 +234,13 @@ class IxManager {
      *
      * @warning 使用完索引后必须调用close_index关闭
      */
-    std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
-        
+    std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         int fd = disk_manager_->open_file(ix_name);
         return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
     }
 
-    std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<std::string>& index_cols) {
+    std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<std::string> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         int fd = disk_manager_->open_file(ix_name);
         return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
@@ -264,7 +259,7 @@ class IxManager {
      * @warning 关闭后不能再使用该索引句柄
      */
     void close_index(const IxIndexHandle *ih) {
-        char* data = new char[ih->file_hdr_->tot_len_];
+        char *data = new char[ih->file_hdr_->tot_len_];
         ih->file_hdr_->serialize(data);
         disk_manager_->write_page(ih->fd_, IX_FILE_HDR_PAGE, data, ih->file_hdr_->tot_len_);
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面

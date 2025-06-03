@@ -54,9 +54,9 @@
  *    - INSERT/DELETE: 需要保持页面固定直到操作完成
  */
 enum class Operation {
-    FIND = 0,   // 查找操作：只读访问，使用共享锁
-    INSERT,     // 插入操作：可能触发节点分裂，需要排他锁
-    DELETE      // 删除操作：可能触发节点合并，需要排他锁
+    FIND = 0,  // 查找操作：只读访问，使用共享锁
+    INSERT,    // 插入操作：可能触发节点分裂，需要排他锁
+    DELETE     // 删除操作：可能触发节点合并，需要排他锁
 };
 
 /**
@@ -97,11 +97,12 @@ inline int ix_compare(const char *a, const char *b, ColType type, int col_len) {
     }
 }
 
-inline int ix_compare(const char* a, const char* b, const std::vector<ColType>& col_types, const std::vector<int>& col_lens) {
+inline int ix_compare(const char *a, const char *b, const std::vector<ColType> &col_types,
+                      const std::vector<int> &col_lens) {
     int offset = 0;
-    for(size_t i = 0; i < col_types.size(); ++i) {
+    for (size_t i = 0; i < col_types.size(); ++i) {
         int res = ix_compare(a + offset, b + offset, col_types[i], col_lens[i]);
-        if(res != 0) return res;
+        if (res != 0) return res;
         offset += col_lens[i];
     }
     return 0;
@@ -116,8 +117,8 @@ inline int ix_compare(const char* a, const char* b, const std::vector<ColType>& 
  * 3. 节点内部数据的组织和管理
  */
 class IxNodeHandle {
-    friend class IxIndexHandle; // 允许 IxIndexHandle 类访问 IxNodeHandle 的私有成员
-    friend class IxScan;        // 允许 IxScan 类访问 IxNodeHandle 的私有成员
+    friend class IxIndexHandle;  // 允许 IxIndexHandle 类访问 IxNodeHandle 的私有成员
+    friend class IxScan;         // 允许 IxScan 类访问 IxNodeHandle 的私有成员
 
    private:
     /**
@@ -134,11 +135,11 @@ class IxNodeHandle {
      * 2. 键值和RID一一对应，通过下标关联
      * 3. 键值长度由文件头指定，支持变长
      */
-    const IxFileHdr *file_hdr;      // 指向索引文件头，包含键值长度等元信息
-    Page *page;                     // 指向底层页面，管理物理存储
-    IxPageHdr *page_hdr;            // 指向页面头部，存储节点属性（如是否为叶节点）
-    char *keys;                     // 指向键值存储区域的起始位置
-    Rid *rids;                      // 指向RID存储区域的起始位置
+    const IxFileHdr *file_hdr;  // 指向索引文件头，包含键值长度等元信息
+    Page *page;                 // 指向底层页面，管理物理存储
+    IxPageHdr *page_hdr;        // 指向页面头部，存储节点属性（如是否为叶节点）
+    char *keys;                 // 指向键值存储区域的起始位置
+    Rid *rids;                  // 指向RID存储区域的起始位置
 
    public:
     // 默认构造函数
@@ -209,7 +210,9 @@ class IxNodeHandle {
     Rid *get_rid(int rid_idx) const { return &rids[rid_idx]; }
 
     // 将提供的键 (原始字节) 设置到指定索引位置
-    void set_key(int key_idx, const char *key) { memcpy(keys + key_idx * file_hdr->col_tot_len_, key, file_hdr->col_tot_len_); }
+    void set_key(int key_idx, const char *key) {
+        memcpy(keys + key_idx * file_hdr->col_tot_len_, key, file_hdr->col_tot_len_);
+    }
 
     // 将提供的 Rid 对象设置到指定索引位置
     void set_rid(int rid_idx, const Rid &rid) { rids[rid_idx] = rid; }
@@ -246,10 +249,10 @@ class IxNodeHandle {
      * @return 唯一的子节点的页面ID
      */
     page_id_t remove_and_return_only_child() {
-        assert(get_size() == 1); // 断言当前节点只有一个键
-        page_id_t child_page_no = value_at(0); // 获取该键对应的子节点页面ID
-        erase_pair(0); // 删除该键值对
-        assert(get_size() == 0); // 断言删除后节点为空
+        assert(get_size() == 1);                // 断言当前节点只有一个键
+        page_id_t child_page_no = value_at(0);  // 获取该键对应的子节点页面ID
+        erase_pair(0);                          // 删除该键值对
+        assert(get_size() == 0);                // 断言删除后节点为空
         return child_page_no;
     }
 
@@ -264,7 +267,7 @@ class IxNodeHandle {
         for (rid_idx = 0; rid_idx < page_hdr->num_key; rid_idx++) {
             // 比较子节点的页面号是否与目标child节点的页面号匹配
             if (get_rid(rid_idx)->page_no == child->get_page_no()) {
-                break; // 找到匹配的子节点，跳出循环
+                break;  // 找到匹配的子节点，跳出循环
             }
         }
         // 断言确保找到了子节点 (即rid_idx在有效范围内)
@@ -289,8 +292,8 @@ class IxNodeHandle {
  * - 根节点管理
  */
 class IxIndexHandle {
-    friend class IxScan;    // 允许 IxScan 类访问 IxIndexHandle 的私有成员
-    friend class IxManager; // 允许 IxManager 类访问 IxIndexHandle 的私有成员
+    friend class IxScan;     // 允许 IxScan 类访问 IxIndexHandle 的私有成员
+    friend class IxManager;  // 允许 IxManager 类访问 IxIndexHandle 的私有成员
 
    private:
     /**
@@ -302,17 +305,17 @@ class IxIndexHandle {
      * - 页面2：根节点页面(初始化时)
      * - 页面3+：数据节点页面
      */
-    DiskManager *disk_manager_;              // 磁盘管理器，处理页面的物理读写
+    DiskManager *disk_manager_;               // 磁盘管理器，处理页面的物理读写
     BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，提供页面缓存
-    int fd_;                                 // 索引文件描述符
-    IxFileHdr* file_hdr_;                    // 索引文件头指针，包含：
-                                            // - 根页面号
-                                            // - 键值长度
-                                            // - B+树阶数
-                                            // - 页面数量等
-    std::mutex root_latch_;                  // 保护根节点的锁，用于：
-                                            // - 控制根节点的并发访问
-                                            // - 保护根节点的分裂和合并
+    int fd_;                                  // 索引文件描述符
+    IxFileHdr *file_hdr_;                     // 索引文件头指针，包含：
+                                              // - 根页面号
+                                              // - 键值长度
+                                              // - B+树阶数
+                                              // - 页面数量等
+    std::mutex root_latch_;                   // 保护根节点的锁，用于：
+                                              // - 控制根节点的并发访问
+                                              // - 保护根节点的分裂和合并
 
    public:
     /**
@@ -341,7 +344,7 @@ class IxIndexHandle {
      * @return pair<叶节点句柄, 根节点是否加锁>
      */
     std::pair<IxNodeHandle *, bool> find_leaf_page(const char *key, Operation operation, Transaction *transaction,
-                                                  bool find_first = false);
+                                                   bool find_first = false);
 
     /**
      * @brief 插入键值对
@@ -384,7 +387,7 @@ class IxIndexHandle {
      * @return 是否需要继续处理
      */
     bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr,
-                                 bool *root_is_latched = nullptr);
+                                  bool *root_is_latched = nullptr);
 
     /**
      * @brief 调整根节点
@@ -413,7 +416,7 @@ class IxIndexHandle {
      * @return 是否成功合并
      */
     bool coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index,
-                   Transaction *transaction, bool *root_is_latched);
+                  Transaction *transaction, bool *root_is_latched);
 
     /**
      * @brief 查找大于等于指定键的第一个位置
@@ -442,128 +445,128 @@ class IxIndexHandle {
     Iid leaf_begin() const;
 
    private:
-   //===== 树结构维护函数 =====
+    //===== 树结构维护函数 =====
 
-   /**
-    * @brief 更新文件头中的根页面号
-    * @param root 新的根页面号
-    *
-    * @note 在以下情况下调用：
-    * 1. 根节点分裂：创建新的根节点
-    * 2. 根节点合并：树高度降低
-    * 3. 初始化：创建第一个根节点
-    *
-    * @warning 必须在持有root_latch_的情况下调用
-    */
-   void update_root_page_no(page_id_t root) { file_hdr_->root_page_ = root; }
+    /**
+     * @brief 更新文件头中的根页面号
+     * @param root 新的根页面号
+     *
+     * @note 在以下情况下调用：
+     * 1. 根节点分裂：创建新的根节点
+     * 2. 根节点合并：树高度降低
+     * 3. 初始化：创建第一个根节点
+     *
+     * @warning 必须在持有root_latch_的情况下调用
+     */
+    void update_root_page_no(page_id_t root) { file_hdr_->root_page_ = root; }
 
-   /**
-    * @brief 检查B+树是否为空
-    * @return true 如果树为空，false 否则
-    *
-    * @note 空树的特征：
-    * 1. 根页面号为IX_NO_PAGE
-    * 2. 没有任何键值对
-    * 3. 只有头页面和叶子链表头页面
-    */
-   bool is_empty() const { return file_hdr_->root_page_ == IX_NO_PAGE; }
+    /**
+     * @brief 检查B+树是否为空
+     * @return true 如果树为空，false 否则
+     *
+     * @note 空树的特征：
+     * 1. 根页面号为IX_NO_PAGE
+     * 2. 没有任何键值对
+     * 3. 只有头页面和叶子链表头页面
+     */
+    bool is_empty() const { return file_hdr_->root_page_ == IX_NO_PAGE; }
 
-   //===== 节点管理函数 =====
+    //===== 节点管理函数 =====
 
-   /**
-    * @brief 获取指定页面的节点句柄
-    * @param page_no 页面号
-    * @return 节点句柄指针
-    *
-    * @details 获取过程：
-    * 1. 从缓冲池获取或加载页面
-    * 2. 构造节点句柄包装页面
-    * 3. 设置页面的固定计数
-    *
-    * @warning
-    * 1. 返回的节点必须通过release_node_handle释放
-    * 2. 可能触发缓冲池页面替换
-    */
-   IxNodeHandle *fetch_node(int page_no) const;
+    /**
+     * @brief 获取指定页面的节点句柄
+     * @param page_no 页面号
+     * @return 节点句柄指针
+     *
+     * @details 获取过程：
+     * 1. 从缓冲池获取或加载页面
+     * 2. 构造节点句柄包装页面
+     * 3. 设置页面的固定计数
+     *
+     * @warning
+     * 1. 返回的节点必须通过release_node_handle释放
+     * 2. 可能触发缓冲池页面替换
+     */
+    IxNodeHandle *fetch_node(int page_no) const;
 
-   /**
-    * @brief 创建新的B+树节点
-    * @return 新节点的句柄
-    *
-    * @details 创建过程：
-    * 1. 分配新页面
-    * 2. 初始化页面头部
-    * 3. 设置节点属性（如是否为叶节点）
-    * 4. 更新文件头中的页面计数
-    *
-    * @warning 必须正确初始化node_hdr和指针关系
-    */
-   IxNodeHandle *create_node();
+    /**
+     * @brief 创建新的B+树节点
+     * @return 新节点的句柄
+     *
+     * @details 创建过程：
+     * 1. 分配新页面
+     * 2. 初始化页面头部
+     * 3. 设置节点属性（如是否为叶节点）
+     * 4. 更新文件头中的页面计数
+     *
+     * @warning 必须正确初始化node_hdr和指针关系
+     */
+    IxNodeHandle *create_node();
 
-   //===== 树结构维护函数 =====
+    //===== 树结构维护函数 =====
 
-   /**
-    * @brief 维护节点的父指针
-    * @param node 要维护的节点
-    *
-    * @details 维护过程：
-    * 1. 遍历所有子节点
-    * 2. 更新每个子节点的父指针
-    * 3. 确保双向连接的一致性
-    *
-    * @note 在节点分裂、合并后调用
-    */
-   void maintain_parent(IxNodeHandle *node);
+    /**
+     * @brief 维护节点的父指针
+     * @param node 要维护的节点
+     *
+     * @details 维护过程：
+     * 1. 遍历所有子节点
+     * 2. 更新每个子节点的父指针
+     * 3. 确保双向连接的一致性
+     *
+     * @note 在节点分裂、合并后调用
+     */
+    void maintain_parent(IxNodeHandle *node);
 
-   /**
-    * @brief 从叶节点链表中删除节点
-    * @param leaf 要删除的叶节点
-    *
-    * @details 删除过程：
-    * 1. 更新前驱节点的next指针
-    * 2. 更新后继节点的prev指针
-    * 3. 维护叶节点链表的完整性
-    *
-    * @warning 必须正确维护双向链表结构
-    */
-   void erase_leaf(IxNodeHandle *leaf);
+    /**
+     * @brief 从叶节点链表中删除节点
+     * @param leaf 要删除的叶节点
+     *
+     * @details 删除过程：
+     * 1. 更新前驱节点的next指针
+     * 2. 更新后继节点的prev指针
+     * 3. 维护叶节点链表的完整性
+     *
+     * @warning 必须正确维护双向链表结构
+     */
+    void erase_leaf(IxNodeHandle *leaf);
 
-   /**
-    * @brief 释放节点句柄
-    * @param node 要释放的节点句柄
-    *
-    * @details 释放过程：
-    * 1. 减少页面的引用计数
-    * 2. 如果页面变脏，标记需要写回
-    * 3. 清理节点句柄的资源
-    *
-    * @note 所有通过fetch_node获取的节点都必须释放
-    */
-   void release_node_handle(IxNodeHandle &node);
+    /**
+     * @brief 释放节点句柄
+     * @param node 要释放的节点句柄
+     *
+     * @details 释放过程：
+     * 1. 减少页面的引用计数
+     * 2. 如果页面变脏，标记需要写回
+     * 3. 清理节点句柄的资源
+     *
+     * @note 所有通过fetch_node获取的节点都必须释放
+     */
+    void release_node_handle(IxNodeHandle &node);
 
-   /**
-    * @brief 维护父子节点关系
-    * @param node 父节点
-    * @param child_idx 子节点在父节点中的索引
-    *
-    * @details 维护过程：
-    * 1. 验证父子关系的有效性
-    * 2. 更新子节点的父指针
-    * 3. 确保索引项正确
-    *
-    * @warning 在节点移动、分裂后调用
-    */
-   void maintain_child(IxNodeHandle *node, int child_idx);
+    /**
+     * @brief 维护父子节点关系
+     * @param node 父节点
+     * @param child_idx 子节点在父节点中的索引
+     *
+     * @details 维护过程：
+     * 1. 验证父子关系的有效性
+     * 2. 更新子节点的父指针
+     * 3. 确保索引项正确
+     *
+     * @warning 在节点移动、分裂后调用
+     */
+    void maintain_child(IxNodeHandle *node, int child_idx);
 
-   //===== 测试辅助函数 =====
+    //===== 测试辅助函数 =====
 
-   /**
-    * @brief 获取索引项对应的记录ID
-    * @param iid 索引项ID(页号+槽号)
-    * @return 对应的记录ID
-    *
-    * @note 仅用于测试和调试
-    * @warning 必须确保iid有效
-    */
-   Rid get_rid(const Iid &iid) const;
+    /**
+     * @brief 获取索引项对应的记录ID
+     * @param iid 索引项ID(页号+槽号)
+     * @return 对应的记录ID
+     *
+     * @note 仅用于测试和调试
+     * @warning 必须确保iid有效
+     */
+    Rid get_rid(const Iid &iid) const;
 };

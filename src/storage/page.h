@@ -13,7 +13,16 @@ See the Mulan PSL v2 for more details. */
 #include "common/config.h"
 
 /**
- * @description: 存储层每个Page的id的声明
+ * @brief 页面标识符结构体
+ *
+ * @details 用于唯一标识一个页面：
+ * 1. fd：文件描述符，标识页面所在的物理文件
+ * 2. page_no：页号，标识文件内的具体页面
+ *
+ * @note 设计特点：
+ * 1. 支持比较操作，用于容器排序
+ * 2. 提供哈希函数，支持哈希表存储
+ * 3. 可序列化为字符串，便于调试
  */
 struct PageId {
     int fd;  //  Page所在的磁盘文件开启后的文件描述符, 来定位打开的文件在内存中的位置
@@ -30,7 +39,17 @@ struct PageId {
     inline int64_t Get() const { return (static_cast<int64_t>(fd << 16) | page_no); }
 };
 
-// PageId的自定义哈希算法, 用于构建unordered_map<PageId, frame_id_t, PageIdHash>
+/**
+ * @brief PageId的自定义哈希算法
+ *
+ * @details 实现方式：
+ * 1. 将fd左移16位与page_no组合
+ * 2. 生成唯一的哈希值
+ *
+ * @note 主要用于：
+ * 1. 构建unordered_map<PageId, frame_id_t>
+ * 2. 实现O(1)的页面查找
+ */
 struct PageIdHash {
     size_t operator()(const PageId &x) const { return (x.fd << 16) | x.page_no; }
 };
@@ -41,8 +60,30 @@ struct std::hash<PageId> {
 };
 
 /**
- * @description: Page类声明, Page是RMDB数据块的单位、是负责数据操作Record模块的操作对象，
- * Page对象在磁盘上有文件存储, 若在Buffer中则有帧偏移, 并非特指Buffer或Disk上的数据
+ * @brief 数据库的基本存储单元
+ *
+ * @details Page类的设计特点：
+ * 1. 存储管理
+ *    - 固定大小的数据块(PAGE_SIZE)
+ *    - 包含页面头部和数据区域
+ *    - 支持LSN(日志序列号)管理
+ *
+ * 2. 状态维护
+ *    - 脏页标记(is_dirty_)
+ *    - 引用计数(pin_count_)
+ *    - 页面ID管理
+ *
+ * 3. 内存布局
+ *    - OFFSET_PAGE_START: 页面起始位置
+ *    - OFFSET_LSN: LSN存储位置
+ *    - OFFSET_PAGE_HDR: 页面头部起始位置
+ *
+ * @note 重要说明：
+ * 1. Page对象可能同时存在于磁盘和缓冲池
+ * 2. 通过pin_count_控制页面驻留
+ * 3. 使用is_dirty_标记是否需要写回
+ *
+ * @thread_safety 线程安全由BufferPoolManager保证
  */
 class Page {
     friend class BufferPoolManager;

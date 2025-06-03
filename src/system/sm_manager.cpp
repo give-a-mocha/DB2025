@@ -35,9 +35,20 @@
 #include "record_printer.h"
 
 /**
- * @description: 判断是否为一个文件夹
- * @return {bool} 返回是否为一个文件夹
- * @param {string&} db_name 数据库文件名称，与文件夹同名
+ * @brief 判断指定路径是否为一个文件夹
+ *
+ * @param db_name 数据库文件名称
+ * @return true 如果是一个有效的文件夹
+ * @return false 如果不是文件夹或路径不存在
+ *
+ * @details 实现说明：
+ * 1. 使用stat系统调用获取文件信息
+ * 2. 检查文件类型标志是否为目录
+ *
+ * @note 用于：
+ * 1. 创建数据库前的检查
+ * 2. 打开数据库前的验证
+ * 3. 防止重复创建数据库
  */
 bool SmManager::is_dir(const std::string& db_name) {
     struct stat st;
@@ -45,8 +56,23 @@ bool SmManager::is_dir(const std::string& db_name) {
 }
 
 /**
- * @description: 创建数据库，所有的数据库相关文件都放在数据库同名文件夹下
- * @param {string&} db_name 数据库名称
+ * @brief 创建新的数据库
+ *
+ * @param db_name 数据库名称
+ * @throw DatabaseExistsError 如果数据库已存在
+ * @throw UnixError 如果文件系统操作失败
+ *
+ * @details 创建步骤：
+ * 1. 检查数据库是否已存在
+ * 2. 创建数据库目录
+ * 3. 初始化数据库元数据
+ * 4. 创建日志文件
+ * 5. 写入元数据文件
+ *
+ * @note 实现说明：
+ * 1. 所有数据库文件存放在同名目录下
+ * 2. 使用系统调用创建目录
+ * 3. 确保创建过程的原子性
  */
 void SmManager::create_db(const std::string& db_name) {
     if (is_dir(db_name)) {
@@ -82,8 +108,18 @@ void SmManager::create_db(const std::string& db_name) {
 }
 
 /**
- * @description: 删除数据库，同时需要清空相关文件以及数据库同名文件夹
- * @param {string&} db_name 数据库名称，与文件夹同名
+ * @brief 删除指定的数据库
+ *
+ * @param db_name 数据库名称
+ * @throw DatabaseNotFoundError 如果数据库不存在
+ * @throw UnixError 如果文件系统操作失败
+ *
+ * @details 删除步骤：
+ * 1. 验证数据库是否存在
+ * 2. 递归删除数据库目录及其内容
+ * 3. 清理相关系统资源
+ *
+ * @warning 该操作不可恢复，会删除所有数据
  */
 void SmManager::drop_db(const std::string& db_name) {
     if (!is_dir(db_name)) {

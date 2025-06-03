@@ -23,8 +23,10 @@ See the Mulan PSL v2 for more details. */
  * @param file_handle 要扫描的表文件句柄
  */
 RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
-    // Todo:
-    // !初始化file_handle和rid（指向第一个存放了记录的位置）
+    // 扫描器初始化步骤：
+    // 1. 保存要扫描的文件句柄指针
+    // 2. 将rid初始化指向第一个记录页
+    // 3. 调用next()移动到第一个有效记录位置
 
     rid_.page_no = RM_FIRST_RECORD_PAGE;  // 从第一个记录页开始
     rid_.slot_no = RM_NO_PAGE;            // 初始化为-1，next()会移动到第一个有效位置
@@ -45,8 +47,12 @@ RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
  * - 如果找不到有效记录，会将page_no设置为RM_NO_PAGE表示结束
  */
 void RmScan::next() {
-    // Todo:
-    // !找到文件中下一个存放了记录的非空闲位置，用rid_来指向这个位置
+    // 查找下一条记录的步骤：
+    // 1. 遍历文件中的所有页面
+    // 2. 在每个页面中使用位图查找已使用的槽位
+    // 3. 找到后更新rid_指向该位置
+    // 4. 如果当前页面搜索完毕则转到下一页
+    // 5. 如果所有页面都搜索完则将page_no设为无效值
 
     while (rid_.page_no < file_handle_->file_hdr_.num_pages) {
         // 获取当前页面句柄
