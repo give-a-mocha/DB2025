@@ -62,7 +62,7 @@ class UpdateExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     UpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                    std::vector<Condition> conds, std::vector<Rid> rids, Context *context) {
+                   std::vector<Condition> conds, std::vector<Rid> rids, Context *context) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = set_clauses;

@@ -45,17 +45,17 @@ class IndexScanExecutor : public AbstractExecutor {
     SmManager *sm_manager_;
 
    public:
-   /**
-    * @brief 构造函数
-    *
-    * 初始化索引扫描执行器，设置扫描参数和打开必要的文件句柄
-    *
-    * @param sm_manager 系统管理器指针
-    * @param tab_name 要扫描的表名
-    * @param conds 扫描条件
-    * @param index_col_names 索引涉及的列名
-    * @param context 执行上下文
-    */
+    /**
+     * @brief 构造函数
+     *
+     * 初始化索引扫描执行器，设置扫描参数和打开必要的文件句柄
+     *
+     * @param sm_manager 系统管理器指针
+     * @param tab_name 要扫描的表名
+     * @param conds 扫描条件
+     * @param index_col_names 索引涉及的列名
+     * @param context 执行上下文
+     */
     IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
                       std::vector<std::string> index_col_names, Context *context) {
         sm_manager_ = sm_manager;

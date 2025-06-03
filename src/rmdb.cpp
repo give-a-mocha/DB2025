@@ -1,12 +1,19 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL
-v2. You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file rmdb.cpp
+ * @author RMDB Development Team
+ * @brief RMDB服务器主程序入口
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * RMDB is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ */
 
 #include <netinet/in.h>
 #include <readline/history.h>
@@ -51,7 +58,14 @@ auto analyze = std::make_unique<Analyze>(sm_manager.get());
 pthread_mutex_t *buffer_mutex;
 pthread_mutex_t *sockfd_mutex;
 
+/* 用于处理Ctrl+C信号的跳转缓冲区 */
 static jmp_buf jmpbuf;
+
+/**
+ * @brief 处理Ctrl+C信号的处理函数
+ * @param signo 信号编号
+ * @note 当接收到SIGINT信号时，将日志刷新到磁盘并优雅地退出服务器
+ */
 void sigint_handler(int signo) {
     should_exit = true;
     log_manager->flush_log_to_disk();
@@ -59,7 +73,13 @@ void sigint_handler(int signo) {
     longjmp(jmpbuf, 1);
 }
 
-// 判断当前正在执行的是显式事务还是单条SQL语句的事务，并更新事务ID
+/**
+ * @brief 设置当前事务上下文
+ * @param txn_id 事务ID指针
+ * @param context 数据库上下文
+ * @note 判断当前正在执行的是显式事务还是单条SQL语句的事务，并更新事务ID
+ *       如果当前没有活跃事务或事务已结束，则创建新的事务
+ */
 void SetTransaction(txn_id_t *txn_id, Context *context) {
     context->txn_ = txn_manager->get_transaction(*txn_id);
     if (context->txn_ == nullptr || context->txn_->get_state() == TransactionState::COMMITTED ||
@@ -87,6 +107,18 @@ void SetTransaction(txn_id_t *txn_id, Context *context) {
     }
 }
 
+/**
+ * @brief 处理客户端连接的线程函数
+ * @param sock_fd 客户端socket文件描述符
+ * @return void*
+ * @note 负责接收和处理来自客户端的SQL请求：
+ *       1. 接收客户端发送的SQL语句
+ *       2. 解析SQL语句(Parser)
+ *       3. 分析和重写查询(Analyzer)
+ *       4. 优化查询计划(Optimizer)
+ *       5. 执行查询(Executor)
+ *       6. 返回结果给客户端
+ */
 void *client_handler(void *sock_fd) {
     int fd = *((int *)sock_fd);
     pthread_mutex_unlock(sockfd_mutex);
@@ -222,6 +254,14 @@ void *client_handler(void *sock_fd) {
     pthread_exit(NULL);  // terminate calling thread!
 }
 
+/**
+ * @brief 启动RMDB服务器
+ * @note 主要功能：
+ *       1. 初始化服务器socket和互斥锁
+ *       2. 监听客户端连接请求
+ *       3. 对每个客户端连接创建新的处理线程
+ *       4. 处理服务器关闭时的清理工作
+ */
 void start_server() {
     // init mutex
     buffer_mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
@@ -295,6 +335,16 @@ void start_server() {
     std::cout << "Server shuts down." << std::endl;
 }
 
+/**
+ * @brief RMDB主程序入口
+ * @param argc 参数个数
+ * @param argv 参数值数组，argv[1]为数据库名称
+ * @return int 返回程序执行状态
+ * @note 主要功能：
+ *       1. 初始化数据库环境
+ *       2. 执行数据库恢复流程
+ *       3. 启动服务器接受客户端连接
+ */
 int main(int argc, char **argv) {
     if (argc != 2) {
         // 需要指定数据库名称

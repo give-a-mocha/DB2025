@@ -1,12 +1,27 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL
-v2. You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file sm_manager.cpp
+ * @author RMDB Development Team
+ * @brief 系统管理器实现
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * 系统管理器是数据库的核心组件，负责：
+ * 1. 物理文件组织：
+ *    - 数据库目录结构管理
+ *    - 表文件和索引文件的创建与删除
+ * 2. 元数据管理：
+ *    - 维护数据字典
+ *    - 管理表的定义、索引信息
+ * 3. DDL语句执行：
+ *    - CREATE/DROP DATABASE/TABLE/INDEX
+ *    - SHOW/DESC TABLE
+ * 4. 系统恢复：
+ *    - 数据库启动时的元数据加载
+ *    - 故障恢复时的系统状态重建
+ */
 
 #include "sm_manager.h"
 
@@ -299,30 +314,43 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
  * @throw TableExistsError 如果表已经存在
  */
 void SmManager::create_table(const std::string& tab_name, const std::vector<ColDef>& col_defs, Context* context) {
+    // 1. 检查表是否已存在
     if (db_.is_table(tab_name)) {
         throw TableExistsError(tab_name);
     }
-    // Create table meta
-    int curr_offset = 0;
+
+    // 2. 创建表元数据
+    int curr_offset = 0;  // 记录每个字段在记录中的偏移量
     TabMeta tab;
     tab.name = tab_name;
+
+    // 3. 构建列的元数据
     for (auto& col_def : col_defs) {
-        ColMeta col = {.tab_name = tab_name,
-                       .name = col_def.name,
-                       .type = col_def.type,
-                       .len = col_def.len,
-                       .offset = curr_offset,
-                       .index = false};
-        curr_offset += col_def.len;
-        tab.cols.push_back(col);
+        // 创建列元数据对象
+        ColMeta col = {
+            .tab_name = tab_name,   // 表名
+            .name = col_def.name,   // 列名
+            .type = col_def.type,   // 数据类型
+            .len = col_def.len,     // 字段长度
+            .offset = curr_offset,  // 在记录中的偏移量
+            .index = false          // 初始无索引
+        };
+        curr_offset += col_def.len;  // 更新偏移量
+        tab.cols.push_back(col);     // 添加到表的列集合
     }
-    // Create & open record file
-    int record_size = curr_offset;  // record_size就是col meta所占的大小（表的元数据也是以记录的形式进行存储的）
+
+    // 4. 创建表的物理文件
+    // record_size表示每条记录的大小，等于所有字段长度之和
+    int record_size = curr_offset;
     rm_manager_->create_file(tab_name, record_size);
+
+    // 5. 更新数据库元数据
     db_.tabs_[tab_name] = tab;
-    // fhs_[tab_name] = rm_manager_->open_file(tab_name);
+
+    // 6. 打开表文件，创建文件句柄
     fhs_.emplace(tab_name, rm_manager_->open_file(tab_name));
 
+    // 7. 持久化元数据变更
     flush_meta();
 }
 
@@ -343,36 +371,40 @@ void SmManager::create_table(const std::string& tab_name, const std::vector<ColD
  * @throw TableNotFoundError 如果表不存在
  */
 void SmManager::drop_table(const std::string& tab_name, Context* context) {
-    //! DO
-    // 检查表是否存在
+    // 1. 验证表是否存在，不存在则抛出异常
     if (!db_.is_table(tab_name)) {
         throw TableNotFoundError(tab_name);
     }
 
+    // 2. 获取表的排他锁，确保当前没有其他事务在访问该表
     if (context != nullptr) {
         context->lock_mgr_->lock_exclusive_on_table(context->txn_, fhs_[tab_name]->GetFd());
     }
 
-    // 获取表元数据
+    // 3. 获取表元数据
     TabMeta& tab_meta = db_.get_table(tab_name);
 
-    // 删除表的所有索引
+    // 4. 删除表的所有索引文件
     for (auto& index : tab_meta.indexes) {
+        // 递归调用删除索引的函数
         drop_index(tab_name, index.cols, context);
     }
 
-    // 关闭并删除表文件
+    // 5. 关闭表文件并清理资源
     if (fhs_.count(tab_name)) {
+        // 关闭文件并清理缓冲池中的相关页面
         rm_manager_->close_file_and_clear_buffer(fhs_[tab_name].get());
+        // 从文件句柄映射中移除
         fhs_.erase(tab_name);
     }
 
+    // 6. 删除表的物理文件
     rm_manager_->destroy_file(tab_name);
 
-    // 从数据库元数据中删除表
+    // 7. 更新数据库元数据
     db_.tabs_.erase(tab_name);
 
-    // 刷新元数据到磁盘
+    // 8. 持久化元数据变更
     flush_meta();
 }
 
@@ -394,44 +426,71 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
  * @throw IndexExistsError 如果索引已存在
  */
 void SmManager::create_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
-    //! DO
+    // 1. 获取表的元数据并验证
     TabMeta& tab = db_.get_table(tab_name);
-    // 检查索引是否已经物理存在 (基于文件名)
+
+    // 2. 检查索引是否已存在
     if (ix_manager_->exists(tab_name, col_names)) {
         throw IndexExistsError(tab_name, col_names);
     }
+
+    // 3. 获取索引列的元数据
     std::vector<ColMeta> cols(col_names.size());
-    int tot_col_len = 0;
+    int tot_col_len = 0;  // 索引键的总长度
     for (int i = 0; i < col_names.size(); ++i) {
         auto col_name = col_names[i];
-        cols[i] = (*tab.get_col(col_name));
-        tot_col_len += cols[i].len;
+        cols[i] = (*tab.get_col(col_name));  // 获取列的元数据
+        tot_col_len += cols[i].len;          // 累加列长度
     }
-    auto fh_ = fhs_[tab_name].get();
-    ix_manager_->create_index(tab_name, cols);
-    auto ih_ = ix_manager_->open_index(tab_name, cols);
-    std::vector<char> key_buffer(tot_col_len);
+
+    // 4. 创建和打开索引文件
+    auto fh_ = fhs_[tab_name].get();                     // 获取表的文件句柄
+    ix_manager_->create_index(tab_name, cols);           // 创建索引文件
+    auto ih_ = ix_manager_->open_index(tab_name, cols);  // 打开索引文件
+
+    // 5. 为索引键分配缓冲区
+    std::vector<char> key_buffer(tot_col_len);  // 存储组合索引键的缓冲区
     char* key = key_buffer.data();
-    // 插入B+树，扫描所有的记录
+
+    // 6. 扫描表中所有记录，构建B+树索引
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
+        // 获取记录数据
         auto record = fh_->get_record(rmScan.rid(), context);
+
+        // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
+            // 从记录中复制对应列的数据到索引键缓冲区
             std::memcpy(key + offset, record.get()->data + col.offset, col.len);
             offset += col.len;
         }
-        // 要求该键是唯一索引
+
+        // 将键值对插入B+树
+        // 键：索引列值的组合
+        // 值：记录的RID
         auto res = ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
+
+        // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (res == INVALID_PAGE_ID) {
             drop_index(tab_name, col_names, context);
             return;
         }
     }
 
+    // 7. 更新内存中的索引信息
     auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
-    ihs_.emplace(index_name, std::move(ih_));
-    IndexMeta indexMeta = {tab_name, tot_col_len, static_cast<int>(cols.size()), cols};
+    ihs_.emplace(index_name, std::move(ih_));  // 保存索引句柄
+
+    // 8. 更新表的元数据
+    IndexMeta indexMeta = {
+        tab_name,                       // 表名
+        tot_col_len,                    // 索引键总长度
+        static_cast<int>(cols.size()),  // 索引列数
+        cols                            // 索引列元数据
+    };
     tab.indexes.emplace_back(indexMeta);
+
+    // 9. 持久化元数据变更
     flush_meta();
 }
 

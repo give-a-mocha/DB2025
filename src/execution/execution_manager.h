@@ -16,15 +16,15 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/common.h"
+#include "common/context.h"
 #include "execution_defs.h"
+#include "executor_abstract.h"
+#include "optimizer/plan.h"
+#include "optimizer/planner.h"
 #include "record/rm.h"
 #include "system/sm.h"
-#include "common/context.h"
-#include "common/common.h"
-#include "optimizer/plan.h"
-#include "executor_abstract.h"
 #include "transaction/transaction_manager.h"
-#include "optimizer/planner.h"
 
 class Planner;
 
@@ -44,9 +44,9 @@ class Planner;
  */
 class QlManager {
    private:
-    SmManager *sm_manager_;          // 系统管理器指针
-    TransactionManager *txn_mgr_;    // 事务管理器指针
-    Planner *planner_;               // 查询计划器指针
+    SmManager *sm_manager_;        // 系统管理器指针
+    TransactionManager *txn_mgr_;  // 事务管理器指针
+    Planner *planner_;             // 查询计划器指针
 
    public:
     /**
@@ -55,8 +55,8 @@ class QlManager {
      * @param txn_mgr 事务管理器指针
      * @param planner 查询计划器指针
      */
-    QlManager(SmManager *sm_manager, TransactionManager *txn_mgr, Planner *planner) 
-        : sm_manager_(sm_manager),  txn_mgr_(txn_mgr), planner_(planner) {}
+    QlManager(SmManager *sm_manager, TransactionManager *txn_mgr, Planner *planner)
+        : sm_manager_(sm_manager), txn_mgr_(txn_mgr), planner_(planner) {}
 
     /**
      * @brief 执行多查询操作
@@ -80,7 +80,7 @@ class QlManager {
      * @param context 执行上下文
      */
     void select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
-                        Context *context);
+                     Context *context);
 
     /**
      * @brief 执行DML操作(INSERT/UPDATE/DELETE)
@@ -94,5 +94,6 @@ class QlManager {
      * @param sel_cols 选择的列
      * @param context 执行上下文
      */
-    void run_explain(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols, Context *context);
+    void run_explain(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
+                     Context *context);
 };

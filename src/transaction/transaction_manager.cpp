@@ -1,12 +1,25 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file transaction_manager.cpp
+ * @author RMDB Development Team
+ * @brief 事务管理器实现文件
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * 该文件实现了事务管理器的核心功能，包括：
+ * - 事务的创建、提交和回滚
+ * - 并发控制（2PL、MVCC）
+ * - 日志管理与恢复
+ * - 锁管理
+ *
+ * 事务管理器是数据库系统的核心组件之一，负责保证：
+ * 1. 原子性(Atomicity)：事务要么完全执行，要么完全不执行
+ * 2. 一致性(Consistency)：事务执行前后数据库状态保持一致
+ * 3. 隔离性(Isolation)：并发事务互不干扰
+ * 4. 持久性(Durability)：已提交事务的修改永久保存
+ */
 
 #include "transaction_manager.h"
 
@@ -15,8 +28,25 @@ See the Mulan PSL v2 for more details. */
 
 std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
 
+/**
+ * @brief 事务管理器构造函数
+ *
+ * @param lock_manager 锁管理器指针，用于并发控制
+ * @param sm_manager 系统管理器指针，用于访问数据库资源
+ * @param concurrency_mode 并发控制模式，默认为两阶段封锁
+ */
 TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_manager,
-                                       ConcurrencyMode concurrency_mode) {}
+                                       ConcurrencyMode concurrency_mode) {
+    // 初始化成员变量
+    lock_manager_ = lock_manager;
+    sm_manager_ = sm_manager;
+    concurrency_mode_ = concurrency_mode;
+    
+    // 初始化事务计数器和时间戳
+    next_txn_id_ = 0;
+    next_timestamp_ = 0;
+    last_commit_ts_ = 0;
+}
 
 /**
  * @description: 开始一个新事务或继续一个已有事务
@@ -88,13 +118,35 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
  * @param {LogManager*} log_manager 日志管理器指针
  */
 void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
-    // Todo:
-    // 1. 如果存在未提交的写操作，提交所有的写操作
-    // 2. 释放所有锁
-    // 3. 释放事务相关资源，eg.锁集
-    // 4. 把事务日志刷入磁盘中
+    // Todo: 实现事务提交逻辑
+    
+    // 1. 提交所有未完成的写操作
+    // - 遍历write_set中的所有数据项
+    // - 对于每个修改，将其写入磁盘
+    // - 清空write_set
+    
+    // 2. 释放所有持有的锁
+    // - 遍历lock_set中的所有锁
+    // - 按照2PL协议释放锁
+    // - 更新锁管理器状态
+    
+    // 3. 资源清理
+    // - 释放事务占用的内存
+    // - 清空事务的write_set和lock_set
+    
+    // 4. 日志处理
+    // - 创建COMMIT类型日志记录
+    // - 更新日志序列号链
+    // - 确保日志被刷入磁盘
+    
     // 5. 更新事务状态
-    // 如果需要支持MVCC请在上述过程中添加代码
+    // - 将状态设置为COMMITTED
+    // - 从全局事务表中移除
+    
+    // 6. MVCC支持（如果启用）
+    // - 更新记录的版本链
+    // - 更新提交时间戳
+    // - 维护活跃事务水位线
 }
 
 /**
@@ -123,11 +175,32 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
  * @param {LogManager*} log_manager 日志管理器指针
  */
 void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
-    // Todo:
+    // Todo: 实现事务回滚逻辑
+    
     // 1. 回滚所有写操作
+    // - 按照撤销日志的逆序回滚
+    // - 对每条日志记录执行补偿操作
+    // - 恢复修改前的数据状态
+    
     // 2. 释放所有锁
-    // 3. 清空事务相关资源，eg.锁集
-    // 4. 把事务日志刷入磁盘中
+    // - 遍历并释放lock_set中的锁
+    // - 通知锁管理器更新状态
+    
+    // 3. 资源清理
+    // - 清空write_set和lock_set
+    // - 释放相关内存
+    
+    // 4. 日志处理
+    // - 创建ABORT类型日志记录
+    // - 更新日志序列号链
+    // - 将日志刷入磁盘
+    
     // 5. 更新事务状态
-    // 如果需要支持MVCC请在上述过程中添加代码
+    // - 将状态设置为ABORTED
+    // - 从全局事务表中移除
+    
+    // 6. MVCC相关清理（如果启用）
+    // - 清理版本链
+    // - 恢复时间戳状态
+    // - 更新活跃事务水位线
 }

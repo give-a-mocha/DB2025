@@ -26,12 +26,27 @@ See the Mulan PSL v2 for more details. */
 /**
  * @brief 并发控制算法的枚举类型
  *
- * 系统支持多种并发控制算法：
- * - 两阶段封锁(2PL)
- * - 基本时间戳排序(BASIC_TO)
- * - 多版本并发控制(MVCC)
+ * 系统支持以下并发控制算法：
+ * TWO_PHASE_LOCKING: 两阶段封锁协议
+ * - 增长阶段：事务只能获取锁，不能释放锁
+ * - 缩减阶段：事务只能释放锁，不能获取锁
+ * - 保证可串行化
+ *
+ * BASIC_TO: 基本时间戳排序
+ * - 使用时间戳确定事务执行顺序
+ * - 较早的时间戳优先执行
+ * - 检测读写冲突
+ *
+ * MVCC: 多版本并发控制
+ * - 为数据维护多个版本
+ * - 读操作不阻塞写操作
+ * - 支持快照隔离
  */
-enum class ConcurrencyMode { TWO_PHASE_LOCKING = 0, BASIC_TO, MVCC };
+enum class ConcurrencyMode {
+    TWO_PHASE_LOCKING = 0,  // 两阶段封锁协议
+    BASIC_TO,               // 基本时间戳排序
+    MVCC                    // 多版本并发控制
+};
 
 /**
  * @brief 版本链接结构，用于MVCC实现
@@ -43,8 +58,12 @@ enum class ConcurrencyMode { TWO_PHASE_LOCKING = 0, BASIC_TO, MVCC };
  * - 实现快照隔离
  */
 struct VersionUndoLink {
-    UndoLink prev_;            // 指向前一个版本的链接
-    bool in_progress_{false};  // 标记该版本是否正在被修改
+    UndoLink prev_;            // 指向记录前一个版本的撤销日志链接
+                              // 用于构建版本链，支持MVCC和事务回滚
+    
+    bool in_progress_{false};  // 版本状态标记
+                              // true: 该版本正在被某个事务修改
+                              // false: 该版本是稳定的
 
     friend auto operator==(const VersionUndoLink &a, const VersionUndoLink &b) {
         return a.prev_ == b.prev_ && a.in_progress_ == b.in_progress_;
@@ -192,14 +211,33 @@ class TransactionManager {
     std::unordered_map<page_id_t, std::shared_ptr<PageVersionInfo>> version_info_;
 
    private:
-    ConcurrencyMode concurrency_mode_;            // 当前使用的并发控制模式
-    std::atomic<txn_id_t> next_txn_id_{0};        // 事务ID生成器
-    std::atomic<timestamp_t> next_timestamp_{0};  // 事务时间戳生成器
-    std::mutex latch_;                            // 保护事务相关数据结构的互斥锁
-    SmManager *sm_manager_;                       // 系统管理器指针
-    LockManager *lock_manager_;                   // 锁管理器指针
+    /** @brief 当前使用的并发控制模式，决定使用哪种并发控制策略 */
+    ConcurrencyMode concurrency_mode_;
+    
+    /** @brief 事务ID生成器，保证每个事务有唯一的ID
+     *  使用atomic保证多线程下的原子递增 */
+    std::atomic<txn_id_t> next_txn_id_{0};
+    
+    /** @brief 事务时间戳生成器，用于MVCC和时间戳排序
+     *  使用atomic保证多线程下的原子递增 */
+    std::atomic<timestamp_t> next_timestamp_{0};
+    
+    /** @brief 保护事务相关数据结构的互斥锁
+     *  用于保护事务表等共享数据结构的并发访问 */
+    std::mutex latch_;
+    
+    /** @brief 系统管理器指针，用于访问表、索引等系统资源 */
+    SmManager *sm_manager_;
+    
+    /** @brief 锁管理器指针，用于实现2PL等基于锁的并发控制 */
+    LockManager *lock_manager_;
 
-    // MVCC相关成员
-    std::atomic<timestamp_t> last_commit_ts_{0};  // 最近提交事务的时间戳
-    Watermark running_txns_{0};                   // 活跃事务的时间水位线，用于垃圾回收
+    /** @brief MVCC相关成员 */
+    /** @brief 最近提交事务的时间戳，用于实现快照隔离 */
+    std::atomic<timestamp_t> last_commit_ts_{0};
+    
+    /** @brief 活跃事务的时间水位线
+     *  用于垃圾回收：低于水位线的版本可以安全删除
+     *  因为它们不会再被任何活跃事务访问 */
+    Watermark running_txns_{0};
 };

@@ -1,12 +1,28 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file ix_manager.h
+ * @author RMDB Development Team
+ * @brief 索引管理器的实现
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * 索引管理器负责B+树索引的创建和维护：
+ * 1. 物理存储结构
+ *    - 文件头页：存储B+树的元数据
+ *    - 叶子链表头页：管理所有叶子节点
+ *    - 数据页：存储B+树节点
+ *
+ * 2. B+树特性
+ *    - 所有叶子节点通过双向链表连接
+ *    - 支持联合索引(多列索引)
+ *    - 动态计算B+树的阶数
+ *
+ * 3. 并发控制
+ *    - 支持事务的隔离性
+ *    - 提供加锁和解锁接口
+ */
 
 #pragma once
 
@@ -17,18 +33,44 @@ See the Mulan PSL v2 for more details. */
 #include "ix_defs.h"
 #include "ix_index_handle.h"
 
+/**
+ * @brief 索引管理器类
+ *
+ * 提供了索引的创建、打开、关闭等操作：
+ * 1. 文件管理
+ *    - 创建索引文件
+ *    - 删除索引文件
+ *    - 打开/关闭索引文件
+ *
+ * 2. 文件组织
+ *    - 维护文件头信息
+ *    - 管理页面分配
+ *    - 处理文件格式
+ *
+ * 3. 缓冲管理
+ *    - 协调内存与磁盘交互
+ *    - 处理页面固定和解固定
+ */
 class IxManager {
    private:
-    DiskManager *disk_manager_;
-    BufferPoolManager *buffer_pool_manager_;
+    DiskManager *disk_manager_;            // 磁盘管理器
+    BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器
 
    public:
     IxManager(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager)
         : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager) {}
 
-    /*
-    * @description: 获取索引文件名通过表名和索引列
-    */
+    /**
+     * @brief 生成索引文件名
+     * @param filename 表名
+     * @param index_cols 索引列名数组
+     * @return 索引文件名(格式：表名_列名1_列名2_..._列名n.idx)
+     *
+     * @note 文件命名约定：
+     * 1. 使用下划线连接表名和列名
+     * 2. 以.idx作为文件扩展名
+     * 3. 支持多列联合索引
+     */
     std::string get_index_name(const std::string &filename, const std::vector<std::string>& index_cols) {
         std::string index_name = filename;
         for(size_t i = 0; i < index_cols.size(); ++i) 
@@ -65,9 +107,31 @@ class IxManager {
         return disk_manager_->is_file(ix_name);
     }
 
-    /*
-    * @description: 创建索引文件
-    */
+    /**
+     * @brief 创建索引文件
+     * @param filename 表名
+     * @param index_cols 索引列元数据数组
+     * @throw InvalidColLengthError 如果索引键太长
+     *
+     * @details 创建过程：
+     * 1. 计算B+树参数
+     *    - 计算索引键的总长度
+     *    - 动态确定B+树的阶数
+     *    - 验证长度限制
+     *
+     * 2. 初始化文件结构
+     *    - 创建并写入文件头
+     *    - 初始化叶子链表头页
+     *    - 创建根节点页面
+     *
+     * 3. 页面布局(按页号)：
+     *    - 页面0：文件头
+     *    - 页面1：叶子链表头
+     *    - 页面2：根节点
+     *
+     * @note B+树阶数计算公式：
+     * (页面大小 - 页面头大小) = (键长 + RID大小) * (阶数 + 1)
+     */
     void create_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         // 创建索引文件
@@ -161,7 +225,19 @@ class IxManager {
         disk_manager_->destroy_file(index_name);
     }
 
-    // 注意这里打开文件，创建并返回了index file handle的指针
+    /**
+     * @brief 打开索引文件并创建索引句柄
+     * @param filename 表名
+     * @param index_cols 索引列元数据
+     * @return 索引句柄的智能指针
+     *
+     * @note 索引句柄的作用：
+     * 1. 提供B+树的操作接口
+     * 2. 维护文件的打开状态
+     * 3. 管理内存中的索引页面
+     *
+     * @warning 使用完索引后必须调用close_index关闭
+     */
     std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<ColMeta>& index_cols) {
         
         std::string ix_name = get_index_name(filename, index_cols);
@@ -175,6 +251,18 @@ class IxManager {
         return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
     }
 
+    /**
+     * @brief 关闭索引文件
+     * @param ih 要关闭的索引句柄
+     *
+     * @details 关闭过程：
+     * 1. 将文件头信息序列化到磁盘
+     * 2. 刷新所有脏页
+     * 3. 关闭文件描述符
+     * 4. 清理内存资源
+     *
+     * @warning 关闭后不能再使用该索引句柄
+     */
     void close_index(const IxIndexHandle *ih) {
         char* data = new char[ih->file_hdr_->tot_len_];
         ih->file_hdr_->serialize(data);
@@ -185,6 +273,17 @@ class IxManager {
         delete[] data;
     }
 
+    /**
+     * @brief 删除索引
+     * @param ih 要删除的索引句柄
+     *
+     * @details 删除过程：
+     * 1. 从缓冲池中移除所有相关页面
+     * 2. 关闭文件描述符
+     *
+     * @note 这是一个底层操作，通常通过destroy_index调用
+     * @warning 确保没有其他事务正在使用该索引
+     */
     void drop_index(const IxIndexHandle *ih) {
         buffer_pool_manager_->delete_all_pages(ih->fd_);
         disk_manager_->close_file(ih->fd_);

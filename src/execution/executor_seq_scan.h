@@ -38,9 +38,9 @@ class SeqScanExecutor : public AbstractExecutor {
     size_t len_;                        // 输出记录的总长度
     std::vector<Condition> fed_conds_;  // 传递给条件评估器的条件
 
-    Rid rid_;                           // 当前记录的RID
-    std::unique_ptr<RecScan> scan_;    // 表扫描迭代器
-    SmManager *sm_manager_;             // 系统管理器指针
+    Rid rid_;                        // 当前记录的RID
+    std::unique_ptr<RecScan> scan_;  // 表扫描迭代器
+    SmManager *sm_manager_;          // 系统管理器指针
 
    public:
     /**

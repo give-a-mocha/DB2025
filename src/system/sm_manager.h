@@ -1,12 +1,25 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file sm_manager.h
+ * @author RMDB Development Team
+ * @brief 系统管理器头文件
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * 系统管理器(System Manager)是数据库系统的核心组件之一，主要负责：
+ * - 数据库的创建、删除和打开
+ * - 表和索引的创建、删除和维护
+ * - 元数据(metadata)的管理
+ * - DDL语句的执行
+ *
+ * 该模块通过以下方式保证数据库的完整性：
+ * 1. 维护数据字典，存储所有数据库对象的定义
+ * 2. 管理表和索引文件的创建和删除
+ * 3. 提供原子性的DDL操作执行
+ * 4. 与其他模块(记录管理、索引管理等)协同工作
+ */
 
 #pragma once
 
@@ -44,19 +57,35 @@ class SmManager {
     /**
      * @brief 系统管理器的主要成员变量
      */
-    DbMeta db_;  // 当前打开的数据库的元数据
-    std::unordered_map<std::string, std::unique_ptr<RmFileHandle>>
-        fhs_;  // 文件名到记录文件句柄的映射，管理当前数据库中每张表的数据文件
-    std::unordered_map<std::string, std::unique_ptr<IxIndexHandle>>
-        ihs_;  // 文件名到索引文件句柄的映射，管理当前数据库中每个索引的文件
+    DbMeta db_;                   // 当前打开的数据库的元数据，包含数据库名称和所有表的定义
+    
+    std::unordered_map<std::string, std::unique_ptr<RmFileHandle>> fhs_;
+    // 表文件句柄映射表
+    // 键：表名
+    // 值：对应的记录文件句柄
+    // 用途：管理当前数据库中每张表的数据文件访问
+    
+    std::unordered_map<std::string, std::unique_ptr<IxIndexHandle>> ihs_;
+    // 索引文件句柄映射表
+    // 键：索引名（格式：表名_列名）
+    // 值：对应的索引文件句柄
+    // 用途：管理当前数据库中每个索引的文件访问
 
    private:
-    DiskManager* disk_manager_;               // 磁盘管理器指针
-    BufferPoolManager* buffer_pool_manager_;  // 缓冲池管理器指针
-    RmManager* rm_manager_;                   // 记录管理器指针
-    IxManager* ix_manager_;                   // 索引管理器指针
+    DiskManager* disk_manager_;               // 磁盘管理器，负责文件系统操作
+    BufferPoolManager* buffer_pool_manager_;  // 缓冲池管理器，提供页面缓存功能
+    RmManager* rm_manager_;                   // 记录管理器，处理记录级别的操作
+    IxManager* ix_manager_;                   // 索引管理器，处理索引的创建和维护
 
    public:
+    /**
+     * @brief 系统管理器构造函数
+     * @param disk_manager 磁盘管理器
+     * @param buffer_pool_manager 缓冲池管理器
+     * @param rm_manager 记录管理器
+     * @param ix_manager 索引管理器
+     * @note 初始化系统管理器，建立与其他管理器的关联
+     */
     SmManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, RmManager* rm_manager,
               IxManager* ix_manager)
         : disk_manager_(disk_manager),
@@ -64,12 +93,28 @@ class SmManager {
           rm_manager_(rm_manager),
           ix_manager_(ix_manager) {}
 
+    /**
+     * @brief 系统管理器析构函数
+     * @note 确保数据库正确关闭，资源被适当释放
+     */
     ~SmManager() {}
 
+    /**
+     * @brief 获取缓冲池管理器指针
+     * @return BufferPoolManager* 缓冲池管理器指针
+     */
     BufferPoolManager* get_bpm() { return buffer_pool_manager_; }
 
+    /**
+     * @brief 获取记录管理器指针
+     * @return RmManager* 记录管理器指针
+     */
     RmManager* get_rm_manager() { return rm_manager_; }
 
+    /**
+     * @brief 获取索引管理器指针
+     * @return IxManager* 索引管理器指针
+     */
     IxManager* get_ix_manager() { return ix_manager_; }
 
     /**

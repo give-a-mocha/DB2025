@@ -1,12 +1,34 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file ix_index_handle.h
+ * @author RMDB Development Team
+ * @brief B+树索引实现
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * B+树索引的特性：
+ * 1. 物理存储
+ *    - 所有节点都是一个页面
+ *    - 页内数据紧凑存储，无空隙
+ *    - 支持变长键值(通过文件头指定长度)
+ *
+ * 2. 逻辑结构
+ *    - 所有数据都存储在叶节点
+ *    - 内部节点仅存储键值和子节点指针
+ *    - 叶节点通过双向链表连接
+ *
+ * 3. 并发控制
+ *    - 支持基于锁的并发控制
+ *    - 提供意向锁和行级锁
+ *    - 采用B-link tree优化
+ *
+ * 4. 性能优化
+ *    - 动态计算B+树的阶数
+ *    - 支持批量操作
+ *    - 延迟合并和预分裂
+ */
 
 #pragma once
 
@@ -16,15 +38,35 @@ See the Mulan PSL v2 for more details. */
 /**
  * @brief 索引操作的类型枚举
  *
- * 用于指定对B+树进行的操作类型，主要用于并发控制时的锁定策略
+ * 该枚举用于指定对B+树的操作类型，影响：
+ * 1. 并发控制策略
+ *    - FIND: 使用共享锁，允许并发读
+ *    - INSERT: 使用排他锁，防止并发修改
+ *    - DELETE: 使用排他锁，可能触发节点合并
+ *
+ * 2. 加锁顺序
+ *    - FIND: 自顶向下加锁，访问后立即释放
+ *    - INSERT: 自顶向下加锁，直到操作完成
+ *    - DELETE: 自顶向下加锁，可能需要向上回溯
+ *
+ * 3. 缓冲区管理
+ *    - FIND: 页面访问后立即解固定
+ *    - INSERT/DELETE: 需要保持页面固定直到操作完成
  */
 enum class Operation {
-    FIND = 0,   // 查找操作
-    INSERT,     // 插入操作
-    DELETE      // 删除操作
+    FIND = 0,   // 查找操作：只读访问，使用共享锁
+    INSERT,     // 插入操作：可能触发节点分裂，需要排他锁
+    DELETE      // 删除操作：可能触发节点合并，需要排他锁
 };
 
-static const bool binary_search = false;  // 是否使用二分查找
+/**
+ * @brief 是否使用二分查找的全局开关
+ *
+ * @note 性能考虑：
+ * - true: 适用于大量数据，O(log n)查找时间
+ * - false: 适用于少量数据，O(n)但有更好的缓存局部性
+ */
+static const bool binary_search = false;
 
 /**
  * @brief 比较两个键值的大小
@@ -78,11 +120,25 @@ class IxNodeHandle {
     friend class IxScan;        // 允许 IxScan 类访问 IxNodeHandle 的私有成员
 
    private:
-    const IxFileHdr *file_hdr;      // 节点所在文件的头部信息
-    Page *page;                     // 存储节点的页面
-    IxPageHdr *page_hdr;            // page->data的第一部分，指针指向首地址，长度为sizeof(IxPageHdr)
-    char *keys;                     // page->data的第二部分，指针指向首地址，长度为file_hdr->keys_size，每个key的长度为file_hdr->col_len
-    Rid *rids;                      // page->data的第三部分，指针指向首地址
+    /**
+     * @brief B+树节点在物理页面上的数据结构
+     *
+     * 页面布局：
+     * +-------------+----------------------+------------------+
+     * | 页面头部    |     键值区域        |    RID区域      |
+     * | IxPageHdr   |     变长键值        |    定长RID      |
+     * +-------------+----------------------+------------------+
+     *
+     * 注意：
+     * 1. 所有指针都指向页面数据区的不同偏移位置
+     * 2. 键值和RID一一对应，通过下标关联
+     * 3. 键值长度由文件头指定，支持变长
+     */
+    const IxFileHdr *file_hdr;      // 指向索引文件头，包含键值长度等元信息
+    Page *page;                     // 指向底层页面，管理物理存储
+    IxPageHdr *page_hdr;            // 指向页面头部，存储节点属性（如是否为叶节点）
+    char *keys;                     // 指向键值存储区域的起始位置
+    Rid *rids;                      // 指向RID存储区域的起始位置
 
    public:
     // 默认构造函数
@@ -237,12 +293,26 @@ class IxIndexHandle {
     friend class IxManager; // 允许 IxManager 类访问 IxIndexHandle 的私有成员
 
    private:
-    DiskManager *disk_manager_;           // 指向磁盘管理器，用于物理页面的读写
-    BufferPoolManager *buffer_pool_manager_; // 指向缓冲池管理器，用于管理内存中的页面
-    int fd_;                                    // 存储B+树索引的文件描述符
-    IxFileHdr* file_hdr_;                       // 指向索引文件头部，包含索引的元数据 (例如根页面号)
-                                                // root_page 初始化为2 (第0页存FILE_HDR_PAGE，第1页存LEAF_HEADER_PAGE)
-    std::mutex root_latch_;                     // 用于保护根页面并发访问的互斥锁
+    /**
+     * @brief B+树索引的关键组件和状态信息
+     *
+     * 文件组织：
+     * - 页面0：文件头页面(FILE_HDR_PAGE)
+     * - 页面1：叶节点链表头页面(LEAF_HEADER_PAGE)
+     * - 页面2：根节点页面(初始化时)
+     * - 页面3+：数据节点页面
+     */
+    DiskManager *disk_manager_;              // 磁盘管理器，处理页面的物理读写
+    BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，提供页面缓存
+    int fd_;                                 // 索引文件描述符
+    IxFileHdr* file_hdr_;                    // 索引文件头指针，包含：
+                                            // - 根页面号
+                                            // - 键值长度
+                                            // - B+树阶数
+                                            // - 页面数量等
+    std::mutex root_latch_;                  // 保护根节点的锁，用于：
+                                            // - 控制根节点的并发访问
+                                            // - 保护根节点的分裂和合并
 
    public:
     /**
@@ -372,34 +442,128 @@ class IxIndexHandle {
     Iid leaf_begin() const;
 
    private:
-    // 辅助函数
-    // 更新文件头中的根页面号
-    void update_root_page_no(page_id_t root) { file_hdr_->root_page_ = root; }
+   //===== 树结构维护函数 =====
 
-    // 检查B+树是否为空 (即根页面号是否为无效页面)
-    bool is_empty() const { return file_hdr_->root_page_ == IX_NO_PAGE; }
+   /**
+    * @brief 更新文件头中的根页面号
+    * @param root 新的根页面号
+    *
+    * @note 在以下情况下调用：
+    * 1. 根节点分裂：创建新的根节点
+    * 2. 根节点合并：树高度降低
+    * 3. 初始化：创建第一个根节点
+    *
+    * @warning 必须在持有root_latch_的情况下调用
+    */
+   void update_root_page_no(page_id_t root) { file_hdr_->root_page_ = root; }
 
-    // 节点获取与创建
-    // 根据页面号从缓冲池获取一个页面，并包装成 IxNodeHandle 返回
-    IxNodeHandle *fetch_node(int page_no) const;
+   /**
+    * @brief 检查B+树是否为空
+    * @return true 如果树为空，false 否则
+    *
+    * @note 空树的特征：
+    * 1. 根页面号为IX_NO_PAGE
+    * 2. 没有任何键值对
+    * 3. 只有头页面和叶子链表头页面
+    */
+   bool is_empty() const { return file_hdr_->root_page_ == IX_NO_PAGE; }
 
-    // 创建一个新的B+树节点页面，并包装成 IxNodeHandle 返回
-    IxNodeHandle *create_node();
+   //===== 节点管理函数 =====
 
-    // 数据结构维护
-    // 维护节点 (node) 的父节点指针 (在节点分裂或移动后可能需要)
-    void maintain_parent(IxNodeHandle *node);
+   /**
+    * @brief 获取指定页面的节点句柄
+    * @param page_no 页面号
+    * @return 节点句柄指针
+    *
+    * @details 获取过程：
+    * 1. 从缓冲池获取或加载页面
+    * 2. 构造节点句柄包装页面
+    * 3. 设置页面的固定计数
+    *
+    * @warning
+    * 1. 返回的节点必须通过release_node_handle释放
+    * 2. 可能触发缓冲池页面替换
+    */
+   IxNodeHandle *fetch_node(int page_no) const;
 
-    // 从叶节点链表中移除一个叶节点 (leaf)
-    void erase_leaf(IxNodeHandle *leaf);
+   /**
+    * @brief 创建新的B+树节点
+    * @return 新节点的句柄
+    *
+    * @details 创建过程：
+    * 1. 分配新页面
+    * 2. 初始化页面头部
+    * 3. 设置节点属性（如是否为叶节点）
+    * 4. 更新文件头中的页面计数
+    *
+    * @warning 必须正确初始化node_hdr和指针关系
+    */
+   IxNodeHandle *create_node();
 
-    // 释放不再使用的 IxNodeHandle (通常意味着 unpin 对应的页面)
-    void release_node_handle(IxNodeHandle &node);
+   //===== 树结构维护函数 =====
 
-    // 维护父节点 (node) 中指向其子节点 (child_idx) 的指针
-    void maintain_child(IxNodeHandle *node, int child_idx);
+   /**
+    * @brief 维护节点的父指针
+    * @param node 要维护的节点
+    *
+    * @details 维护过程：
+    * 1. 遍历所有子节点
+    * 2. 更新每个子节点的父指针
+    * 3. 确保双向连接的一致性
+    *
+    * @note 在节点分裂、合并后调用
+    */
+   void maintain_parent(IxNodeHandle *node);
 
-    // 索引测试相关
-    // 根据 Iid (页面号和槽号) 获取对应的 Rid (通常用于测试或调试)
-    Rid get_rid(const Iid &iid) const;
+   /**
+    * @brief 从叶节点链表中删除节点
+    * @param leaf 要删除的叶节点
+    *
+    * @details 删除过程：
+    * 1. 更新前驱节点的next指针
+    * 2. 更新后继节点的prev指针
+    * 3. 维护叶节点链表的完整性
+    *
+    * @warning 必须正确维护双向链表结构
+    */
+   void erase_leaf(IxNodeHandle *leaf);
+
+   /**
+    * @brief 释放节点句柄
+    * @param node 要释放的节点句柄
+    *
+    * @details 释放过程：
+    * 1. 减少页面的引用计数
+    * 2. 如果页面变脏，标记需要写回
+    * 3. 清理节点句柄的资源
+    *
+    * @note 所有通过fetch_node获取的节点都必须释放
+    */
+   void release_node_handle(IxNodeHandle &node);
+
+   /**
+    * @brief 维护父子节点关系
+    * @param node 父节点
+    * @param child_idx 子节点在父节点中的索引
+    *
+    * @details 维护过程：
+    * 1. 验证父子关系的有效性
+    * 2. 更新子节点的父指针
+    * 3. 确保索引项正确
+    *
+    * @warning 在节点移动、分裂后调用
+    */
+   void maintain_child(IxNodeHandle *node, int child_idx);
+
+   //===== 测试辅助函数 =====
+
+   /**
+    * @brief 获取索引项对应的记录ID
+    * @param iid 索引项ID(页号+槽号)
+    * @return 对应的记录ID
+    *
+    * @note 仅用于测试和调试
+    * @warning 必须确保iid有效
+    */
+   Rid get_rid(const Iid &iid) const;
 };

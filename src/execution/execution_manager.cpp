@@ -1,12 +1,20 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file execution_manager.cpp
+ * @author RMDB Development Team
+ * @brief RMDB执行管理器实现
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * RMDB查询执行管理器负责：
+ * 1. 执行DDL语句（创建/删除表和索引）
+ * 2. 执行DML语句（插入/更新/删除数据）
+ * 3. 执行查询语句（SELECT）
+ * 4. 执行事务控制语句（开始/提交/回滚）
+ * 5. 执行实用工具命令（帮助/显示表等）
+ */
 
 #include "execution_manager.h"
 
@@ -21,6 +29,16 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "record_printer.h"
 
+/**
+ * @brief SQL命令帮助信息
+ * 包含所有支持的SQL语法说明，包括：
+ * - 表和索引的创建/删除
+ * - 数据的插入/更新/删除
+ * - 查询语句语法
+ * - 数据类型说明
+ * - WHERE子句语法
+ * - 运算符说明
+ */
 constexpr const char *help_info =
     "Supported SQL syntax:\n"
     "  command ;\n"
@@ -50,11 +68,15 @@ constexpr int help_info_len = strlen(help_info);
 /**
  * @brief 执行DDL(数据定义语言)语句
  *
- * 该函数负责处理CREATE/DROP TABLE/INDEX等DDL语句。
- * 根据计划类型调用系统管理器的相应函数执行具体操作。
+ * @param plan DDL语句的执行计划，包含创建/删除表和索引的具体信息
+ * @param context 执行上下文，包含事务信息和结果缓冲区
+ * @throw InternalError 当遇到未预期的计划类型时抛出
  *
- * @param plan DDL语句的执行计划
- * @param context 执行上下文
+ * @note 该函数处理以下DDL操作：
+ * - CREATE TABLE: 创建新表
+ * - DROP TABLE: 删除已有表
+ * - CREATE INDEX: 在指定列上创建索引
+ * - DROP INDEX: 删除指定的索引
  */
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
@@ -83,17 +105,22 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
 }
 
 /**
- * @brief 执行实用工具命令
- *
- * 处理各种实用工具命令，包括：
- * - help: 显示帮助信息
- * - show tables: 显示所有表
- * - desc table: 描述表结构
- * - begin/commit/abort: 事务控制命令
+ * @brief 执行实用工具命令和事务控制
  *
  * @param plan 命令的执行计划
- * @param txn_id 事务ID指针
- * @param context 执行上下文
+ * @param txn_id 事务ID指针，用于事务控制命令
+ * @param context 执行上下文，包含事务和输出信息
+ * @throw InternalError 当遇到未预期的命令类型时抛出
+ *
+ * @note 该函数处理以下命令：
+ * - help: 显示SQL语法帮助信息
+ * - show tables: 显示数据库中所有表
+ * - show index: 显示指定表的索引
+ * - desc table: 显示表结构
+ * - begin: 开启显式事务
+ * - commit: 提交当前事务
+ * - rollback/abort: 回滚当前事务
+ * - set knob: 设置优化器参数
  */
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
@@ -171,7 +198,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
  * @param context 执行上下文
  */
 void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
-                             Context *context) {
+                            Context *context) {
     std::vector<std::string> captions;
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {
@@ -231,22 +258,29 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
 /**
  * @brief 执行DML(数据操作语言)语句
  *
- * 处理INSERT、UPDATE、DELETE等数据操作语句
+ * @param exec DML执行器指针，可以是插入、更新或删除执行器
  *
- * @param exec DML执行器指针
+ * @note 调用执行器的Next()方法来执行具体的DML操作：
+ * - INSERT: 插入新记录
+ * - UPDATE: 更新已有记录
+ * - DELETE: 删除符合条件的记录
+ * 具体的执行逻辑由对应的执行器实现。
  */
 void QlManager::run_dml(std::unique_ptr<AbstractExecutor> exec) { exec->Next(); }
 
 /**
  * @brief 执行EXPLAIN命令
  *
- * 显示查询的执行计划，帮助分析和优化查询性能
+ * @param executorTreeRoot 执行器树的根节点，包含完整的执行计划
+ * @param sel_cols 查询涉及的列信息
+ * @param context 执行上下文，用于存储和输出执行计划
  *
- * @param executorTreeRoot 执行器树的根节点
- * @param sel_cols 涉及的列
- * @param context 执行上下文
+ * @note 该函数用于分析和展示查询的执行计划：
+ * 1. 显示执行器树的结构
+ * 2. 展示各个执行节点的执行顺序
+ * 3. 帮助分析查询性能和优化查询
  */
 void QlManager::run_explain(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
-                             Context *context) {
+                            Context *context) {
     executorTreeRoot->Next();
 }
