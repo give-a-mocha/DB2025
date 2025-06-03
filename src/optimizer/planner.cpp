@@ -694,7 +694,8 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     now_tables.push_back(first_scan->tab_name_);
     table_plans.pop_front();
 
-    auto join_table = [&](std::string current_table, std::list<std::shared_ptr<Plan>>::iterator &table_it) -> void{
+    // 复杂度O(n)
+    auto join_table = [&](const std::string &current_table, std::list<std::shared_ptr<Plan>>::iterator &table_it) -> void{
         now_tables.push_back(current_table);
         std::vector<Condition> applicable_conds;
         auto it = join_conditions.begin();
@@ -709,7 +710,7 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
                 //     std::swap(it->lhs_col, it->rhs_col);
                 //     it->op = swap_op(it->op);
                 // }
-                applicable_conds.push_back(*it);
+                applicable_conds.emplace_back(std::move(*it));
                 it = join_conditions.erase(it);
             } else {
                 ++it;
@@ -764,13 +765,13 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
                 join_table(current_table, it);
                 flag = true;
                 break;
-                break;
             }
         }
         // 如果没有找到可连接的表，强制连接剩余的第一个未使用表
         if(!flag) {
-            std::shared_ptr<ScanPlan> current_scan = std::dynamic_pointer_cast<ScanPlan>(*it);
-            join_table(current_scan->tab_name_, it);
+            auto temp = table_plans.begin();
+            std::shared_ptr<ScanPlan> current_scan = std::dynamic_pointer_cast<ScanPlan>(*temp);
+            join_table(current_scan->tab_name_, temp);
         }
     }
     
