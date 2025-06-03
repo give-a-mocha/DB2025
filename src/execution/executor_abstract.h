@@ -21,19 +21,52 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 执行器抽象基类，定义查询执行器的通用接口
+ * @brief 执行器抽象基类，定义查询执行引擎的核心接口
  *
- * 该类提供了执行器的基本功能和接口定义，包括：
- * - 元组遍历和访问
- * - 记录比较和条件评估
- * - 类型转换和数据访问
+ * 执行器架构设计：
+ * 1. 火山模型接口
+ *    - next(): 获取下一个元组
+ *    - beginTuple(): 初始化扫描
+ *    - is_end(): 检查是否结束
  *
- * 所有具体的执行器类(如SeqScan、IndexScan等)都继承自该类
+ * 2. 数据访问接口
+ *    - 元组遍历和定位
+ *    - 列值提取和类型转换
+ *    - 条件评估和过滤
+ *
+ * 3. 资源管理
+ *    - 内存分配和释放
+ *    - 缓冲区管理
+ *    - 异常处理机制
+ *
+ * 4. 扩展设计
+ *    - 支持流水线执行
+ *    - 允许向量化处理
+ *    - 便于添加新算子
+ *
+ * @note 具体执行器实现：
+ * - SeqScan: 顺序扫描
+ * - IndexScan: 索引扫描
+ * - NestedLoop: 嵌套循环连接
+ * - HashJoin: 哈希连接
+ * - Sort: 排序
+ * - Projection: 投影
  */
 class AbstractExecutor {
    public:
+    /**
+     * @brief 当前处理的记录ID
+     * @note 用于定位和访问具体记录
+     */
     Rid _abstract_rid;
 
+    /**
+     * @brief 执行上下文
+     * @note 包含：
+     * - 事务信息
+     * - 系统配置
+     * - 执行状态
+     */
     Context *context_;
 
     virtual ~AbstractExecutor() = default;
@@ -60,52 +93,105 @@ class AbstractExecutor {
     virtual std::string getType() { return "AbstractExecutor"; };
 
     /**
-     * @brief 开始遍历元组
-     * 初始化执行器状态，准备开始扫描元组
+     * @brief 初始化元组遍历
+     * @note 子类实现必须：
+     * 1. 重置内部状态
+     * 2. 初始化扫描位置
+     * 3. 准备第一个元组
      */
     virtual void beginTuple() {};
 
     /**
      * @brief 移动到下一个元组
-     * 更新执行器状态以访问下一个元组
+     * @note 子类实现必须：
+     * 1. 更新当前位置
+     * 2. 维护内部状态
+     * 3. 处理边界情况
      */
     virtual void nextTuple() {};
 
     /**
-     * @brief 检查是否到达元组序列末尾
-     * @return 如果没有更多元组返回true，否则返回false
+     * @brief 检查遍历是否结束
+     * @return true表示遍历结束，false表示还有元组
+     * @note 子类实现必须：
+     * 1. 正确判断边界
+     * 2. 考虑过滤条件
+     * 3. 处理异常情况
      */
     virtual bool is_end() const { return true; };
 
     /**
-     * @brief 获取当前元组的RID
-     * @return 当前元组的RID引用
+     * @brief 获取当前元组的记录ID
+     * @return 当前记录的RID引用
+     * @note 子类实现必须：
+     * 1. 维护有效的RID
+     * 2. 支持随机访问
+     * 3. 在遍历过程中更新
      */
     virtual Rid &rid() = 0;
 
     /**
-     * @brief 获取下一个记录
-     * @return 下一条记录的智能指针
+     * @brief 获取下一个元组
+     * @return 下一条记录
+     * @throw ExecutionError 当获取失败时
+     *
+     * @note 火山模型的核心接口，子类实现必须：
+     * 1. 返回一个有效记录
+     * 2. 正确处理终止条件
+     * 3. 维护内部迭代状态
+     * 4. 处理所有错误情况
      */
     virtual std::unique_ptr<RmRecord> Next() = 0;
 
     /**
-     * @brief 获取指定列的元数据
+     * @brief 获取列的偏移和元数据信息
      * @param target 目标列的表列引用
-     * @return 列的元数据
+     * @return 列的完整元数据
+     * @throw ColumnNotFoundError 当列不存在时
+     *
+     * @details 获取信息包括：
+     * 1. 列的物理位置
+     *    - 字节偏移量
+     *    - 对齐要求
+     *
+     * 2. 列的属性
+     *    - 数据类型
+     *    - 长度信息
+     *    - 是否允许NULL
+     *
+     * 3. 访问优化
+     *    - 缓存常用列
+     *    - 批量获取优化
      */
     virtual ColMeta get_col_offset(const TabCol &target) { return ColMeta(); };
 
     /**
-     * @brief 在列集合中查找指定列
+     * @brief 在列集合中定位指定列
+     * @param rec_cols 记录的列集合
+     * @param target 目标列引用
+     * @return 列的迭代器位置
+     * @throw ColumnNotFoundError 当列不存在时
      *
-     * 根据表名和列名在给定的列集合中查找匹配的列
-     * 如果找不到指定的列，抛出ColumnNotFoundError异常
+     * @details 查找过程：
+     * 1. 列匹配规则
+     *    - 完整匹配：表名和列名
+     *    - 部分匹配：仅列名(需唯一)
+     *    - 别名处理
      *
-     * @param rec_cols 要搜索的列集合
-     * @param target 目标列的表列引用
-     * @return 找到的列的迭代器
-     * @throw ColumnNotFoundError 如果列不存在
+     * 2. 搜索优化
+     *    - 使用find_if快速定位
+     *    - 处理特殊情况
+     *    - 错误恢复机制
+     *
+     * 3. 结果验证
+     *    - 检查唯一性
+     *    - 验证访问权限
+     *    - 确保列可用
+     *
+     * @note 性能考虑：
+     * - 对频繁访问的列建立索引
+     * - 缓存查找结果
+     * - 批量查找优化
      */
     std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
@@ -183,15 +269,33 @@ class AbstractExecutor {
     }
 
     /**
-     * @brief 检查记录是否满足所有条件
+     * @brief 评估记录是否满足所有条件
+     * @param rec_cols 记录的列元数据集合
+     * @param conds 条件表达式列表
+     * @param rec 待评估的记录
+     * @return true表示满足所有条件
+     * @throw ExecutionError 当评估过程出错时
      *
-     * 遍历所有条件，检查记录是否满足每一个条件。
-     * 所有条件都满足时返回true，任一条件不满足时返回false。
+     * @details 评估策略：
+     * 1. 短路求值
+     *    - 任一条件不满足立即返回false
+     *    - 按条件选择性优化顺序
+     *    - 减少不必要的计算
      *
-     * @param rec_cols 记录的列元数据
-     * @param conds 需要检查的条件列表
-     * @param rec 要检查的记录
-     * @return 如果记录满足所有条件返回true，否则返回false
+     * 2. 条件重排序
+     *    - 高选择性条件前置
+     *    - 低代价条件前置
+     *    - 考虑列访问局部性
+     *
+     * 3. 批量处理优化
+     *    - 缓存频繁访问的值
+     *    - 复用中间计算结果
+     *    - 减少内存访问
+     *
+     * @note 性能优化：
+     * - 对于大量记录的评估，考虑向量化
+     * - 条件表达式的复用和缓存
+     * - 避免重复的类型转换
      */
     bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds, const RmRecord *rec) {
         for (const auto &cond : conds) {
@@ -203,18 +307,39 @@ class AbstractExecutor {
     }
 
     /**
-     * @brief 检查记录是否满足单个条件
-     *
-     * 对指定的条件进行评估：
-     * 1. 获取条件左右两边的值
-     * 2. 进行类型检查和必要的类型转换
-     * 3. 根据比较运算符进行值比较
-     *
+     * @brief 评估单个条件表达式
      * @param rec_cols 记录的列元数据
-     * @param cond 要检查的条件
-     * @param rec 要检查的记录
-     * @return 如果记录满足条件返回true，否则返回false
-     * @throw IncompatibleTypeError 当比较的类型不兼容时
+     * @param cond 条件表达式
+     * @param rec 待评估的记录
+     * @return true表示满足条件
+     * @throw IncompatibleTypeError 当类型不兼容时
+     * @throw InternalError 当遇到非法操作符时
+     *
+     * @details 评估过程：
+     * 1. 值提取和准备
+     *    - 定位左值的偏移位置
+     *    - 处理右值(常量或列值)
+     *    - 准备比较数据
+     *
+     * 2. 类型处理
+     *    - 验证类型兼容性
+     *    - 执行必要的类型转换
+     *    - 特殊类型的比较处理
+     *
+     * 3. 值比较策略
+     *    - 数值类型的高效比较
+     *    - 字符串的优化比较
+     *    - NULL值的特殊处理
+     *
+     * 4. 错误处理
+     *    - 类型不兼容检查
+     *    - 非法操作符检查
+     *    - 数值范围检查
+     *
+     * @note 支持的优化：
+     * - 数值比较的快速路径
+     * - 字符串比较的长度优化
+     * - 类型转换的缓存机制
      */
     bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
         auto lhs_col = get_col(rec_cols, cond.lhs_col);

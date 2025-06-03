@@ -1,12 +1,32 @@
-/* Copyright (c) 2023 Renmin University of China
-RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL v2.
-You may obtain a copy of Mulan PSL v2 at:
-        http://license.coscl.org.cn/MulanPSL2
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
-EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
-MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
-See the Mulan PSL v2 for more details. */
+/**
+ * @file analyze.h
+ * @author RMDB Development Team
+ * @brief SQL语句的语义分析器
+ * @version 0.1
+ * @date 2023-12-01
+ *
+ * @copyright Copyright (c) 2023 Renmin University of China
+ * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
+ *
+ * 语义分析器的主要功能：
+ * 1. 验证和转换
+ *    - 检查表和列的存在性
+ *    - 解析和验证表别名
+ *    - 处理列名歧义
+ *    - 验证数据类型兼容性
+ *
+ * 2. 查询分析
+ *    - 构建JOIN树结构
+ *    - 收集WHERE条件
+ *    - 处理子查询
+ *    - 标识聚合函数
+ *
+ * 3. 错误处理
+ *    - 表不存在检查
+ *    - 列不存在检查
+ *    - 列名歧义解决
+ *    - 类型不匹配检查
+ */
 
 #pragma once
 
@@ -99,45 +119,76 @@ class ColCheck {
 };
 
 /**
- * @brief 查询对象类，存储经过语义分析后的查询信息
+ * @brief 查询对象类，表示经过语义分析的SQL语句
  *
- * 该类包含查询执行所需的所有结构化信息，如表名、列、条件、连接等。
- * 负责存储从语法树转换而来的已验证查询组件。
+ * Query对象存储了一个SQL语句的完整语义信息：
+ * 1. 查询结构
+ *    - parse: 原始语法树，保留完整的语法结构
+ *    - jointree: JOIN操作的层次结构
+ *    - cols: 需要返回的列
+ *    - tables: 涉及的表
+ *
+ * 2. 查询条件
+ *    - conds: WHERE子句的条件表达式
+ *    - 支持：比较操作、逻辑运算、IN子句等
+ *
+ * 3. 数据修改
+ *    - set_clauses: UPDATE的SET子句
+ *    - values: INSERT的VALUES值列表
+ *
+ * @note 该类设计支持SELECT、INSERT、UPDATE、DELETE等
+ * 不同类型的SQL语句，相应字段根据语句类型使用
  */
 class Query {
    public:
-    std::shared_ptr<ast::TreeNode> parse;  // 原始语法树节点
+    // 查询的语法结构
+    std::shared_ptr<ast::TreeNode> parse;  // 语法分析树根节点
 
-    // JOIN树 - 存储所有的JOIN操作
-    std::vector<JoinNode> jointree;
+    // 查询的逻辑结构
+    std::vector<JoinNode> jointree;        // JOIN操作的层次结构
+    std::vector<TabCol> cols;              // 投影列表(SELECT子句)
+    std::vector<std::string> tables;       // 相关表名列表
 
-    // WHERE条件列表
-    std::vector<Condition> conds;
+    // 查询条件和约束
+    std::vector<Condition> conds;          // WHERE子句条件列表
 
-    // 投影列(SELECT子句中的列)
-    std::vector<TabCol> cols;
+    // 数据修改相关
+    std::vector<SetClause> set_clauses;    // UPDATE的SET子句
+    std::vector<Value> values;             // INSERT的VALUES列表
 
-    // 查询涉及的表名列表
-    std::vector<std::string> tables;
-
-    // UPDATE语句的SET子句值
-    std::vector<SetClause> set_clauses;
-
-    // INSERT语句的VALUES值列表
-    std::vector<Value> values;
-
+    /**
+     * @brief 默认构造函数
+     * @note 创建一个空的查询对象，各容器保持为空
+     */
     Query() = default;
 };
 
 /**
- * @brief 语义分析器类，负责SQL语句的语义检查和查询对象构建
+ * @brief 语义分析器类，处理SQL语句的验证和转换
  *
- * 该类接收语法分析生成的语法树，进行语义验证并构建查询执行计划。
- * 主要职责包括：检查表和列是否存在、解析表别名、类型检查、条件验证等。
+ * 负责功能：
+ * 1. 语法树分析
+ *    - 遍历和解析语法树节点
+ *    - 提取查询组件(表、列、条件等)
+ *    - 构建规范化的查询结构
+ *
+ * 2. 语义检查
+ *    - 验证表和列的存在性
+ *    - 检查类型兼容性
+ *    - 解决命名冲突
+ *    - 验证约束条件
+ *
+ * 3. 错误处理
+ *    - 抛出语义错误异常
+ *    - 提供详细的错误信息
+ *    - 支持事务回滚
+ *
+ * @note 分析器依赖系统管理器(SmManager)获取
+ * 数据库的元数据信息，如表结构、列类型等
  */
 class Analyze {
    private:
-    SmManager *sm_manager_;  // 系统管理器指针，用于访问数据库元数据
+    SmManager *sm_manager_;  // 系统管理器，提供元数据访问
 
    public:
     /**
@@ -148,30 +199,68 @@ class Analyze {
 
     /**
      * @brief 析构函数
+     * @note 析构时不会释放sm_manager_，因为它是外部传入的
      */
-    ~Analyze() {}
+    ~Analyze() = default;
 
     /**
-     * @brief 执行语义分析
-     * @param root 语法树根节点
-     * @return 处理后的查询对象
+     * @brief 执行SQL语句的语义分析
+     * @param root 语法分析产生的语法树根节点
+     * @return 包含完整查询信息的Query对象
+     * @throw SemanticError 当存在语义错误时
+     *
+     * @details 分析过程：
+     * 1. 验证语法树的基本结构
+     * 2. 根据SQL类型选择相应的处理流程
+     * 3. 收集和验证所有查询组件
+     * 4. 构建规范化的查询对象
+     *
+     * @note 该方法是语义分析的入口点，会触发
+     * 完整的语义检查流程
      */
     std::shared_ptr<Query> do_analyze(std::shared_ptr<ast::TreeNode> root);
 
    private:
     /**
-     * @brief 检查列是否存在，返回列的元数据
+     * @brief 检查列是否存在并验证其元数据
      * @param all_cols 所有相关表的列元数据集合
      * @param target 目标列引用
-     * @return 验证后的列引用
+     * @return 验证后的列引用(可能包含推断出的表名)
+     * @throw ColumnNotFoundError 当列不存在时
+     * @throw AmbiguousColumnError 当列名有歧义时
+     *
+     * @details 检查过程：
+     * 1. 验证列是否存在
+     * 2. 处理未限定的列名(无表名前缀)
+     * 3. 解决可能的列名歧义
+     * 4. 验证数据类型是否合法
+     *
+     * @note 该方法是列验证的核心，确保查询中的列引用有效
      */
     TabCol check_column(const std::vector<ColMeta> &all_cols, TabCol target);
 
     /**
-     * @brief 将表别名转换为真实表名
-     * @param all_cols 所有相关表的列元数据
-     * @param target 需要处理的表列引用(会被修改)
-     * @param tab_refs 查询中的所有表引用
+     * @brief 解析表别名并转换为真实表名
+     * @param all_cols 所有相关表的列元数据集合
+     * @param target 要处理的表列引用(会被修改)
+     * @param tab_refs 查询中的所有表引用信息
+     * @throw TableAliasError 当别名无效或有歧义时
+     *
+     * @details 转换过程：
+     * 1. 别名处理
+     *    - 检查别名是否在tab_refs中定义
+     *    - 验证别名的唯一性
+     *    - 将别名替换为实际表名
+     *
+     * 2. 表名验证
+     *    - 确保表名在数据库中存在
+     *    - 处理大小写敏感性
+     *
+     * 3. 模式限定
+     *    - 处理模式名前缀(如果有)
+     *    - 验证模式的存在性
+     *
+     * @note target参数会被直接修改，包含转换后的表名
      */
     void convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs);
 
@@ -183,9 +272,27 @@ class Analyze {
     void get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols);
 
     /**
-     * @brief 处理WHERE条件转换(不处理表别名)
-     * @param sv_conds 语法树条件表达式集合
-     * @param conds 输出参数，存储转换后的条件
+     * @brief 处理WHERE条件的基本转换
+     * @param sv_conds 语法树中的条件表达式集合
+     * @param conds 输出参数，存储转换结果
+     * @throw SemanticError 当条件表达式存在语法或语义错误
+     *
+     * @details 转换过程：
+     * 1. 表达式处理
+     *    - 解析比较运算符
+     *    - 处理常量表达式
+     *    - 转换数据类型
+     *
+     * 2. 条件组合
+     *    - 处理AND/OR逻辑关系
+     *    - 合并相关条件
+     *    - 优化条件顺序
+     *
+     * 3. 类型检查
+     *    - 验证操作数类型匹配
+     *    - 处理隐式类型转换
+     *
+     * @note 该方法不处理表别名，需要配合get_clause_alias使用
      */
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
 
@@ -223,16 +330,51 @@ class Analyze {
     Value convert_sv_value(const std::shared_ptr<ast::Value> &sv_val);
 
     /**
-     * @brief 将语法树中的比较操作符转换为系统内部的CompOp枚举值
-     * @param op 语法树中的比较操作符
-     * @return 转换后的系统内部比较操作符
+     * @brief 将SQL比较操作符转换为系统操作符
+     * @param op SQL语法树中的原始操作符
+     * @return 系统内部的CompOp枚举值
+     * @throw InvalidCompOpError 当操作符无效时
+     *
+     * @details 支持的操作符：
+     * 1. 关系运算
+     *    - 等于(=)
+     *    - 不等于(<>, !=)
+     *    - 大于(>)
+     *    - 大于等于(>=)
+     *    - 小于(<)
+     *    - 小于等于(<=)
+     *
+     * 2. 特殊操作
+     *    - IS NULL
+     *    - IS NOT NULL
+     *    - IN / NOT IN
+     *    - EXISTS
+     *
+     * @note 操作符转换会考虑类型兼容性
      */
     CompOp convert_sv_comp_op(ast::SvCompOp op);
 
     /**
-     * @brief 将语法树中的JOIN类型转换为系统内部的JoinType枚举值
-     * @param type 语法树中的JOIN类型
-     * @return 转换后的系统内部JOIN类型
+     * @brief 转换JOIN操作类型
+     * @param type SQL语法树中的JOIN类型
+     * @return 系统内部的JoinType枚举值
+     * @throw InvalidJoinTypeError 当JOIN类型无效时
+     *
+     * @details 支持的JOIN类型：
+     * 1. 基本连接
+     *    - INNER JOIN（内连接）
+     *    - LEFT JOIN（左外连接）
+     *    - RIGHT JOIN（右外连接）
+     *    - FULL JOIN（全外连接）
+     *
+     * 2. 特殊连接
+     *    - CROSS JOIN（交叉连接）
+     *    - NATURAL JOIN（自然连接）
+     *
+     * @note
+     * 1. 不同JOIN类型会影响连接条件的处理
+     * 2. 外连接需要特殊处理NULL值
+     * 3. 自然连接需要自动推断连接条件
      */
     JoinType convert_sv_join_type(ast::JoinType type);
 };

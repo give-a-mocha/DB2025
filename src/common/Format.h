@@ -2,6 +2,16 @@
 #ifndef FORMAT_H_
 #define FORMAT_H_
 
+#ifdef protected
+#undef protected
+#define need_protected
+#endif
+
+#ifdef private
+#undef private
+#define need_private
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <sstream>
@@ -52,5 +62,15 @@ std::string format(std::string fmt, Args &&...args) {
 }
 
 }  // namespace util
+
+#ifdef need_protected
+#define protected public
+#undef need_protected
+#endif
+
+#ifdef need_private
+#define private public
+#undef need_private
+#endif
 
 #endif

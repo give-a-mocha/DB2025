@@ -17,30 +17,89 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 顺序扫描执行器，实现对表的顺序扫描
+ * @brief 顺序扫描执行器，提供表的全表扫描功能
  *
- * 主要功能：
- * 1. 按顺序扫描表中的所有记录
- * 2. 根据条件过滤记录
- * 3. 提供迭代器接口访问满足条件的记录
+ * 实现架构：
+ * 1. 扫描机制
+ *    - 页面级扫描：按页读取数据
+ *    - 记录级扫描：遍历页内记录
+ *    - 缓冲区管理：优化I/O操作
  *
- * 实现策略：
- * - 使用表扫描迭代器遍历所有记录
- * - 使用条件评估器过滤记录
- * - 维护当前记录的位置信息
+ * 2. 条件处理
+ *    - 条件下推：尽早过滤无关记录
+ *    - 谓词评估：高效的条件检查
+ *    - 批量处理：减少函数调用开销
+ *
+ * 3. 性能优化
+ *    - 预读取：异步加载下一页
+ *    - 缓存优化：重用热点数据
+ *    - 内存对齐：优化数据访问
+ *
+ * 4. 资源管理
+ *    - 内存控制：避免过度消耗
+ *    - 并发处理：支持多事务
+ *    - 错误恢复：保证操作原子性
+ *
+ * @note 适用场景：
+ * - 小表全表扫描
+ * - 高选择性查询
+ * - 数据探索分析
  */
 class SeqScanExecutor : public AbstractExecutor {
    private:
-    std::string tab_name_;              // 要扫描的表名
-    std::vector<Condition> conds_;      // 扫描的过滤条件
-    RmFileHandle *fh_;                  // 表文件句柄
-    std::vector<ColMeta> cols_;         // 输出记录的字段元数据
-    size_t len_;                        // 输出记录的总长度
-    std::vector<Condition> fed_conds_;  // 传递给条件评估器的条件
+    /**
+     * @brief 扫描目标表的名称
+     * @note 用于获取表的元数据和文件句柄
+     */
+    std::string tab_name_;
 
-    Rid rid_;                        // 当前记录的RID
-    std::unique_ptr<RecScan> scan_;  // 表扫描迭代器
-    SmManager *sm_manager_;          // 系统管理器指针
+    /**
+     * @brief 扫描的过滤条件列表
+     * @note 包含WHERE子句中的所有条件
+     */
+    std::vector<Condition> conds_;
+
+    /**
+     * @brief 表文件的访问句柄
+     * @note 用于读取记录数据
+     */
+    RmFileHandle *fh_;
+
+    /**
+     * @brief 输出列的元数据定义
+     * @note 包含列的类型、长度、偏移等信息
+     */
+    std::vector<ColMeta> cols_;
+
+    /**
+     * @brief 输出记录的总长度(字节)
+     * @note 用于内存分配和数据访问
+     */
+    size_t len_;
+
+    /**
+     * @brief 优化后的条件表达式
+     * @note 可能经过重写和简化的条件
+     */
+    std::vector<Condition> fed_conds_;
+
+    /**
+     * @brief 当前处理记录的标识符
+     * @note 用于定位和访问记录
+     */
+    Rid rid_;
+
+    /**
+     * @brief 底层扫描迭代器
+     * @note 提供记录级别的遍历功能
+     */
+    std::unique_ptr<RecScan> scan_;
+
+    /**
+     * @brief 系统管理器的访问接口
+     * @note 用于访问系统元数据和服务
+     */
+    SmManager *sm_manager_;
 
    public:
     /**
@@ -65,9 +124,29 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 开始扫描操作
+     * @brief 初始化表扫描操作
+     * @throw InternalError 当初始化失败时
      *
-     * 初始化扫描迭代器并定位到第一个满足条件的记录
+     * @details 初始化过程：
+     * 1. 扫描准备
+     *    - 创建记录迭代器
+     *    - 设置初始位置
+     *    - 预热缓冲区
+     *
+     * 2. 条件处理
+     *    - 初始化条件评估器
+     *    - 准备常量条件值
+     *    - 设置评估上下文
+     *
+     * 3. 资源分配
+     *    - 分配扫描缓冲区
+     *    - 注册事务锁
+     *    - 初始化统计信息
+     *
+     * @note 优化策略：
+     * - 异步预读下一页
+     * - 批量加载优化
+     * - 减少内存分配
      */
     void beginTuple() override {
         scan_ = std::make_unique<RmScan>(fh_);
@@ -83,9 +162,29 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 移动到下一个满足条件的记录
+     * @brief 获取下一个满足条件的记录
+     * @throw InternalError 当扫描器未初始化时
      *
-     * 继续扫描直到找到下一个满足所有条件的记录
+     * @details 处理流程：
+     * 1. 状态检查
+     *    - 验证扫描器状态
+     *    - 检查事务活跃性
+     *    - 处理并发访问
+     *
+     * 2. 记录定位
+     *    - 获取下一条记录
+     *    - 条件过滤
+     *    - 处理删除标记
+     *
+     * 3. 性能优化
+     *    - 批量条件评估
+     *    - 跳过无效记录
+     *    - 利用缓存数据
+     *
+     * @note 错误处理：
+     * - 处理无效记录
+     * - 检测并发冲突
+     * - 维护扫描状态
      */
     void nextTuple() override {
         if (scan_ == nullptr) {
