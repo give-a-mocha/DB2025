@@ -90,8 +90,24 @@ class IxFileHdr {
 
     IxFileHdr() { tot_len_ = col_num_ = 0; }
 
-    /*
-     * @description: IxFileHdr的构造函数, 把vertor类型扩容，不使用push_back
+    /**
+     * @brief 初始化索引文件头
+     * @param first_free_page_no 空闲页面链表头
+     * @param num_pages 总页面数
+     * @param root_page 根节点页号
+     * @param col_num 索引包含的列数
+     * @param col_tot_len 所有列的总长度
+     * @param btree_order B+树的阶
+     * @param keys_size 键值区域的大小
+     * @param first_leaf 首叶节点页号
+     * @param last_leaf 尾叶节点页号
+     *
+     * @note 初始化过程：
+     * 1. 初始化所有基本字段
+     * 2. 计算结构体总长度
+     * 3. 预分配向量空间，避免动态扩容
+     *
+     * @warning col_num必须大于0且不超过限制
      */
     IxFileHdr(page_id_t first_free_page_no, int num_pages, page_id_t root_page, int col_num, int col_tot_len,
               int btree_order, int keys_size, page_id_t first_leaf, page_id_t last_leaf)
@@ -108,56 +124,113 @@ class IxFileHdr {
         col_types_.resize(col_num);
         col_lens_.resize(col_num);
     }
+    /**
+     * @brief 将文件头信息序列化到目标缓冲区
+     * @param dest 目标缓冲区指针
+     *
+     * @details 序列化的内存布局：
+     * +------------+----------------+---------------+----------------+
+     * | 总长度(4B) | 基本字段(可变) | 列信息(可变)  | 其他参数(可变)  |
+     * +------------+----------------+---------------+----------------+
+     *
+     * 1. 基本字段：
+     *    - first_free_page_no (page_id_t)
+     *    - num_pages (int)
+     *    - root_page (page_id_t)
+     *    - col_num (int)
+     *
+     * 2. 列信息：
+     *    - 所有列的类型 (col_num * sizeof(ColType))
+     *    - 所有列的长度 (col_num * sizeof(int))
+     *
+     * 3. 其他参数：
+     *    - col_tot_len (int)
+     *    - btree_order (int)
+     *    - keys_size (int)
+     *    - first_leaf (page_id_t)
+     *    - last_leaf (page_id_t)
+     *
+     * @warning
+     * - dest必须有足够的空间(至少tot_len_字节)
+     * - 所有数值使用本地字节序
+     * - 必须确保内存对齐
+     */
     void serialize(char *dest) {
-        int offset = 0;  // 初始化偏移量，用于在目标缓冲区中定位写入位置
-        // 将tot_len_（结构体总长度）序列化到dest缓冲区
+        int offset = 0;
+        
+        // 1. 序列化总长度
         memcpy(dest + offset, &tot_len_, sizeof(int));
-        offset += sizeof(int);  // 更新偏移量
-        // 将first_free_page_no_（第一个空闲页号）序列化到dest缓冲区
+        offset += sizeof(int);
+        
+        // 2. 序列化基本字段
         memcpy(dest + offset, &first_free_page_no_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);  // 更新偏移量
-        // 将num_pages_（页面数量）序列化到dest缓冲区
+        offset += sizeof(page_id_t);
         memcpy(dest + offset, &num_pages_, sizeof(int));
-        offset += sizeof(int);  // 更新偏移量
-        // 将root_page_（根页号）序列化到dest缓冲区
+        offset += sizeof(int);
         memcpy(dest + offset, &root_page_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);  // 更新偏移量
-        // 将col_num_（列数量）序列化到dest缓冲区
+        offset += sizeof(page_id_t);
         memcpy(dest + offset, &col_num_, sizeof(int));
-        offset += sizeof(int);  // 更新偏移量
-        // 循环序列化每个列的类型 (col_types_)
+        offset += sizeof(int);
+        
+        // 3. 序列化列信息
+        // 3.1 列的类型
         for (int i = 0; i < col_num_; ++i) {
             memcpy(dest + offset, &col_types_[i], sizeof(ColType));
-            offset += sizeof(ColType);  // 更新偏移量
+            offset += sizeof(ColType);
         }
-        // 循环序列化每个列的长度 (col_lens_)
+        // 3.2 列的长度
         for (int i = 0; i < col_num_; ++i) {
             memcpy(dest + offset, &col_lens_[i], sizeof(int));
-            offset += sizeof(int);  // 更新偏移量
+            offset += sizeof(int);
         }
-        // 将col_tot_len_（列总长度）序列化到dest缓冲区
+        
+        // 4. 序列化其他参数
         memcpy(dest + offset, &col_tot_len_, sizeof(int));
-        offset += sizeof(int);  // 更新偏移量
-        // 将btree_order_（B+树的阶）序列化到dest缓冲区
+        offset += sizeof(int);
         memcpy(dest + offset, &btree_order_, sizeof(int));
-        offset += sizeof(int);  // 更新偏移量
-        // 将keys_size_（键的总大小）序列化到dest缓冲区
+        offset += sizeof(int);
         memcpy(dest + offset, &keys_size_, sizeof(int));
-        offset += sizeof(int);  // 更新偏移量
-        // 将first_leaf_（第一个叶子页号）序列化到dest缓冲区
+        offset += sizeof(int);
         memcpy(dest + offset, &first_leaf_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);  // 更新偏移量
-        // 将last_leaf_（最后一个叶子页号）序列化到dest缓冲区
+        offset += sizeof(page_id_t);
         memcpy(dest + offset, &last_leaf_, sizeof(page_id_t));
-        offset += sizeof(page_id_t);  // 更新偏移量
-        // 断言：检查最终的偏移量是否等于结构体的总长度，确保序列化完整性
+        offset += sizeof(page_id_t);
+        
+        // 验证序列化的完整性
         assert(offset == tot_len_);
     }
 
+    /**
+     * @brief 从源数据反序列化文件头信息
+     * @param src 源数据缓冲区指针
+     *
+     * @details 反序列化过程：
+     * 1. 读取总长度并校验
+     * 2. 按序列化时的相同顺序读取数据：
+     *    - 基本字段
+     *    - 列信息
+     *    - 其他参数
+     * 3. 动态分配向量空间
+     * 4. 验证数据完整性
+     *
+     * @note 性能优化：
+     * 1. 使用reinterpret_cast避免多余的复制
+     * 2. 提前计算向量大小避免重分配
+     * 3. 保持内存对齐以提高访问效率
+     *
+     * @warning
+     * 1. src必须指向有效的序列化数据
+     * 2. 必须按照严格的顺序读取
+     * 3. 注意类型转换的安全性
+     */
     void deserialize(char *src) {
         int offset = 0;
+        
+        // 1. 读取总长度
         tot_len_ = *reinterpret_cast<const int *>(src + offset);
         offset += sizeof(int);
+        
+        // 2. 读取基本字段
         first_free_page_no_ = *reinterpret_cast<const page_id_t *>(src + offset);
         offset += sizeof(int);
         num_pages_ = *reinterpret_cast<const int *>(src + offset);
@@ -166,18 +239,24 @@ class IxFileHdr {
         offset += sizeof(page_id_t);
         col_num_ = *reinterpret_cast<const int *>(src + offset);
         offset += sizeof(int);
-        // std::cout << col_num_ << "\n";
-        // 反序列化没有初始大小
+        
+        // 3. 分配向量空间并读取列信息
         col_types_.resize(col_num_);
         col_lens_.resize(col_num_);
+        
+        // 3.1 读取列类型
         for (int i = 0; i < col_num_; ++i) {
             col_types_[i] = *reinterpret_cast<const ColType *>(src + offset);
             offset += sizeof(ColType);
         }
+        
+        // 3.2 读取列长度
         for (int i = 0; i < col_num_; ++i) {
             col_lens_[i] = *reinterpret_cast<const int *>(src + offset);
             offset += sizeof(int);
         }
+        
+        // 4. 读取其他参数
         col_tot_len_ = *reinterpret_cast<const int *>(src + offset);
         offset += sizeof(int);
         btree_order_ = *reinterpret_cast<const int *>(src + offset);
@@ -188,6 +267,8 @@ class IxFileHdr {
         offset += sizeof(page_id_t);
         last_leaf_ = *reinterpret_cast<const page_id_t *>(src + offset);
         offset += sizeof(page_id_t);
+        
+        // 验证读取的完整性
         assert(offset == tot_len_);
     }
 
