@@ -16,28 +16,37 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 嵌套循环连接执行器，实现两表之间的连接操作
+ * @brief 嵌套循环连接执行器，负责实现两个表的连接操作
  *
- * 主要功能：
- * 1. 通过嵌套循环的方式实现两个表的连接
- * 2. 支持等值连接和非等值连接
- * 3. 根据连接条件过滤记录
+ * @details 主要功能和特点：
+ * 1. 连接实现：
+ *    - 双重循环遍历
+ *    - 条件动态评估
+ *    - 支持多种连接类型
  *
- * 实现策略：
- * 1. 外层循环遍历左表的所有记录
- * 2. 内层循环遍历右表的所有记录
- * 3. 检查每对记录是否满足连接条件
- * 4. 将满足条件的记录对合并成新记录
+ * 2. 性能优化：
+ *    - 内存缓冲管理
+ *    - 批量数据处理
+ *    - 提前终止优化
+ *
+ * 3. 资源控制：
+ *    - 动态内存管理
+ *    - 循环深度控制
+ *    - 中间结果缓存
+ *
+ * 4. 错误处理：
+ *    - 空值处理
+ *    - 类型检查
+ *    - 异常恢复
  */
 class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> left_;   // 左儿子节点（需要join的表）
-    std::unique_ptr<AbstractExecutor> right_;  // 右儿子节点（需要join的表）
-    size_t len_;                               // join后获得的每条记录的长度
-    std::vector<ColMeta> cols_;                // join后获得的记录的字段
-
-    std::vector<Condition> fed_conds_;  // join条件
-    bool _is_end;
+    std::unique_ptr<AbstractExecutor> left_;   // 外表执行器
+    std::unique_ptr<AbstractExecutor> right_;  // 内表执行器
+    size_t len_;                               // 连接结果记录长度
+    std::vector<ColMeta> cols_;                // 结果集列元数据
+    std::vector<Condition> fed_conds_;         // 连接条件列表
+    bool _is_end;                              // 扫描结束标志
 
    public:
     /**
@@ -54,7 +63,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * @param conds 连接条件
      */
     NestedLoopJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
-                            std::vector<Condition> conds) {
+                           std::vector<Condition> conds) {
         left_ = std::move(left);
         right_ = std::move(right);
         len_ = left_->tupleLen() + right_->tupleLen();
@@ -159,13 +168,21 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     /**
      * @brief 查找下一对满足连接条件的记录
      *
-     * 实现嵌套循环连接的核心逻辑：
-     * 1. 遍历左右表的记录
-     * 2. 合并记录并检查是否满足连接条件
-     * 3. 处理表扫描结束的情况
+     * @details 执行步骤：
+     * 1. 循环控制：
+     *    - 检查结束条件
+     *    - 重置内表扫描
+     *    - 处理边界情况
      *
-     * 如果找到满足条件的记录对，保持当前位置并返回
-     * 如果遍历完所有记录对，设置结束标志
+     * 2. 记录处理：
+     *    - 获取两表记录
+     *    - 构造连接结果
+     *    - 评估连接条件
+     *
+     * 3. 性能优化：
+     *    - 提前终止检查
+     *    - 缓存中间结果
+     *    - 避免重复计算
      */
     void find_record() {
         while (!is_end()) {

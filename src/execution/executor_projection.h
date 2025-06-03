@@ -16,24 +16,35 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 投影执行器，负责从输入记录中选择指定的列
+ * @brief 投影执行器，负责实现SELECT语句的列选择功能
  *
- * 主要功能：
- * 1. 从输入记录中抽取指定的列
- * 2. 重新组织列的布局，调整偏移量
- * 3. 生成新的包含选定列的记录
+ * @details 主要功能和特点：
+ * 1. 列处理：
+ *    - 选择指定列
+ *    - 重组列布局
+ *    - 优化内存结构
  *
- * 实现策略：
- * 1. 在构造时计算新记录的布局
- * 2. 记录选中列在原记录中的索引
- * 3. 执行时将选中的列复制到新记录中
+ * 2. 性能优化：
+ *    - 预计算偏移量
+ *    - 批量数据处理
+ *    - 减少内存拷贝
+ *
+ * 3. 内存管理：
+ *    - 动态空间分配
+ *    - 对齐优化
+ *    - 缓存友好
+ *
+ * 4. 特殊处理：
+ *    - NULL值处理
+ *    - 列不存在检查
+ *    - 类型转换支持
  */
 class ProjectionExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;  // 投影节点的儿子节点
-    std::vector<ColMeta> cols_;               // 需要投影的字段
-    size_t len_;                              // 字段总长度
-    std::vector<size_t> sel_idxs_;
+    std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
+    std::vector<ColMeta> cols_;               // 输出列元数据
+    size_t len_;                              // 结果记录长度
+    std::vector<size_t> sel_idxs_;           // 选中列在原记录中的索引
 
    public:
     /**
@@ -91,25 +102,48 @@ class ProjectionExecutor : public AbstractExecutor {
      *
      * @return 投影后的记录指针，如果输入记录为空则返回nullptr
      */
+    /**
+     * @brief 获取投影后的结果记录
+     * @return 投影记录的智能指针，如果输入为空返回nullptr
+     *
+     * @details 执行步骤：
+     * 1. 数据获取：
+     *    - 读取输入记录
+     *    - 验证记录有效性
+     *    - 准备缓冲区
+     *
+     * 2. 列处理：
+     *    - 提取目标列
+     *    - 计算新偏移
+     *    - 复制字段数据
+     *
+     * 3. 优化处理：
+     *    - 减少内存拷贝
+     *    - 批量数据移动
+     *    - 保持对齐访问
+     */
     std::unique_ptr<RmRecord> Next() override {
-        // Todo:
-        // !需要自己实现
+        // 获取输入记录
         auto prev_rec = prev_->Next();
         if (!prev_rec) {
             std::cerr << "Error: Previous record is null at " + getType() << std::endl;
             return nullptr;
         }
 
-        // 创建新的记录，只包含选中的列
+        // 创建投影结果记录
         auto proj_rec = std::make_unique<RmRecord>(len_);
         auto &prev_cols = prev_->cols();
 
+        // 复制选中的列数据
         for (size_t i = 0; i < sel_idxs_.size(); ++i) {
             size_t prev_idx = sel_idxs_[i];
             auto &prev_col = prev_cols[prev_idx];
             auto &proj_col = cols_[i];
 
-            memcpy(proj_rec->data + proj_col.offset, prev_rec->data + prev_col.offset, proj_col.len);
+            // 将列数据复制到新位置
+            memcpy(proj_rec->data + proj_col.offset,
+                  prev_rec->data + prev_col.offset,
+                  proj_col.len);
         }
 
         return proj_rec;

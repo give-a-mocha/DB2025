@@ -13,10 +13,15 @@ See the Mulan PSL v2 for more details. */
 #include "ix_scan.h"
 
 /**
- * @brief 在当前node中查找第一个>=target的key_idx
- *
- * @return key_idx，范围为[0,num_key)，如果返回的key_idx=num_key，则表示target大于最后一个key
- * @note 返回key index（同时也是rid index），作为slot no
+ * @brief 在当前节点中查找第一个大于等于target的key的位置
+ * @details 使用二分查找算法在当前节点中寻找第一个大于等于目标值的键的位置
+ * @param target 目标键值
+ * @return key_idx 键值对数组的下标
+ *         - 范围：[0,num_key)
+ *         - 如果返回num_key，表示target大于节点中的所有key
+ * @note
+ * - 返回的key_idx同时也是rid_index，作为slot no使用
+ * - 采用二分查找以提高查找效率
  */
 int IxNodeHandle::lower_bound(const char *target) const {
     // Todo:
@@ -37,10 +42,15 @@ int IxNodeHandle::lower_bound(const char *target) const {
 }
 
 /**
- * @brief 在当前node中查找第一个>target的key_idx
- *
- * @return key_idx，范围为[1,num_key)，如果返回的key_idx=num_key，则表示target大于等于最后一个key
- * @note 注意此处的范围从1开始
+ * @brief 在当前节点中查找第一个严格大于target的key的位置
+ * @details 使用二分查找算法查找第一个严格大于目标值的键的位置
+ * @param target 目标键值
+ * @return key_idx 键值对数组的下标
+ *         - 范围：[1,num_key)
+ *         - 如果返回num_key，表示target大于等于节点中所有key
+ * @note
+ * - 与lower_bound不同，这里范围从1开始
+ * - 适用于内部节点的查找，确保不会返回第一个位置
  */
 int IxNodeHandle::upper_bound(const char *target) const {
     // Todo:
@@ -61,12 +71,17 @@ int IxNodeHandle::upper_bound(const char *target) const {
 }
 
 /**
- * @brief 用于叶子结点根据key来查找该结点中的键值对
- * 值value作为传出参数，函数返回是否查找成功
- *
- * @param key 目标key
- * @param[out] value 传出参数，目标key对应的Rid
- * @return 目标key是否存在
+ * @brief 在叶子节点中查找指定key对应的键值对
+ * @details 在叶子节点中定位目标键的具体位置，并返回对应的记录ID
+ * @param key 要查找的目标键值
+ * @param[out] value 用于存储查找到的记录ID的指针
+ * @return bool
+ *         - true：成功找到目标键值对
+ *         - false：未找到目标键值对
+ * @note
+ * - 该函数只用于叶子节点
+ * - value作为传出参数，存储目标key对应的记录ID
+ * - 使用lower_bound进行高效查找
  */
 bool IxNodeHandle::leaf_lookup(const char *key, Rid **value) {
     // Todo:
@@ -83,9 +98,14 @@ bool IxNodeHandle::leaf_lookup(const char *key, Rid **value) {
 }
 
 /**
- * 用于内部结点（非叶子节点）查找目标key所在的孩子结点（子树）
- * @param key 目标key
- * @return page_id_t 目标key所在的孩子节点（子树）的存储页面编号
+ * @brief 在内部节点中查找目标key应该插入的子节点位置
+ * @details 通过比较键值确定目标key应当插入到哪个子树中
+ * @param key 目标键值
+ * @return page_id_t 包含目标key的子节点页面编号
+ * @note
+ * - 仅用于内部节点（非叶子节点）
+ * - 利用upper_bound确保返回正确的子节点
+ * - 返回的页面号对应目标key所在的子树根节点
  */
 page_id_t IxNodeHandle::internal_lookup(const char *key) {
     // Todo:
@@ -97,18 +117,22 @@ page_id_t IxNodeHandle::internal_lookup(const char *key) {
 }
 
 /**
- * @brief 在指定位置插入n个连续的键值对
- * 将key的前n位插入到原来keys中的pos位置；将rid的前n位插入到原来rids中的pos位置
- *
- * @param pos 要插入键值对的位置
- * @param (key, rid) 连续键值对的起始地址，也就是第一个键值对，可以通过(key, rid)来获取n个键值对
- * @param n 键值对数量
- * @note [0,pos)           [pos,num_key)
- *                            key_slot
- *                            /      \
- *                           /        \
- *       [0,pos)     [pos,pos+n)   [pos+n,num_key+n)
- *                      key           key_slot
+ * @brief 向节点的指定位置插入多个连续的键值对
+ * @details 在节点中插入n个键值对，通过内存移动和复制实现高效插入
+ * @param pos 插入位置的起始下标
+ * @param (key, rid) 要插入的键值对数组的起始地址
+ * @param n 要插入的键值对数量
+ * @note 插入过程的内存布局：
+ * 原始数据: [0,pos)           [pos,num_key)
+ *                               key_slot
+ *                               /      \
+ *                              /        \
+ * 插入后:   [0,pos)     [pos,pos+n)   [pos+n,num_key+n)
+ *                         key           key_slot
+ * @warning
+ * - 调用前必须确保节点有足够空间容纳n个新键值对
+ * - pos必须在有效范围内[0,num_key]
+ * - 需要同时维护keys和rids数组
  */
 void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n) {
     // Todo:
@@ -133,11 +157,16 @@ void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n)
 }
 
 /**
- * @brief 用于在结点中插入单个键值对。
- * 函数返回插入后的键值对数量
- *
- * @param (key, value) 要插入的键值对
- * @return int 键值对数量
+ * @brief 向节点中插入单个键值对
+ * @details 检查是否存在重复键值，不存在则插入新的键值对
+ * @param key 要插入的键
+ * @param value 要插入的记录ID
+ * @return int 插入完成后节点中的键值对总数
+ * @note
+ * - 首先使用lower_bound找到适合的插入位置
+ * - 如果键值已存在则不执行插入
+ * - 通过insert_pairs实现实际的插入操作
+ * @warning 调用前要确保节点有足够的空间存储新的键值对
  */
 int IxNodeHandle::insert(const char *key, const Rid &value) {
     // Todo:
@@ -154,9 +183,16 @@ int IxNodeHandle::insert(const char *key, const Rid &value) {
 }
 
 /**
- * @brief 用于在结点中的指定位置删除单个键值对
- *
- * @param pos 要删除键值对的位置
+ * @brief 删除节点中指定位置的键值对
+ * @details 通过内存移动实现高效的键值对删除
+ * @param pos 要删除的键值对位置
+ * @note
+ * - 通过移动内存来填补被删除的位置
+ * - 同时维护keys和rids数组
+ * - 更新节点的键值对数量
+ * @warning
+ * - pos必须在有效范围内[0,num_key)
+ * - 删除后要保证节点结构的完整性
  */
 void IxNodeHandle::erase_pair(int pos) {
     // Todo:
@@ -185,10 +221,15 @@ void IxNodeHandle::erase_pair(int pos) {
 }
 
 /**
- * @brief 用于在结点中删除指定key的键值对。函数返回删除后的键值对数量
- *
- * @param key 要删除的键值对key值
- * @return 完成删除操作后的键值对数量
+ * @brief 删除节点中指定key的键值对
+ * @details 查找并删除指定key对应的键值对
+ * @param key 要删除的键值
+ * @return int 删除后节点中剩余的键值对数量
+ * @note
+ * - 使用lower_bound找到目标键的位置
+ * - 如果找到目标键则调用erase_pair进行删除
+ * - 如果未找到则不进行任何操作
+ * @warning 删除操作可能导致节点键值对数量低于最小值，需要额外处理
  */
 int IxNodeHandle::remove(const char *key) {
     // Todo:
@@ -246,12 +287,18 @@ std::pair<IxNodeHandle *, bool> IxIndexHandle::find_leaf_page(const char *key, O
 }
 
 /**
- * @brief 用于查找指定键在叶子结点中的对应的值result
- *
- * @param key 查找的目标key值
- * @param result 用于存放结果的容器
- * @param transaction 事务指针
- * @return bool 返回目标键值对是否存在
+ * @brief 查找指定键值对应的记录
+ * @details 定位并获取与给定键值关联的所有记录ID
+ * @param key 查找的目标键值
+ * @param result 存储查找结果的向量容器
+ * @param transaction 事务指针，用于并发控制
+ * @return bool
+ *         - true：成功找到目标键值对
+ *         - false：未找到目标键值对
+ * @note
+ * - 使用find_leaf_page定位叶子节点
+ * - 使用互斥锁保护并发访问
+ * - 需要正确处理内存资源的释放
  */
 bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transaction *transaction) {
     // Todo:
@@ -275,11 +322,19 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
 }
 
 /**
- * @brief  将传入的一个node拆分(Split)成两个结点，在node的右边生成一个新结点new node
- * @param node 需要拆分的结点
- * @return 拆分得到的new_node
- * @note need to unpin the new node outside
- * 注意：本函数执行完毕后，原node和new node都需要在函数外面进行unpin
+ * @brief 将节点分裂成两个节点
+ * @details 将一个满节点分裂成两个节点，键值对平均分配
+ * @param node 需要分裂的节点
+ * @return IxNodeHandle* 新创建的右侧节点
+ * @note
+ * - 会创建一个新的右侧兄弟节点
+ * - 原节点保留前半部分键值对
+ * - 新节点包含后半部分键值对
+ * - 如果是叶子节点，需要维护叶子节点链表
+ * - 如果是内部节点，需要更新子节点的父指针
+ * @warning
+ * - 调用者必须在使用完毕后unpin两个节点
+ * - 分裂可能触发父节点的递归分裂
  */
 IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
     // Todo:
@@ -319,17 +374,23 @@ IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
 }
 
 /**
- * @brief Insert key & value pair into internal page after split
- * 拆分(Split)后，向上找到old_node的父结点
- * 将new_node的第一个key插入到父结点，其位置在 父结点指向old_node的孩子指针 之后
- * 如果插入后>=maxsize，则必须继续拆分父结点，然后在其父结点的父结点再插入，即需要递归
- * 直到找到的old_node为根结点时，结束递归（此时将会新建一个根R，关键字为key，old_node和new_node为其孩子）
- *
- * @param (old_node, new_node) 原结点为old_node，old_node被分裂之后产生了新的右兄弟结点new_node
- * @param key 要插入parent的key
- * @note 一个结点插入了键值对之后需要分裂，分裂后左半部分的键值对保留在原结点，在参数中称为old_node，
- * 右半部分的键值对分裂为新的右兄弟节点，在参数中称为new_node（参考Split函数来理解old_node和new_node）
- * @note 本函数执行完毕后，new node和old node都需要在函数外面进行unpin
+ * @brief 在节点分裂后将新节点的信息插入到父节点
+ * @details 处理节点分裂后的父节点更新操作，可能触发递归分裂
+ * @param old_node 原始节点
+ * @param key 要插入到父节点的键值
+ * @param new_node 分裂产生的新右兄弟节点
+ * @param transaction 事务指针
+ * @note 处理流程：
+ * 1. 如果old_node是根节点：
+ *    - 创建新的根节点
+ *    - 设置old_node和new_node为其子节点
+ * 2. 如果old_node不是根节点：
+ *    - 在父节点中插入new_node的首个键值对
+ *    - 如果父节点已满，则递归执行分裂
+ * @warning
+ * - 必须正确维护节点间的父子关系
+ * - 分裂可能一直递归到根节点
+ * - 调用者负责unpin所有节点
  */
 void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node,
                                        Transaction *transaction) {
@@ -376,10 +437,23 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
 }
 
 /**
- * @brief 将指定键值对插入到B+树中
- * @param (key, value) 要插入的键值对
- * @param transaction 事务指针
- * @return page_id_t 插入到的叶结点的page_no
+ * @brief 向B+树中插入键值对
+ * @details 完成键值对的插入操作，必要时进行节点分裂
+ * @param key 要插入的键
+ * @param value 要插入的记录ID
+ * @param transaction 事务指针，用于并发控制
+ * @return page_id_t
+ *         - 插入位置所在叶节点的页面号
+ *         - INVALID_PAGE_ID 表示插入失败
+ * @note 插入过程：
+ * 1. 找到目标叶子节点
+ * 2. 检查是否存在重复键值
+ * 3. 执行插入操作
+ * 4. 必要时分裂节点并更新父节点
+ * @warning
+ * - 需要正确处理并发控制
+ * - 必须维护最右叶子节点信息
+ * - 要及时释放节点的内存资源
  */
 page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction *transaction) {
     // Todo:
@@ -414,9 +488,21 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
 }
 
 /**
- * @brief 用于删除B+树中含有指定key的键值对
- * @param key 要删除的key值
+ * @brief 从B+树中删除指定键值对
+ * @details 删除键值对并处理可能的节点合并或重分配
+ * @param key 要删除的键值
  * @param transaction 事务指针
+ * @return bool
+ *         - true：成功删除目标键值对
+ *         - false：未找到目标键值对
+ * @note 删除过程：
+ * 1. 定位目标叶子节点
+ * 2. 执行删除操作
+ * 3. 如果节点键值对过少，进行合并或重分配
+ * @warning
+ * - 删除可能触发节点合并
+ * - 需要正确处理并发访问
+ * - 注意资源的释放
  */
 bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
     // Todo:
@@ -653,13 +739,20 @@ bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, 
 }
 
 /**
- * @brief 这里把iid转换成了rid，即iid的slot_no作为node的rid_idx(key_idx)
- * node其实就是把slot_no作为键值对数组的下标
- * 换而言之，每个iid对应的索引槽存了一对(key,rid)，指向了(要建立索引的属性首地址,插入/删除记录的位置)
- *
- * @param iid
- * @return Rid
- * @note iid和rid存的不是一个东西，rid是上层传过来的记录位置，iid是索引内部生成的索引槽位置
+ * @brief 将索引项ID转换为记录ID
+ * @details 根据索引项ID中的页号和槽号找到对应的记录ID
+ * @param iid 索引项ID，包含页号和槽号
+ * @return Rid 对应的记录ID
+ * @note 实现说明：
+ * - iid.slot_no作为node的rid_idx(key_idx)
+ * - 每个iid对应的索引槽存储(key,rid)对
+ * - key指向要建立索引的属性首地址
+ * - rid指向实际记录的存储位置
+ * @warning
+ * - iid和rid存储不同含义：
+ *   - iid是索引内部的位置标识
+ *   - rid是实际记录的存储位置
+ * - 使用后必须释放节点资源
  */
 Rid IxIndexHandle::get_rid(const Iid &iid) const {
     IxNodeHandle *node = fetch_node(iid.page_no);
@@ -674,12 +767,16 @@ Rid IxIndexHandle::get_rid(const Iid &iid) const {
 }
 
 /**
- * @brief FindLeafPage + lower_bound
- *
- * @param key
- * @return Iid
- * @note 上层传入的key本来是int类型，通过(const char *)&key进行了转换
- * 可用*(int *)key转换回去
+ * @brief 查找第一个大于等于给定键值的索引项
+ * @details 结合查找叶子节点和节点内查找两个操作
+ * @param key 目标键值
+ * @return Iid 找到的索引项ID
+ * @note 类型转换说明：
+ * - 上层传入int类型键值通过(const char *)&key转换
+ * - 使用时可通过*(int *)key转回int类型
+ * @warning
+ * - 必须正确处理未找到的情况
+ * - 需要及时释放节点资源
  */
 Iid IxIndexHandle::lower_bound(const char *key) {
     //! DO
@@ -696,10 +793,15 @@ Iid IxIndexHandle::lower_bound(const char *key) {
 }
 
 /**
- * @brief FindLeafPage + upper_bound
- *
- * @param key
- * @return Iid
+ * @brief 查找第一个严格大于给定键值的索引项
+ * @details 结合查找叶子节点和节点内查找两个操作
+ * @param key 目标键值
+ * @return Iid 找到的索引项ID
+ * @note 实现细节：
+ * - 先定位到叶子节点
+ * - 然后在节点内查找目标位置
+ * - 如果未找到返回leaf_end()
+ * @warning 必须及时释放节点资源
  */
 Iid IxIndexHandle::upper_bound(const char *key) {
     //! DO
@@ -716,10 +818,14 @@ Iid IxIndexHandle::upper_bound(const char *key) {
 }
 
 /**
- * @brief 指向最后一个叶子的最后一个结点的后一个
- * 用处在于可以作为IxScan的最后一个
- *
- * @return Iid
+ * @brief 获取B+树最后一个叶子节点末尾的位置
+ * @details 用于表示索引扫描的结束位置
+ * @return Iid 最后叶子节点的结束位置
+ * @note
+ * - 返回最后叶子节点的size位置
+ * - 常用作IxScan的终止位置
+ * - 可用于范围查询的边界
+ * @warning 使用后必须及时释放节点资源
  */
 Iid IxIndexHandle::leaf_end() const {
     IxNodeHandle *node = fetch_node(file_hdr_->last_leaf_);
@@ -730,10 +836,13 @@ Iid IxIndexHandle::leaf_end() const {
 }
 
 /**
- * @brief 指向第一个叶子的第一个结点
- * 用处在于可以作为IxScan的第一个
- *
- * @return Iid
+ * @brief 获取B+树第一个叶子节点的起始位置
+ * @details 用于表示索引扫描的起始位置
+ * @return Iid 第一个叶子节点的起始位置
+ * @note
+ * - 返回值：{first_leaf, 0}
+ * - 常用作IxScan的起始位置
+ * - 可用于范围查询的起点
  */
 Iid IxIndexHandle::leaf_begin() const {
     Iid iid = {.page_no = file_hdr_->first_leaf_, .slot_no = 0};
@@ -741,11 +850,17 @@ Iid IxIndexHandle::leaf_begin() const {
 }
 
 /**
- * @brief 获取一个指定结点
- *
- * @param page_no
- * @return IxNodeHandle*
- * @note pin the page, remember to unpin it outside!
+ * @brief 根据页号获取对应的索引节点
+ * @details 从缓冲池中获取或加载指定页面
+ * @param page_no 目标页面号
+ * @return IxNodeHandle* 索引节点句柄
+ * @note 重要说明：
+ * - 会将页面固定在缓冲池中
+ * - 返回的节点必须由调用者解除固定
+ * - 使用完毕后必须删除节点句柄
+ * @warning
+ * - 必须在外部调用unpin_page
+ * - 必须释放返回的节点内存
  */
 IxNodeHandle *IxIndexHandle::fetch_node(int page_no) const {
     Page *page = buffer_pool_manager_->fetch_page(PageId{fd_, page_no});
@@ -757,14 +872,19 @@ IxNodeHandle *IxIndexHandle::fetch_node(int page_no) const {
 }
 
 /**
- * @brief 创建一个新结点
- *
- * @return IxNodeHandle*
- * @note pin the page, remember to unpin it outside!
- * 注意：对于Index的处理是，删除某个页面后，认为该被删除的页面是free_page
- * 而first_free_page实际上就是最新被删除的页面，初始为IX_NO_PAGE
- * 在最开始插入时，一直是create node，那么first_page_no一直没变，一直是IX_NO_PAGE
- * 与Record的处理不同，Record将未插入满的记录页认为是free_page
+ * @brief 创建一个新的索引节点
+ * @details 分配新页面并初始化为索引节点
+ * @return IxNodeHandle* 新创建的节点句柄
+ * @note 页面管理策略：
+ * - 删除的页面被标记为free_page
+ * - first_free_page指向最新删除的页面
+ * - 初始插入时创建新节点，first_page_no保持为IX_NO_PAGE
+ * - 与Record管理的区别：
+ *   - Index：只有删除的页面才是free_page
+ *   - Record：未满的记录页也视为free_page
+ * @warning
+ * - 调用者必须unpin返回的页面
+ * - 必须释放节点内存
  */
 IxNodeHandle *IxIndexHandle::create_node() {
     IxNodeHandle *node;
@@ -778,9 +898,16 @@ IxNodeHandle *IxIndexHandle::create_node() {
 }
 
 /**
- * @brief 从node开始更新其父节点的第一个key，一直向上更新直到根节点
- *
- * @param node
+ * @brief 更新节点到根节点路径上的键值
+ * @details 递归更新父节点的首个键值直到根节点
+ * @param node 起始节点
+ * @note 更新过程：
+ * 1. 获取父节点
+ * 2. 更新父节点中对应子节点的键值
+ * 3. 如果有变化则继续向上更新
+ * @warning
+ * - 必须正确处理资源释放
+ * - 需要正确维护内存中的数据
  */
 void IxIndexHandle::maintain_parent(IxNodeHandle *node) {
     IxNodeHandle *curr = node;
@@ -804,9 +931,15 @@ void IxIndexHandle::maintain_parent(IxNodeHandle *node) {
 }
 
 /**
- * @brief 要删除leaf之前调用此函数，更新leaf前驱结点的next指针和后继结点的prev指针
- *
- * @param leaf 要删除的leaf
+ * @brief 删除叶子节点前更新双向链表
+ * @details 维护叶子节点双向链表的完整性
+ * @param leaf 待删除的叶子节点
+ * @note 更新步骤：
+ * 1. 更新前驱节点的next指针
+ * 2. 更新后继节点的prev指针
+ * @warning
+ * - 必须在实际删除叶子节点前调用
+ * - 需要正确处理资源释放
  */
 void IxIndexHandle::erase_leaf(IxNodeHandle *leaf) {
     assert(leaf->is_leaf_page());
@@ -823,14 +956,24 @@ void IxIndexHandle::erase_leaf(IxNodeHandle *leaf) {
 }
 
 /**
- * @brief 删除node时，更新file_hdr_.num_pages
- *
- * @param node
+ * @brief 删除节点时更新文件头信息
+ * @details 更新索引文件的页面数量统计
+ * @param node 要删除的节点
+ * @note 实现说明：
+ * - 减少文件头中的页面计数
+ * - 用于维护索引文件的元数据
  */
 void IxIndexHandle::release_node_handle(IxNodeHandle &node) { file_hdr_->num_pages_--; }
 
 /**
- * @brief 将node的第child_idx个孩子结点的父节点置为node
+ * @brief 维护节点与子节点的父子关系
+ * @details 设置子节点的父节点指针
+ * @param node 父节点
+ * @param child_idx 子节点在父节点中的索引
+ * @note 实现说明：
+ * - 仅对非叶子节点操作
+ * - 更新子节点的parent指针
+ * @warning 必须正确处理资源释放
  */
 void IxIndexHandle::maintain_child(IxNodeHandle *node, int child_idx) {
     if (!node->is_leaf_page()) {

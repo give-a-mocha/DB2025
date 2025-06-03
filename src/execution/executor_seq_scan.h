@@ -17,140 +17,104 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 顺序扫描执行器，提供表的全表扫描功能
+ * @brief 顺序扫描执行器，负责实现表的全表顺序扫描功能
  *
- * 实现架构：
- * 1. 扫描机制
- *    - 页面级扫描：按页读取数据
- *    - 记录级扫描：遍历页内记录
- *    - 缓冲区管理：优化I/O操作
+ * @details 主要功能和特点：
+ * 1. 基本扫描：
+ *    - 按页顺序读取
+ *    - 遍历页内记录
+ *    - 支持条件过滤
  *
- * 2. 条件处理
- *    - 条件下推：尽早过滤无关记录
- *    - 谓词评估：高效的条件检查
- *    - 批量处理：减少函数调用开销
+ * 2. 执行优化：
+ *    - 条件提前过滤
+ *    - 批量读取优化
+ *    - 缓存数据复用
  *
- * 3. 性能优化
- *    - 预读取：异步加载下一页
- *    - 缓存优化：重用热点数据
- *    - 内存对齐：优化数据访问
+ * 3. 事务支持：
+ *    - 读写隔离
+ *    - 并发访问控制
+ *    - 日志恢复机制
  *
- * 4. 资源管理
- *    - 内存控制：避免过度消耗
- *    - 并发处理：支持多事务
- *    - 错误恢复：保证操作原子性
+ * 4. 性能考虑：
+ *    - 最小化I/O
+ *    - 合理使用缓存
+ *    - 支持中断恢复
  *
- * @note 适用场景：
- * - 小表全表扫描
- * - 高选择性查询
- * - 数据探索分析
+ * @note 使用场景：
+ * - 小表的完整扫描
+ * - 无索引条件查询
+ * - 数据分析和统计
  */
 class SeqScanExecutor : public AbstractExecutor {
    private:
-    /**
-     * @brief 扫描目标表的名称
-     * @note 用于获取表的元数据和文件句柄
-     */
-    std::string tab_name_;
-
-    /**
-     * @brief 扫描的过滤条件列表
-     * @note 包含WHERE子句中的所有条件
-     */
-    std::vector<Condition> conds_;
-
-    /**
-     * @brief 表文件的访问句柄
-     * @note 用于读取记录数据
-     */
-    RmFileHandle *fh_;
-
-    /**
-     * @brief 输出列的元数据定义
-     * @note 包含列的类型、长度、偏移等信息
-     */
-    std::vector<ColMeta> cols_;
-
-    /**
-     * @brief 输出记录的总长度(字节)
-     * @note 用于内存分配和数据访问
-     */
-    size_t len_;
-
-    /**
-     * @brief 优化后的条件表达式
-     * @note 可能经过重写和简化的条件
-     */
-    std::vector<Condition> fed_conds_;
-
-    /**
-     * @brief 当前处理记录的标识符
-     * @note 用于定位和访问记录
-     */
-    Rid rid_;
-
-    /**
-     * @brief 底层扫描迭代器
-     * @note 提供记录级别的遍历功能
-     */
-    std::unique_ptr<RecScan> scan_;
-
-    /**
-     * @brief 系统管理器的访问接口
-     * @note 用于访问系统元数据和服务
-     */
-    SmManager *sm_manager_;
+    std::string tab_name_;              // 扫描的表名
+    std::vector<Condition> conds_;      // 过滤条件列表
+    RmFileHandle *fh_;                  // 表文件句柄
+    std::vector<ColMeta> cols_;         // 输出列的元数据
+    size_t len_;                        // 记录总长度(字节)
+    std::vector<Condition> fed_conds_;  // 优化后的条件
+    Rid rid_;                           // 当前记录的RID
+    std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
+    SmManager *sm_manager_;             // 系统管理器指针
 
    public:
     /**
      * @brief 构造函数
      * @param sm_manager 系统管理器指针
      * @param tab_name 要扫描的表名
-     * @param conds 扫描条件
+     * @param conds 过滤条件列表
      * @param context 执行上下文
+     *
+     * @details 初始化过程：
+     * 1. 基础设置：
+     *    - 保存系统管理器
+     *    - 记录表名和条件
+     *    - 设置执行上下文
+     *
+     * 2. 表信息获取：
+     *    - 读取表元数据
+     *    - 获取文件句柄
+     *    - 计算记录长度
      */
     SeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context) {
         sm_manager_ = sm_manager;
         tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
+
+        // 获取表信息
         TabMeta &tab = sm_manager_->db_.get_table(tab_name_);
         fh_ = sm_manager_->fhs_.at(tab_name_).get();
         cols_ = tab.cols;
+
+        // 计算记录长度
         len_ = cols_.back().offset + cols_.back().len;
 
         context_ = context;
-
-        fed_conds_ = conds_;
+        fed_conds_ = conds_;  // 暂未优化的条件列表
     }
 
     /**
-     * @brief 初始化表扫描操作
-     * @throw InternalError 当初始化失败时
+     * @brief 初始化扫描并定位第一条符合条件的记录
      *
-     * @details 初始化过程：
-     * 1. 扫描准备
-     *    - 创建记录迭代器
-     *    - 设置初始位置
-     *    - 预热缓冲区
+     * @details 执行步骤：
+     * 1. 初始化扫描器：
+     *    - 创建表扫描迭代器
+     *    - 设置起始位置
      *
-     * 2. 条件处理
-     *    - 初始化条件评估器
-     *    - 准备常量条件值
-     *    - 设置评估上下文
+     * 2. 查找首条记录：
+     *    - 读取记录内容
+     *    - 评估过滤条件
+     *    - 跳过不符合的记录
      *
-     * 3. 资源分配
-     *    - 分配扫描缓冲区
-     *    - 注册事务锁
-     *    - 初始化统计信息
-     *
-     * @note 优化策略：
-     * - 异步预读下一页
-     * - 批量加载优化
-     * - 减少内存分配
+     * 3. 性能优化：
+     *    - 使用缓存读取
+     *    - 提前过滤无效记录
      */
     void beginTuple() override {
+        // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
-        // 移动到第一个满足条件的记录
+
+        // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
@@ -162,38 +126,35 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 获取下一个满足条件的记录
+     * @brief 移动到下一条满足条件的记录
      * @throw InternalError 当扫描器未初始化时
      *
-     * @details 处理流程：
-     * 1. 状态检查
+     * @details 执行步骤：
+     * 1. 状态检查：
      *    - 验证扫描器状态
-     *    - 检查事务活跃性
-     *    - 处理并发访问
+     *    - 处理到达结尾的情况
      *
-     * 2. 记录定位
-     *    - 获取下一条记录
-     *    - 条件过滤
-     *    - 处理删除标记
+     * 2. 记录定位：
+     *    - 移动到下一条记录
+     *    - 读取记录数据
+     *    - 条件过滤判断
      *
-     * 3. 性能优化
-     *    - 批量条件评估
-     *    - 跳过无效记录
-     *    - 利用缓存数据
-     *
-     * @note 错误处理：
-     * - 处理无效记录
-     * - 检测并发冲突
-     * - 维护扫描状态
+     * 3. 错误处理：
+     *    - 扫描器错误检测
+     *    - 读取异常处理
      */
     void nextTuple() override {
+        // 检查扫描器状态
         if (scan_ == nullptr) {
             throw InternalError("Scan not initialized at " + getType());
         }
+
+        // 移动扫描位置
         if (!scan_->is_end()) {
             scan_->next();
         }
-        // 移动到下一个满足条件的记录
+
+        // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
@@ -209,47 +170,20 @@ class SeqScanExecutor : public AbstractExecutor {
      * @return true表示扫描结束，false表示还有记录
      *
      * @details 结束条件：
-     * 1. 正常结束
-     *    - 完成全表扫描
-     *    - 到达最后一条记录
-     *
-     * 2. 异常结束
-     *    - 扫描器未初始化(nullptr)
-     *    - 事务回滚或中止
-     *    - I/O错误或损坏
-     *
-     * @note 实现考虑：
-     * - 快速路径检查
-     * - 并发状态验证
-     * - 支持中断恢复
+     * - 扫描器未初始化(nullptr)
+     * - 已到达表末尾
+     * - 无更多满足条件的记录
      */
     bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
 
     /**
-     * @brief 获取当前有效记录
-     * @return 记录的智能指针，无效时返回nullptr
-     * @throw InternalError 当记录访问失败时
+     * @brief 获取当前记录的数据
+     * @return 记录的智能指针，扫描结束时返回nullptr
      *
-     * @details 获取过程：
-     * 1. 有效性检查
-     *    - 验证当前位置
-     *    - 检查记录状态
-     *    - 验证事务可见性
-     *
-     * 2. 数据访问
-     *    - 从缓冲池读取
-     *    - 处理记录格式
-     *    - 应用过滤条件
-     *
-     * 3. 并发控制
-     *    - 获取读锁
-     *    - 检查记录版本
-     *    - 处理死锁
-     *
-     * @note 优化策略：
-     * - 使用记录缓存
-     * - 批量预读取
-     * - 智能指针管理
+     * @details 实现逻辑：
+     * 1. 检查扫描状态
+     * 2. 读取当前记录
+     * 3. 返回记录数据
      */
     std::unique_ptr<RmRecord> Next() override {
         if (is_end()) {
@@ -262,55 +196,27 @@ class SeqScanExecutor : public AbstractExecutor {
      * @brief 获取记录的总长度
      * @return 记录长度(字节数)
      *
-     * @details 长度组成：
-     * 1. 字段长度
-     *    - 固定长度字段
-     *    - 变长字段实际长度
-     *    - 对齐填充
-     *
-     * 2. 系统开销
-     *    - 记录头信息
-     *    - 字段偏移表
-     *    - NULL值位图
-     *
-     * @note 用途：
-     * - 内存分配
-     * - 缓冲区管理
-     * - I/O优化
+     * @note 包含所有字段的总长度，用于内存分配
      */
     size_t tupleLen() const override { return len_; }
 
     /**
-     * @brief 获取输出列的元数据定义
+     * @brief 获取输出列的元数据
      * @return 列元数据向量的常量引用
      *
-     * @details 元数据内容：
-     * 1. 列属性
-     *    - 名称和类型
-     *    - 长度和偏移
-     *    - 约束信息
-     *
-     * 2. 访问信息
-     *    - 物理存储布局
-     *    - 编码方式
-     *    - 统计信息
-     *
-     * @note 使用场景：
-     * - 类型检查
-     * - 内存布局
-     * - 优化决策
+     * @note 包含列的类型、长度、偏移等信息
      */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
     /**
      * @brief 获取当前记录的RID
-     * @return 返回当前记录的RID引用
+     * @return 当前记录的RID引用
      */
     Rid &rid() override { return rid_; }
 
     /**
-     * @brief 获取执行器类型
-     * @return 返回执行器的类型字符串
+     * @brief 获取执行器类型名称
+     * @return 执行器的类型字符串
      */
     std::string getType() override { return "SeqScanExecutor"; }
 };

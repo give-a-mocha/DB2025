@@ -41,7 +41,7 @@ TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_
     lock_manager_ = lock_manager;
     sm_manager_ = sm_manager;
     concurrency_mode_ = concurrency_mode;
-    
+
     // 初始化事务计数器和时间戳
     next_txn_id_ = 0;
     next_timestamp_ = 0;
@@ -119,30 +119,47 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
  */
 void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // Todo: 实现事务提交逻辑
-    
+
     // 1. 提交所有未完成的写操作
     // - 遍历write_set中的所有数据项
     // - 对于每个修改，将其写入磁盘
     // - 清空write_set
-    
+
     // 2. 释放所有持有的锁
     // - 遍历lock_set中的所有锁
     // - 按照2PL协议释放锁
     // - 更新锁管理器状态
-    
+
+    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
+    for (auto lock : *lock_set) {
+        lock_manager_->unlock(txn, lock);
+    }
+
+    txn->get_write_set()->clear();
+    txn->get_lock_set()->clear();
+    txn->get_index_deleted_page_set()->clear();
+    txn->get_index_deleted_page_set()->clear();
+
     // 3. 资源清理
     // - 释放事务占用的内存
     // - 清空事务的write_set和lock_set
-    
+
     // 4. 日志处理
     // - 创建COMMIT类型日志记录
     // - 更新日志序列号链
     // - 确保日志被刷入磁盘
-    
+
+    auto log = new CommitLogRecord(txn->get_transaction_id());
+    log->prev_lsn_ = txn->get_prev_lsn();
+    log_manager->add_log_to_buffer(log);
+    txn->set_prev_lsn(log->lsn_);
+
     // 5. 更新事务状态
     // - 将状态设置为COMMITTED
     // - 从全局事务表中移除
-    
+
+    txn->set_state(TransactionState::COMMITTED);
+
     // 6. MVCC支持（如果启用）
     // - 更新记录的版本链
     // - 更新提交时间戳
@@ -176,29 +193,29 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
  */
 void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
     // Todo: 实现事务回滚逻辑
-    
+
     // 1. 回滚所有写操作
     // - 按照撤销日志的逆序回滚
     // - 对每条日志记录执行补偿操作
     // - 恢复修改前的数据状态
-    
+
     // 2. 释放所有锁
     // - 遍历并释放lock_set中的锁
     // - 通知锁管理器更新状态
-    
+
     // 3. 资源清理
     // - 清空write_set和lock_set
     // - 释放相关内存
-    
+
     // 4. 日志处理
     // - 创建ABORT类型日志记录
     // - 更新日志序列号链
     // - 将日志刷入磁盘
-    
+
     // 5. 更新事务状态
     // - 将状态设置为ABORTED
     // - 从全局事务表中移除
-    
+
     // 6. MVCC相关清理（如果启用）
     // - 清理版本链
     // - 恢复时间戳状态

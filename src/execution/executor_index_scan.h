@@ -17,38 +17,33 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 索引扫描执行器，提供基于索引的高效记录访问
+ * @brief 索引扫描执行器，负责实现基于索引的高效记录访问
  *
- * 核心功能：
- * 1. 索引范围构建
- *    - 分析查询条件
- *    - 确定扫描边界
- *    - 优化范围选择
+ * @details 主要功能和特点：
+ * 1. 索引处理：
+ *    - 构建扫描范围
+ *    - 优化查询条件
+ *    - 高效遍历策略
  *
- * 2. 高效扫描策略
- *    - B+树遍历优化
- *    - 记录预取机制
- *    - 条件过滤下推
+ * 2. 性能优化：
+ *    - B+树访问优化
+ *    - 记录批量预读
+ *    - 条件提前过滤
  *
- * 3. 并发控制
- *    - 索引锁管理
- *    - 一致性保证
+ * 3. 事务支持：
+ *    - 索引并发控制
+ *    - MVCC支持
  *    - 死锁预防
  *
- * 4. 性能优化
- *    - 缓冲区管理
- *    - 批量读取
- *    - 内存对齐
+ * 4. 资源管理：
+ *    - 内存使用优化
+ *    - 缓存命中率提升
+ *    - I/O最小化
  *
- * @note 适用场景：
- * - 高选择性查询
+ * @note 使用场景：
+ * - 高选择度查询
  * - 范围扫描操作
- * - 排序要求
- *
- * @warning 注意事项：
- * - 索引选择性影响性能
- * - 需要维护索引开销
- * - 内存消耗考虑
+ * - 有序结果需求
  */
 class IndexScanExecutor : public AbstractExecutor {
    private:
@@ -261,12 +256,23 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 移动到下一个满足条件的元组
-     *
-     * 沿着索引继续扫描，直到找到下一个满足所有条件的记录。
-     * 如果扫描器未初始化，会抛出内部错误。
-     *
+     * @brief 移动到下一条满足条件的记录
      * @throw InternalError 当扫描器未初始化时
+     *
+     * @details 执行步骤：
+     * 1. 状态检查：
+     *    - 验证扫描器状态
+     *    - 检查是否到达结尾
+     *
+     * 2. 记录查找：
+     *    - 移动索引位置
+     *    - 读取记录数据
+     *    - 应用过滤条件
+     *
+     * 3. 性能优化：
+     *    - 批量预读取
+     *    - 缓存结果集
+     *    - 减少I/O操作
      */
     void nextTuple() override {
         if (scan_ == nullptr) {
@@ -356,6 +362,11 @@ class IndexScanExecutor : public AbstractExecutor {
     /**
      * @brief 获取扫描涉及的所有列元数据
      * @return 列元数据向量的常量引用
+     *
+     * @details 包含数据：
+     * - 列名和类型信息
+     * - 偏移量和长度
+     * - 约束条件
      */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
@@ -372,6 +383,11 @@ class IndexScanExecutor : public AbstractExecutor {
     /**
      * @brief 获取当前记录的RID
      * @return 当前记录的RID引用
+     *
+     * @note 用于：
+     * - 记录定位
+     * - 锁管理
+     * - 并发控制
      */
     Rid &rid() override { return rid_; }
 

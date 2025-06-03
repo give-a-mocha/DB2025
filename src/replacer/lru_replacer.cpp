@@ -15,10 +15,24 @@ LRUReplacer::LRUReplacer(size_t num_pages) { max_size_ = num_pages; }
 LRUReplacer::~LRUReplacer() = default;
 
 /**
- * @description: 使用LRU策略删除一个victim frame，并返回该frame的id
- * @param {frame_id_t*} frame_id
- * 被移除的frame的id，如果没有frame被移除返回nullptr
- * @return {bool} 如果成功淘汰了一个页面则返回true，否则返回false
+ * @brief 根据LRU策略选择并移除一个受害帧
+ *
+ * @param frame_id 被选中移除的帧ID的指针
+ * @return true 成功找到并移除了一个帧
+ * @return false 没有可移除的帧
+ *
+ * @details 实现步骤：
+ * 1. 获取互斥锁，保证并发安全
+ * 2. 检查是否有可淘汰的页面
+ * 3. 选择链表尾部(最久未使用)的页面
+ * 4. 同时从链表和哈希表中删除该页面
+ *
+ * @note 优化考虑：
+ * 1. 使用双向链表保证O(1)删除
+ * 2. 哈希表维护O(1)查找
+ * 3. 并发控制使用RAII锁
+ *
+ * @thread_safety 线程安全
  */
 bool LRUReplacer::victim(frame_id_t* frame_id) {
     // Todo:
@@ -38,8 +52,22 @@ bool LRUReplacer::victim(frame_id_t* frame_id) {
 }
 
 /**
- * @description: 固定指定的frame，即该页面无法被淘汰
- * @param {frame_id_t} 需要固定的frame的id
+ * @brief 固定指定的帧，防止其被淘汰
+ *
+ * @param frame_id 要固定的帧ID
+ *
+ * @details 实现步骤：
+ * 1. 获取互斥锁
+ * 2. 在哈希表中查找指定帧
+ * 3. 如果帧存在(未固定)：
+ *    - 从链表中删除该帧
+ *    - 从哈希表中删除映射
+ *
+ * @note 特殊情况：
+ * 1. 如果帧已经被固定(不在替换器中)，无需操作
+ * 2. 重复pin操作是安全的
+ *
+ * @thread_safety 线程安全
  */
 void LRUReplacer::pin(frame_id_t frame_id) {
     // Todo:
@@ -55,8 +83,23 @@ void LRUReplacer::pin(frame_id_t frame_id) {
 }
 
 /**
- * @description: 取消固定一个frame，代表该页面可以被淘汰
- * @param {frame_id_t} frame_id 取消固定的frame的id
+ * @brief 取消固定帧，使其可以被淘汰
+ *
+ * @param frame_id 要取消固定的帧ID
+ *
+ * @details 实现步骤：
+ * 1. 获取互斥锁
+ * 2. 检查帧是否已在替换器中
+ * 3. 如果不在：
+ *    - 将帧添加到链表头部(最近使用)
+ *    - 在哈希表中添加对应映射
+ *
+ * @note 设计考虑：
+ * 1. 新解固定的页面被视为最近使用
+ * 2. 避免重复添加同一帧
+ * 3. 维护LRU的时间顺序特性
+ *
+ * @thread_safety 线程安全
  */
 void LRUReplacer::unpin(frame_id_t frame_id) {
     // 支持并发锁
@@ -69,6 +112,20 @@ void LRUReplacer::unpin(frame_id_t frame_id) {
 }
 
 /**
- * @description: 获取当前replacer中可以被淘汰的页面数量
+ * @brief 获取当前可被淘汰的页面数量
+ *
+ * @return size_t 可淘汰页面的数量
+ *
+ * @details 实现说明：
+ * 1. 直接返回LRU链表的大小
+ * 2. 链表中的页面都是未固定的
+ * 3. 表示当前可以被替换的页面总数
+ *
+ * @note 使用场景：
+ * 1. 评估缓冲池使用状态
+ * 2. 判断是否需要强制淘汰
+ * 3. 性能监控和调优
+ *
+ * @thread_safety 依赖STL容器的线程安全性
  */
 size_t LRUReplacer::Size() { return LRUlist_.size(); }
