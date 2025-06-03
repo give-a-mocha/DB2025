@@ -58,12 +58,12 @@ enum class ConcurrencyMode {
  * - 实现快照隔离
  */
 struct VersionUndoLink {
-    UndoLink prev_;            // 指向记录前一个版本的撤销日志链接
-                              // 用于构建版本链，支持MVCC和事务回滚
-    
+    UndoLink prev_;  // 指向记录前一个版本的撤销日志链接
+                     // 用于构建版本链，支持MVCC和事务回滚
+
     bool in_progress_{false};  // 版本状态标记
-                              // true: 该版本正在被某个事务修改
-                              // false: 该版本是稳定的
+                               // true: 该版本正在被某个事务修改
+                               // false: 该版本是稳定的
 
     friend auto operator==(const VersionUndoLink &a, const VersionUndoLink &b) {
         return a.prev_ == b.prev_ && a.in_progress_ == b.in_progress_;
@@ -71,6 +71,11 @@ struct VersionUndoLink {
 
     friend auto operator!=(const VersionUndoLink &a, const VersionUndoLink &b) { return !(a == b); }
 
+    /**
+     * @brief Creates a VersionUndoLink from an optional UndoLink.
+     * @param undo_link The optional UndoLink.
+     * @return An optional VersionUndoLink, or std::nullopt if undo_link is nullopt.
+     */
     inline static std::optional<VersionUndoLink> FromOptionalUndoLink(std::optional<UndoLink> undo_link) {
         if (undo_link.has_value()) {
             return VersionUndoLink{*undo_link};
@@ -139,9 +144,10 @@ class TransactionManager {
     LockManager *get_lock_manager() { return lock_manager_; }
 
     /**
-     * @description: 获取事务ID为txn_id的事务对象
-     * @return {Transaction*} 事务对象的指针
-     * @param {txn_id_t} txn_id 事务ID
+     * @brief Retrieves the Transaction object associated with the given transaction ID.
+     * @param txn_id The ID of the transaction to retrieve.
+     * @return A pointer to the Transaction object, or nullptr if txn_id is INVALID_TXN_ID.
+     * @note Asserts that the transaction exists and belongs to the current thread.
      */
     Transaction *get_transaction(txn_id_t txn_id) {
         if (txn_id == INVALID_TXN_ID) return nullptr;
@@ -164,43 +170,76 @@ class TransactionManager {
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
 
     /**
-     * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
-     * 在更新之前，将调用 `check` 函数以确保有效性。
+     * @brief Updates the undo link for a tuple, connecting it to its first undo log.
+     * Optionally performs a check before updating.
+     * @param rid The record ID of the tuple.
+     * @param prev_link The previous undo link to set.
+     * @param check An optional function to validate the current link before updating.
+     * @return True if the update was successful, false otherwise.
      */
     bool UpdateUndoLink(Rid rid, std::optional<UndoLink> prev_link,
                         std::function<bool(std::optional<UndoLink>)> &&check = nullptr);
 
     /**
-     * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
-     * 在更新之前，将调用 `check` 函数以确保有效性。
+     * @brief Updates the version link for a tuple, used in MVCC.
+     * Optionally performs a check before updating.
+     * @param rid The record ID of the tuple.
+     * @param prev_version The previous version link to set.
+     * @param check An optional function to validate the current version link before updating.
+     * @return True if the update was successful, false otherwise.
      */
     bool UpdateVersionLink(Rid rid, std::optional<VersionUndoLink> prev_version,
                            std::function<bool(std::optional<VersionUndoLink>)> &&check = nullptr);
 
-    /** @brief 获取表堆元组的第一个撤销日志。 */
+    /**
+     * @brief Gets the first undo link associated with a tuple.
+     * @param rid The record ID of the tuple.
+     * @return An optional UndoLink.
+     */
     std::optional<UndoLink> GetUndoLink(Rid rid);
 
-    /** @brief 获取表堆元组的第一个撤销日志。*/
+    /**
+     * @brief Gets the first version link associated with a tuple (for MVCC).
+     * @param rid The record ID of the tuple.
+     * @return An optional VersionUndoLink.
+     */
     std::optional<VersionUndoLink> GetVersionLink(Rid rid);
 
-    /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
-     * 如果索引超出范围仍然会抛出异常。 */
+    /**
+     * @brief Retrieves an undo log from the transaction's undo buffer.
+     * @param link The UndoLink pointing to the desired log.
+     * @return An optional UndoLog. Returns nullopt if the transaction doesn't exist.
+     * @throws std::out_of_range if the link's index is out of bounds.
+     */
     std::optional<UndoLog> GetUndoLogOptional(UndoLink link);
 
-    /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
-     * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
+    /**
+     * @brief Retrieves an undo log from the transaction's undo buffer.
+     * This is the preferred way to access undo logs unless accessing the current transaction's buffer.
+     * @param link The UndoLink pointing to the desired log.
+     * @return The UndoLog.
+     * @throws TransactionAbortException if the transaction doesn't exist or other errors occur.
+     */
     UndoLog GetUndoLog(UndoLink link);
 
-    /** @brief 获取系统中的最低读时间戳。 */
+    /**
+     * @brief Gets the lowest read timestamp (watermark) among all running transactions.
+     * @return The current watermark timestamp.
+     */
     timestamp_t GetWatermark();
 
-    /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
+    /** @brief Performs garbage collection for old versions in MVCC. Should only be called when no transactions are active. */
     void GarbageCollection();
 
+    /**
+     * @brief Stores version information for all slots within a single page for MVCC.
+     */
     struct PageVersionInfo {
+        /** @brief Mutex protecting access to this page's version information. */
         std::shared_mutex mutex_;
-        /** 存储所有槽的先前版本信息。注意：不要使用 `[x]` 来访问它，因为
-         * 即使不存在也会创建新元素。请使用 `find` 来代替。
+        /**
+         * @brief Maps slot offsets to their corresponding previous version link.
+         * @note Use `find()` instead of `[]` for access to avoid creating default elements.
          */
         std::unordered_map<slot_offset_t, VersionUndoLink> prev_version_;
     };
@@ -213,29 +252,29 @@ class TransactionManager {
    private:
     /** @brief 当前使用的并发控制模式，决定使用哪种并发控制策略 */
     ConcurrencyMode concurrency_mode_;
-    
+
     /** @brief 事务ID生成器，保证每个事务有唯一的ID
      *  使用atomic保证多线程下的原子递增 */
     std::atomic<txn_id_t> next_txn_id_{0};
-    
+
     /** @brief 事务时间戳生成器，用于MVCC和时间戳排序
      *  使用atomic保证多线程下的原子递增 */
     std::atomic<timestamp_t> next_timestamp_{0};
-    
+
     /** @brief 保护事务相关数据结构的互斥锁
      *  用于保护事务表等共享数据结构的并发访问 */
     std::mutex latch_;
-    
+
     /** @brief 系统管理器指针，用于访问表、索引等系统资源 */
     SmManager *sm_manager_;
-    
+
     /** @brief 锁管理器指针，用于实现2PL等基于锁的并发控制 */
     LockManager *lock_manager_;
 
     /** @brief MVCC相关成员 */
     /** @brief 最近提交事务的时间戳，用于实现快照隔离 */
     std::atomic<timestamp_t> last_commit_ts_{0};
-    
+
     /** @brief 活跃事务的时间水位线
      *  用于垃圾回收：低于水位线的版本可以安全删除
      *  因为它们不会再被任何活跃事务访问 */

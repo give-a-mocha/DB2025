@@ -49,8 +49,9 @@ TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_
 }
 
 /**
- * @description: 开始一个新事务或继续一个已有事务
+ * @brief 开始一个新事务或继续一个已有事务
  *
+ * @details
  * 该函数执行以下操作：
  * 1. 如果是新事务：
  *    - 创建新的事务对象
@@ -62,9 +63,9 @@ TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_
  *    - 创建BEGIN类型的日志记录
  *    - 维护日志序列号(LSN)链
  *
- * @param {Transaction*} txn 事务指针，nullptr表示需要创建新事务
- * @param {LogManager*} log_manager 日志管理器指针
- * @return {Transaction*} 初始化后的事务指针
+ * @param txn 事务指针，nullptr表示需要创建新事务
+ * @param log_manager 日志管理器指针
+ * @return 初始化后的事务指针 (注意：当前实现返回nullptr，可能是一个bug)
  */
 Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager) {
     // 1. 判断传入事务参数是否为空指针，为空则创建新事务
@@ -93,8 +94,9 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
 }
 
 /**
- * @description: 提交事务
+ * @brief 提交事务
  *
+ * @details
  * 该函数需要执行以下操作：
  * 1. 提交写操作：
  *    - 确保所有修改都已经完成
@@ -114,8 +116,8 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
  *    - 更新版本链
  *    - 处理事务时间戳
  *
- * @param {Transaction*} txn 要提交的事务指针
- * @param {LogManager*} log_manager 日志管理器指针
+ * @param txn 要提交的事务指针
+ * @param log_manager 日志管理器指针
  */
 void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // Todo: 实现事务提交逻辑
@@ -167,8 +169,9 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 }
 
 /**
- * @description: 终止（回滚）事务
+ * @brief 终止（回滚）事务
  *
+ * @details
  * 该函数需要执行以下操作：
  * 1. 回滚所有修改：
  *    - 根据撤销日志逆序执行
@@ -188,8 +191,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
  *    - 清理版本链
  *    - 回退时间戳相关操作
  *
- * @param {Transaction*} txn 要回滚的事务指针
- * @param {LogManager*} log_manager 日志管理器指针
+ * @param txn 要回滚的事务指针
+ * @param log_manager 日志管理器指针
  */
 void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
     // Todo: 实现事务回滚逻辑
@@ -198,6 +201,17 @@ void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
     // - 按照撤销日志的逆序回滚
     // - 对每条日志记录执行补偿操作
     // - 恢复修改前的数据状态
+
+    std::shared_ptr<std::deque<WriteRecord*>> write_set = txn->get_write_set();
+    while (!write_set->empty()) {
+        auto write_record = write_set->back();
+        write_set->pop_back();
+
+        WType write_type = write_record->GetWriteType();
+        const std::string& table_name = write_record->GetTableName();
+        const RmRecord& record = write_record->GetRecord();
+        const Rid& rid = write_record->GetRid();
+    }
 
     // 2. 释放所有锁
     // - 遍历并释放lock_set中的锁

@@ -19,7 +19,22 @@ See the Mulan PSL v2 for more details. */
 #include "errors.h"
 #include "sm_defs.h"
 
-/* 字段元数据 */
+/**
+ * @brief 字段(列)的元数据定义
+ *
+ * @details 存储表中每一列的完整信息：
+ * 1. 基本信息
+ *    - tab_name: 所属表名
+ *    - name: 列名
+ *    - type: 数据类型
+ *
+ * 2. 存储信息
+ *    - len: 字段长度
+ *    - offset: 在记录中的偏移量
+ *    - index: 是否建立索引
+ *
+ * @note 支持序列化和反序列化，用于元数据持久化
+ */
 struct ColMeta {
     std::string tab_name;  // 字段所属表名称
     std::string name;      // 字段名称
@@ -39,7 +54,23 @@ struct ColMeta {
     }
 };
 
-/* 索引元数据 */
+/**
+ * @brief 索引的元数据定义
+ *
+ * @details 存储索引的结构信息：
+ * 1. 基本信息
+ *    - tab_name: 所属表名
+ *    - col_tot_len: 索引键总长度
+ *    - col_num: 包含的列数
+ *
+ * 2. 组成信息
+ *    - cols: 构成索引的列元数据
+ *
+ * @note 主要用于：
+ * 1. 索引的创建和维护
+ * 2. 优化器使用索引的决策
+ * 3. 支持联合索引
+ */
 struct IndexMeta {
     std::string tab_name;       // 索引所属表名称
     int col_tot_len;            // 索引字段长度总和
@@ -65,7 +96,27 @@ struct IndexMeta {
     }
 };
 
-/* 表元数据 */
+/**
+ * @brief 表的元数据定义
+ *
+ * @details 管理表的完整结构信息：
+ * 1. 表基本信息
+ *    - name: 表名
+ *
+ * 2. 结构信息
+ *    - cols: 所有列的元数据
+ *    - indexes: 所有索引的元数据
+ *
+ * 3. 核心功能
+ *    - 列的查找和验证
+ *    - 索引的查找和验证
+ *    - 元数据的序列化
+ *
+ * @note 支持以下操作：
+ * 1. 复制构造，便于临时操作
+ * 2. 列和索引的快速查找
+ * 3. 序列化，用于持久化存储
+ */
 struct TabMeta {
     std::string name;                // 表名称
     std::vector<ColMeta> cols;       // 表包含的字段
@@ -152,8 +203,24 @@ struct TabMeta {
     }
 };
 
-// 注意重载了操作符 << 和 >>，这需要更底层同样重载TabMeta、ColMeta的操作符 << 和 >>
-/* 数据库元数据 */
+/**
+ * @brief 数据库的元数据定义
+ *
+ * @details 管理数据库级别的元信息：
+ * 1. 数据库信息
+ *    - name_: 数据库名称
+ *    - tabs_: 所有表的元数据映射
+ *
+ * 2. 核心功能
+ *    - 表的存在性检查
+ *    - 表元数据的管理
+ *    - 元数据的序列化
+ *
+ * @note 实现特点：
+ * 1. 使用map高效管理表信息
+ * 2. 支持元数据持久化
+ * 3. 提供表级别的原子操作
+ */
 class DbMeta {
     friend class SmManager;
 
