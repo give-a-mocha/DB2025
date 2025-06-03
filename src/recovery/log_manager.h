@@ -50,6 +50,8 @@ static std::string LogTypeStr[] = {
     "ABORT"    // 事务中止的字符串表示
 };
 
+#define Serialize_data(data) serialize_data(dest, data, offset);
+
 /**
  * 日志记录基类
  * 所有类型的日志记录都继承自此类，包含所有日志的基本信息
@@ -84,6 +86,12 @@ class LogRecord {
         memcpy(dest + OFFSET_PREV_LSN, &prev_lsn_, sizeof(lsn_t));           // 写入前一条日志的序列号
     }
 
+    template <typename T>
+    void serialize_data(char* dest, const T* data, int& offset) const {
+        memcpy(dest + offset, data, sizeof(T));
+        offset += sizeof(T);
+    }
+
     /**
      * 从指定内存区域反序列化出一条日志记录
      * @param src 源内存区域指针
@@ -97,18 +105,23 @@ class LogRecord {
         prev_lsn_ = *reinterpret_cast<const lsn_t*>(src + OFFSET_PREV_LSN);           // 读取前一条日志的序列号
     }
 
+    template <typename... Args>
+    void logINFO(std::string_view fmt_str, Args&&... args) const {
+        INFO(fmt_str, std::forward<Args>(args)...);
+    }
+
     /**
      * 格式化打印日志记录内容，用于调试
      * 派生类可重写此方法以显示更多特定信息
      */
     virtual void format_print() const {
-        std::cout << "log type in father_function: " << LogTypeStr[log_type_] << "\n";
-        printf("Print Log Record:\n");
-        printf("log_type_: %s\n", LogTypeStr[log_type_].c_str());  // 打印日志类型
-        printf("lsn: %d\n", lsn_);                                 // 打印日志序列号
-        printf("log_tot_len: %d\n", log_tot_len_);                 // 打印日志总长度
-        printf("log_tid: %ld\n", log_tid_);                        // 打印事务ID
-        printf("prev_lsn: %d\n", prev_lsn_);                       // 打印前一条日志的序列号
+        logINFO("log type in father_function: {}\n", LogTypeStr[log_type_]);
+        logINFO("Print Log Record:\n");
+        logINFO("log_type_: {}\n", LogTypeStr[log_type_]);  // 打印日志类型
+        logINFO("lsn: {}\n", lsn_);                         // 打印日志序列号
+        logINFO("log_tot_len: {}\n", log_tot_len_);         // 打印日志总长度
+        logINFO("log_tid: {}\n", log_tid_);                 // 打印事务ID
+        logINFO("prev_lsn: {}\n", prev_lsn_);               // 打印前一条日志的序列号
     }
 };
 
@@ -126,7 +139,7 @@ class BeginLogRecord : public LogRecord {
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
-        std::cout << "log type in son_function: " << LogTypeStr[log_type_] << "\n";
+        logINFO("log type in son_function: {}\n", LogTypeStr[log_type_]);
         LogRecord::format_print();  // 调用基类的打印方法
     }
 };
@@ -142,7 +155,7 @@ class CommitLogRecord : public LogRecord {
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
-        std::cout << "log type in son_function: " << LogTypeStr[log_type_] << "\n";
+        logINFO("log type in son_function: {}\n", LogTypeStr[log_type_]);
         LogRecord::format_print();
     }
 };
@@ -167,7 +180,7 @@ class AbortLogRecord : public LogRecord {
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
-        std::cout << "log type in son_function: " << LogTypeStr[log_type_] << "\n";
+        logINFO("log type in son_function: {}\n", LogTypeStr[log_type_]);
         LogRecord::format_print();
     }
 };
@@ -196,15 +209,11 @@ class InsertLogRecord : public LogRecord {
     void serialize(char* dest) const override {
         LogRecord::serialize(dest);
         int offset = OFFSET_LOG_DATA;
-        memcpy(dest + offset, &insert_value_.size, sizeof(int));
-        offset += sizeof(int);
-        memcpy(dest + offset, insert_value_.data, insert_value_.size);
-        offset += insert_value_.size;
-        memcpy(dest + offset, &rid_, sizeof(Rid));
-        offset += sizeof(Rid);
-        memcpy(dest + offset, &table_name_size_, sizeof(size_t));
-        offset += sizeof(size_t);
-        memcpy(dest + offset, table_name_, table_name_size_);
+        Serialize_data(&insert_value_.size);
+        Serialize_data(&insert_value_.data);
+        Serialize_data(&rid_);
+        Serialize_data(&table_name_size_);
+        Serialize_data(&table_name_);
     }
     // 从src中反序列化出一条Insert日志记录
     void deserialize(const char* src) override {
@@ -219,11 +228,11 @@ class InsertLogRecord : public LogRecord {
         memcpy(table_name_, src + offset, table_name_size_);
     }
     void format_print() const override {
-        printf("insert record\n");
+        logINFO("insert record\n");
         LogRecord::format_print();
-        printf("insert_value: %s\n", insert_value_.data);
-        printf("insert rid: %d, %d\n", rid_.page_no, rid_.slot_no);
-        printf("table name: %s\n", table_name_);
+        logINFO("insert_value: {}\n", insert_value_.data);
+        logINFO("insert rid: {}, {}\n", rid_.page_no, rid_.slot_no);
+        logINFO("table name: {}\n", table_name_);
     }
 
     RmRecord insert_value_;   // 插入的记录
@@ -272,15 +281,11 @@ class DeleteLogRecord : public LogRecord {
     void serialize(char* dest) const override {
         LogRecord::serialize(dest);
         int offset = OFFSET_LOG_DATA;
-        memcpy(dest + offset, &delete_value_.size, sizeof(int));
-        offset += sizeof(int);
-        memcpy(dest + offset, delete_value_.data, delete_value_.size);
-        offset += delete_value_.size;
-        memcpy(dest + offset, &rid_, sizeof(Rid));
-        offset += sizeof(Rid);
-        memcpy(dest + offset, &table_name_size_, sizeof(size_t));
-        offset += sizeof(size_t);
-        memcpy(dest + offset, table_name_, table_name_size_);
+        Serialize_data(&delete_value_.size);
+        Serialize_data(&delete_value_.data);
+        Serialize_data(&rid_);
+        Serialize_data(&table_name_size_);
+        Serialize_data(&table_name_);
     }
     // 从src中反序列化出一条Delete日志记录
     void deserialize(const char* src) override {
@@ -295,11 +300,11 @@ class DeleteLogRecord : public LogRecord {
         memcpy(table_name_, src + offset, table_name_size_);
     }
     void format_print() const override {
-        printf("delete record\n");
+        logINFO("delete record\n");
         LogRecord::format_print();
-        printf("delete_value: %s\n", delete_value_.data);
-        printf("delete rid: %d, %d\n", rid_.page_no, rid_.slot_no);
-        printf("table name: %s\n", table_name_);
+        logINFO("delete_value: {}\n", delete_value_.data);
+        logINFO("delete rid: {}, {}\n", rid_.page_no, rid_.slot_no);
+        logINFO("table name: {}\n", table_name_);
     }
 
     RmRecord delete_value_;   // 删除的记录
@@ -353,6 +358,7 @@ class UpdateLogRecord : public LogRecord {
     void serialize(char* dest) const override {
         LogRecord::serialize(dest);
         int offset = OFFSET_LOG_DATA;
+        // TODO
         memcpy(dest + offset, &before_value_.size, sizeof(int));
         offset += sizeof(int);
         memcpy(dest + offset, before_value_.data, before_value_.size);
@@ -382,12 +388,12 @@ class UpdateLogRecord : public LogRecord {
         memcpy(table_name_, src + offset, table_name_size_);
     }
     void format_print() const override {
-        printf("update record\n");
+        logINFO("update record\n");
         LogRecord::format_print();
-        printf("before_value: %s\n", before_value_.data);
-        printf("after_value: %s\n", after_value_.data);
-        printf("update rid: %d, %d\n", rid_.page_no, rid_.slot_no);
-        printf("table name: %s\n", table_name_);
+        logINFO("before_value: {}\n", before_value_.data);
+        logINFO("after_value: {}\n", after_value_.data);
+        logINFO("update rid: {}, {}\n", rid_.page_no, rid_.slot_no);
+        logINFO("table name: {}\n", table_name_);
     }
 
     RmRecord before_value_;   // 更新前的记录
@@ -472,3 +478,5 @@ class LogManager {
     lsn_t persist_lsn_;                 // 最后一条持久化日志的LSN
     DiskManager* disk_manager_;         // 底层磁盘管理器
 };
+
+#undef Serialize_data

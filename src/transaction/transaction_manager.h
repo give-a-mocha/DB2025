@@ -280,4 +280,9 @@ class TransactionManager {
      *  用于垃圾回收：低于水位线的版本可以安全删除
      *  因为它们不会再被任何活跃事务访问 */
     Watermark running_txns_{0};
+
+    /**
+     * @brief 管理日志记录的链接关系
+     */
+    static void record_link_management(LogRecord *log_record, LogManager *log_manager, Transaction *txn);
 };
