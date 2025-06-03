@@ -140,8 +140,9 @@ class Planner {
      * @param join_conditions 连接条件
      * @return 连接计划
      */
-    std::shared_ptr<Plan> build_left_deep_join_tree(std::vector<std::shared_ptr<Plan>> &table_plans,
-                                                    std::vector<Condition> &join_conditions);
+    std::shared_ptr<Plan> build_left_deep_join_tree(
+        std::list<std::shared_ptr<Plan>>& table_plans,
+        std::list<Condition>& join_conditions);
 
     /**
      * @brief 将 AST 中的数据类型转换为系统内部的列类型。
