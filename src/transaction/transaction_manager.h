@@ -126,7 +126,7 @@ class TransactionManager {
      * @param txn 要回滚的事务
      * @param log_manager 日志管理器指针
      */
-    void abort(Transaction *txn, LogManager *log_manager);
+    void abort(Context *context, LogManager *log_manager);
 
     /**
      * @brief 获取当前的并发控制模式
@@ -228,7 +228,8 @@ class TransactionManager {
      */
     timestamp_t GetWatermark();
 
-    /** @brief Performs garbage collection for old versions in MVCC. Should only be called when no transactions are active. */
+    /** @brief Performs garbage collection for old versions in MVCC. Should only be called when no transactions are
+     * active. */
     void GarbageCollection();
 
     /**

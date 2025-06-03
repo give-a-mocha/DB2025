@@ -90,7 +90,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     txn->set_prev_lsn(log->lsn_);
 
     // 注意：这里应该返回txn而不是nullptr，这是一个bug
-    return nullptr;
+    return txn;
 }
 
 /**
@@ -194,7 +194,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
  * @param txn 要回滚的事务指针
  * @param log_manager 日志管理器指针
  */
-void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
+void TransactionManager::abort(Context* context, LogManager* log_manager) {
     // Todo: 实现事务回滚逻辑
 
     // 1. 回滚所有写操作
@@ -202,7 +202,16 @@ void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
     // - 对每条日志记录执行补偿操作
     // - 恢复修改前的数据状态
 
+    Transaction* txn = context->txn_;
+
     std::shared_ptr<std::deque<WriteRecord*>> write_set = txn->get_write_set();
+
+    auto record_link_management = [](LogRecord* log_record, LogManager* log_manager, Transaction* txn) -> void {
+        log_record->prev_lsn_ = txn->get_prev_lsn();
+        log_manager->add_log_to_buffer(log_record);
+        txn->set_prev_lsn(log_record->lsn_);
+    };
+
     while (!write_set->empty()) {
         auto write_record = write_set->back();
         write_set->pop_back();
@@ -211,24 +220,77 @@ void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
         const std::string& table_name = write_record->GetTableName();
         const RmRecord& record = write_record->GetRecord();
         const Rid& rid = write_record->GetRid();
+
+        std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
+
+        switch (write_type) {
+            case WType::INSERT_TUPLE: {
+                auto log_record = std::make_unique<DeleteLogRecord>(txn->get_transaction_id(), record, rid, table_name);
+                record_link_management(log_record.get(), log_manager, txn);
+
+                //  TODO: 删除索引
+                handle->delete_record(rid, context);
+                break;
+            }
+            case WType::UPDATE_TUPLE: {
+                auto old_record = handle->get_record(rid, context);
+                auto log_record =
+                    std::make_unique<UpdateLogRecord>(txn->get_transaction_id(), *old_record, record, rid, table_name);
+                record_link_management(log_record.get(), log_manager, txn);
+
+                //  TODO: 删除索引
+
+                handle->update_record(rid, record.data, context);
+                //  TODO: 添加索引
+
+                break;
+            }
+            case WType::DELETE_TUPLE: {
+                auto log_record = std::make_unique<InsertLogRecord>(txn->get_transaction_id(), record, rid, table_name);
+                record_link_management(log_record.get(), log_manager, txn);
+
+                // TODO: 添加索引
+                handle->insert_record(rid, record.data);
+
+                break;
+            }
+            default:
+                throw InternalError("Invalid write type");
+                break;
+        }
     }
 
     // 2. 释放所有锁
     // - 遍历并释放lock_set中的锁
     // - 通知锁管理器更新状态
 
+    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
+    for (auto lock : *lock_set) {
+        lock_manager_->unlock(txn, lock);
+    }
+
     // 3. 资源清理
     // - 清空write_set和lock_set
     // - 释放相关内存
+
+    txn->get_write_set()->clear();
+    txn->get_lock_set()->clear();
+    txn->get_index_deleted_page_set()->clear();
+    txn->get_index_deleted_page_set()->clear();
 
     // 4. 日志处理
     // - 创建ABORT类型日志记录
     // - 更新日志序列号链
     // - 将日志刷入磁盘
 
+    auto log = std::make_unique<AbortLogRecord>(txn->get_transaction_id());
+    record_link_management(log.get(), log_manager, txn);
+
     // 5. 更新事务状态
     // - 将状态设置为ABORTED
     // - 从全局事务表中移除
+
+    txn->set_state(TransactionState::ABORTED);
 
     // 6. MVCC相关清理（如果启用）
     // - 清理版本链
