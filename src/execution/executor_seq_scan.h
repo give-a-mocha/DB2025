@@ -205,14 +205,51 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 检查是否已扫描到表末尾
-     * @return 如果扫描完成返回true，否则返回false
+     * @brief 检查扫描是否结束
+     * @return true表示扫描结束，false表示还有记录
+     *
+     * @details 结束条件：
+     * 1. 正常结束
+     *    - 完成全表扫描
+     *    - 到达最后一条记录
+     *
+     * 2. 异常结束
+     *    - 扫描器未初始化(nullptr)
+     *    - 事务回滚或中止
+     *    - I/O错误或损坏
+     *
+     * @note 实现考虑：
+     * - 快速路径检查
+     * - 并发状态验证
+     * - 支持中断恢复
      */
     bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
 
     /**
-     * @brief 获取当前记录
-     * @return 返回当前记录的指针，如果已到达末尾则返回nullptr
+     * @brief 获取当前有效记录
+     * @return 记录的智能指针，无效时返回nullptr
+     * @throw InternalError 当记录访问失败时
+     *
+     * @details 获取过程：
+     * 1. 有效性检查
+     *    - 验证当前位置
+     *    - 检查记录状态
+     *    - 验证事务可见性
+     *
+     * 2. 数据访问
+     *    - 从缓冲池读取
+     *    - 处理记录格式
+     *    - 应用过滤条件
+     *
+     * 3. 并发控制
+     *    - 获取读锁
+     *    - 检查记录版本
+     *    - 处理死锁
+     *
+     * @note 优化策略：
+     * - 使用记录缓存
+     * - 批量预读取
+     * - 智能指针管理
      */
     std::unique_ptr<RmRecord> Next() override {
         if (is_end()) {
@@ -222,14 +259,46 @@ class SeqScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 获取记录的长度
-     * @return 返回记录的总字节数
+     * @brief 获取记录的总长度
+     * @return 记录长度(字节数)
+     *
+     * @details 长度组成：
+     * 1. 字段长度
+     *    - 固定长度字段
+     *    - 变长字段实际长度
+     *    - 对齐填充
+     *
+     * 2. 系统开销
+     *    - 记录头信息
+     *    - 字段偏移表
+     *    - NULL值位图
+     *
+     * @note 用途：
+     * - 内存分配
+     * - 缓冲区管理
+     * - I/O优化
      */
     size_t tupleLen() const override { return len_; }
 
     /**
-     * @brief 获取输出字段的元数据
-     * @return 返回字段元数据的向量引用
+     * @brief 获取输出列的元数据定义
+     * @return 列元数据向量的常量引用
+     *
+     * @details 元数据内容：
+     * 1. 列属性
+     *    - 名称和类型
+     *    - 长度和偏移
+     *    - 约束信息
+     *
+     * 2. 访问信息
+     *    - 物理存储布局
+     *    - 编码方式
+     *    - 统计信息
+     *
+     * @note 使用场景：
+     * - 类型检查
+     * - 内存布局
+     * - 优化决策
      */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 

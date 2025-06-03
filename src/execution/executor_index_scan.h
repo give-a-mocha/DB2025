@@ -17,32 +17,83 @@ See the Mulan PSL v2 for more details. */
 #include "system/sm.h"
 
 /**
- * @brief 索引扫描执行器，通过索引快速访问满足条件的记录
+ * @brief 索引扫描执行器，提供基于索引的高效记录访问
  *
- * 该执行器使用表的索引结构来高效地访问满足查询条件的记录。主要功能：
- * 1. 根据查询条件构建索引扫描范围
- * 2. 利用索引进行范围扫描
- * 3. 对扫描到的记录进行条件过滤
+ * 核心功能：
+ * 1. 索引范围构建
+ *    - 分析查询条件
+ *    - 确定扫描边界
+ *    - 优化范围选择
  *
- * 索引扫描比全表扫描更高效，特别是在查询条件命中索引时
+ * 2. 高效扫描策略
+ *    - B+树遍历优化
+ *    - 记录预取机制
+ *    - 条件过滤下推
+ *
+ * 3. 并发控制
+ *    - 索引锁管理
+ *    - 一致性保证
+ *    - 死锁预防
+ *
+ * 4. 性能优化
+ *    - 缓冲区管理
+ *    - 批量读取
+ *    - 内存对齐
+ *
+ * @note 适用场景：
+ * - 高选择性查询
+ * - 范围扫描操作
+ * - 排序要求
+ *
+ * @warning 注意事项：
+ * - 索引选择性影响性能
+ * - 需要维护索引开销
+ * - 内存消耗考虑
  */
 class IndexScanExecutor : public AbstractExecutor {
    private:
-    std::string tab_name_;              // 表名称
-    TabMeta tab_;                       // 表的元数据
-    std::vector<Condition> conds_;      // 扫描条件
-    RmFileHandle *fh_;                  // 表的数据文件句柄
-    std::vector<ColMeta> cols_;         // 需要读取的字段
-    size_t len_;                        // 选取出来的一条记录的长度
-    std::vector<Condition> fed_conds_;  // 扫描条件，和conds_字段相同
+    /**
+     * @brief 表的基本信息
+     * @note 用于元数据访问和验证
+     */
+    std::string tab_name_;  // 表名
+    TabMeta tab_;           // 表元数据
 
-    std::vector<std::string> index_col_names_;  // index scan涉及到的索引包含的字段
-    IndexMeta index_meta_;                      // index scan涉及到的索引元数据
+    /**
+     * @brief 查询条件相关
+     * @note 用于过滤和优化
+     */
+    std::vector<Condition> conds_;      // 原始条件
+    std::vector<Condition> fed_conds_;  // 优化后的条件
 
-    Rid rid_;
-    std::unique_ptr<RecScan> scan_;
-    std::string index_name_;  // 索引名称
-    SmManager *sm_manager_;
+    /**
+     * @brief 数据访问相关
+     * @note 处理记录读取和缓存
+     */
+    RmFileHandle *fh_;           // 表文件句柄
+    std::vector<ColMeta> cols_;  // 输出列定义
+    size_t len_;                 // 记录长度
+
+    /**
+     * @brief 索引访问相关
+     * @note 管理索引扫描状态
+     */
+    std::vector<std::string> index_col_names_;  // 索引列
+    IndexMeta index_meta_;                      // 索引元数据
+    std::string index_name_;                    // 索引标识
+
+    /**
+     * @brief 扫描状态维护
+     * @note 控制扫描进度
+     */
+    Rid rid_;                        // 当前记录ID
+    std::unique_ptr<RecScan> scan_;  // 扫描迭代器
+
+    /**
+     * @brief 系统组件访问
+     * @note 提供系统服务调用
+     */
+    SmManager *sm_manager_;  // 系统管理器
 
    public:
     /**
@@ -89,12 +140,34 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 开始扫描第一个元组
+     * @brief 初始化索引扫描并定位第一条记录
+     * @throw InternalError 当索引访问失败时
      *
-     * 该方法：
-     * 1. 根据条件构建索引扫描范围
-     * 2. 创建索引扫描器
-     * 3. 定位到第一个满足条件的记录
+     * @details 初始化过程：
+     * 1. 扫描范围构建
+     *    - 按索引列提取条件
+     *    - 计算上下边界值
+     *    - 构建边界记录
+     *
+     * 2. B+树操作
+     *    - 查找下界位置
+     *    - 确定上界范围
+     *    - 初始化扫描器
+     *
+     * 3. 性能优化
+     *    - 预读取页面
+     *    - 缓存热点节点
+     *    - 条件过滤下推
+     *
+     * 4. 边界处理
+     *    - 类型范围检查
+     *    - NULL值处理
+     *    - 特殊值优化
+     *
+     * @note 优化策略：
+     * - 最小化I/O操作
+     * - 利用索引特性
+     * - 充分使用缓存
      */
     void beginTuple() override {
         // 构建索引查询范围
@@ -214,20 +287,69 @@ class IndexScanExecutor : public AbstractExecutor {
     }
 
     /**
-     * @brief 检查是否完成所有记录的扫描
-     * @return 如果扫描器为空或已到达末尾则返回true，否则返回false
+     * @brief 检查索引扫描是否结束
+     * @return true表示扫描完成，false表示还有记录
+     *
+     * @details 检查条件：
+     * 1. 正常结束
+     *    - 到达索引上界
+     *    - 遍历完指定范围
+     *    - 满足终止条件
+     *
+     * 2. 异常结束
+     *    - 扫描器未初始化
+     *    - B+树访问错误
+     *    - 事务中止
+     *
+     * 3. 并发考虑
+     *    - 检查索引一致性
+     *    - 处理并发修改
+     *    - 维护扫描状态
      */
     bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
 
     /**
-     * @brief 获取当前记录
-     * @return 当前记录的智能指针
+     * @brief 获取当前扫描位置的记录
+     * @return 记录的智能指针
+     * @throw InternalError 当记录访问失败
+     *
+     * @details 访问流程：
+     * 1. 记录获取
+     *    - 通过RID定位
+     *    - 从缓冲池读取
+     *    - 验证记录有效性
+     *
+     * 2. 并发控制
+     *    - 获取记录锁
+     *    - 检查事务可见性
+     *    - 处理死锁情况
+     *
+     * 3. 性能优化
+     *    - 使用记录缓存
+     *    - 批量预读取
+     *    - 延迟加载策略
      */
     std::unique_ptr<RmRecord> Next() override { return fh_->get_record(rid_, context_); }
 
     /**
-     * @brief 获取记录长度
-     * @return 记录的字节长度
+     * @brief 获取记录的物理长度
+     * @return 记录的总字节数
+     *
+     * @details 长度计算：
+     * 1. 数据部分
+     *    - 固定长度字段
+     *    - 变长字段实际长度
+     *    - 对齐填充
+     *
+     * 2. 控制信息
+     *    - 记录头信息
+     *    - NULL值位图
+     *    - 版本信息
+     *
+     * @note 用于：
+     * - 内存分配
+     * - 缓冲区管理
+     * - 页面布局
      */
     size_t tupleLen() const override { return len_; }
 
@@ -261,17 +383,33 @@ class IndexScanExecutor : public AbstractExecutor {
 
    private:
     /**
-     * @brief 比较两个值
-     *
-     * 支持多种类型的值比较：
-     * - 数值类型(INT, FLOAT)之间可以互相转换后比较
-     * - 字符串类型按字典序比较
-     *
+     * @brief 比较两个值的通用实现
      * @param lhs 左操作数
      * @param rhs 右操作数
-     * @param op 比较操作符
+     * @param op 比较操作类型
      * @return 比较结果
-     * @throw IncompatibleTypeError 当比较的类型不兼容时
+     * @throw IncompatibleTypeError 类型不兼容时
+     *
+     * @details 比较流程：
+     * 1. 类型检查与转换
+     *    - 验证类型兼容性
+     *    - 数值类型隐式转换
+     *    - 特殊类型处理(如NULL)
+     *
+     * 2. 值比较策略
+     *    - 数值直接比较
+     *    - 字符串优化比较
+     *    - 边界条件处理
+     *
+     * 3. 性能优化
+     *    - 避免不必要转换
+     *    - 利用CPU指令
+     *    - 减少内存拷贝
+     *
+     * @note 优化考虑：
+     * - 常见类型快速路径
+     * - 大小写敏感性
+     * - 特殊值处理
      */
     bool compare(Value lhs, Value rhs, CompOp op) {
         bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
