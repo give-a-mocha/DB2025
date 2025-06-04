@@ -116,7 +116,8 @@ class Portal {
                 case PlanTag::T_explain: {
                     std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
                     std::vector<TabCol> sel_cols = p->sel_cols_;
-                    std::unique_ptr<AbstractExecutor> root = convert_plan_explain_executor(p, context, 0);
+                    std::vector<std::string> join_tables;
+                    std::unique_ptr<AbstractExecutor> root = convert_plan_explain_executor(p, context, 0, join_tables);
                     return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(sel_cols), std::move(root), plan);
                 }
                 default:
@@ -187,11 +188,12 @@ class Portal {
     }
 
     std::unique_ptr<AbstractExecutor> convert_plan_explain_executor(std::shared_ptr<Plan> plan, Context *context,
-                                                                    int offset) {
+                                                                    int offset, std::vector<std::string> &join_tables) {
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
             return std::make_unique<ExplainProjectExecutor>(
-                convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1), std::move(x->sel_cols_), offset, x->isStar_);
+                convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables), std::move(x->sel_cols_), offset, x->isStar_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
+            join_tables.push_back(x->tab_name_);
             if (x->conds_.empty()) {
                 return std::make_unique<ExplainScanExecutor>(std::move(x->tab_name_), offset);
             } else {
@@ -214,27 +216,20 @@ class Portal {
             } else {
                 add_offset = 1;
             }
-            auto left = convert_plan_explain_executor(std::move(x->left_), context, offset + add_offset);
-            auto right = convert_plan_explain_executor(std::move(x->right_), context, offset + add_offset);
+            auto left = convert_plan_explain_executor(std::move(x->left_), context, offset + add_offset, join_tables);
+            auto right = convert_plan_explain_executor(std::move(x->right_), context, offset + add_offset, join_tables);
             auto get_level = [](const std::unique_ptr<AbstractExecutor> &executor) -> std::string {
-                if (auto x = dynamic_cast<ExplainFilterExecutor *>(executor.get())) {
-                    return "1_" + x->get_conds();  // Filter
-                } else if (auto x = dynamic_cast<ExplainJoinExecutor *>(executor.get())) {
-                    return "2_" + x->get_tables();  // Join
-                } else if (auto x = dynamic_cast<ExplainProjectExecutor *>(executor.get())) {
-                    return "3_" + x->get_cols();  // Project
-                } else if (auto x = dynamic_cast<ExplainScanExecutor *>(executor.get())) {
-                    return "4_" + x->get_tab_name();  // Scan
+                if (auto y = dynamic_cast<ExplainFilterExecutor *>(executor.get())) {
+                    return "1_" + y->get_conds();  // Filter
+                } else if (auto y = dynamic_cast<ExplainJoinExecutor *>(executor.get())) {
+                    return "2_" + y->get_tables();  // Join
+                } else if (auto y = dynamic_cast<ExplainProjectExecutor *>(executor.get())) {
+                    return "3_" + y->get_cols();  // Project
+                } else if (auto y = dynamic_cast<ExplainScanExecutor *>(executor.get())) {
+                    return "4_" + y->get_tab_name();  // Scan
                 }
             };
-            std::string left_level = get_level(left);
-            std::string right_level = get_level(right);
-            std::vector<std::string> join_tables;
-            if(left_level[0] == '2'){
-                join_tables = dynamic_cast<ExplainJoinExecutor *>(left.get())->get_tables_vec();
-            }
-            join_tables.emplace_back(std::move(x->table_));
-            if (left_level > right_level) {
+            if (get_level(left) > get_level(right)) {
                 std::swap(left, right);
             }
             if (!conds.empty()) {
@@ -246,7 +241,7 @@ class Portal {
                                                              offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-            return convert_plan_explain_executor(std::move(x->subplan_), context, offset);
+            return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
         }
         return nullptr;
     }
