@@ -272,6 +272,27 @@ class Transaction {
         return undo_logs_.size();
     }
 
+    /**
+     * @brief 清空事务的所有相关集合和资源。
+     *
+     * @details
+     * 该方法用于在事务结束（提交或回滚）时清理事务占用的资源，确保事务的状态被重置，
+     * 避免内存泄漏或残留数据对后续操作的影响。
+     *
+     * 具体操作包括：
+     * 1. 清空写集合
+     * 2. 清空锁集合
+     * 3. 清空索引加锁页面集合
+     * 4. 清空索引删除页面集合
+     * 此方法通常在事务提交或回滚后调用，确保事务相关的资源被彻底清理。
+     */
+    inline auto clear() -> void {
+        write_set_->clear();               // 清空事务的写集合
+        lock_set_->clear();                // 清空事务的锁集合
+        index_latch_page_set_->clear();    // 清空索引加锁页面集合
+        index_deleted_page_set_->clear();  // 清空索引删除页面集合
+    }
+
    private:
     /** @brief 事务模式标志：true 表示显式事务，false 表示隐式事务（单条 SQL 语句）。 */
     bool txn_mode_;

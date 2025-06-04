@@ -71,6 +71,10 @@ class WriteRecord {
 
     inline std::string &GetTableName() { return tab_name_; }
 
+    inline std::tuple<WType, const std::string &, const Rid &, const RmRecord &> GetAll() {
+        return std::make_tuple(wtype_, tab_name_, rid_, record_);
+    }
+
    private:
     WType wtype_;
     std::string tab_name_;

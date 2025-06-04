@@ -65,7 +65,7 @@ TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_
  *
  * @param txn 事务指针，nullptr表示需要创建新事务
  * @param log_manager 日志管理器指针
- * @return 初始化后的事务指针 (注意：当前实现返回nullptr，可能是一个bug)
+ * @return 初始化后的事务指针
  */
 Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager) {
     // 1. 判断传入事务参数是否为空指针，为空则创建新事务
@@ -74,48 +74,19 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
         txn = new Transaction(next_txn_id_++);
     }
 
-    // 加锁保护全局事务表的并发访问
-    std::unique_lock<std::mutex> lock(latch_);
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
     txn_map.emplace(txn->get_transaction_id(), txn);
 
     // 创建BEGIN事务日志记录，记录事务开始的操作
     auto* log = new BeginLogRecord(txn->get_transaction_id());
-    // 设置日志记录的前序LSN为事务当前的LSN
-    log->prev_lsn_ = txn->get_prev_lsn();
-    // 将日志添加到日志管理器的缓冲区中
-    log_manager->add_log_to_buffer(log);
+    record_link_management(log, log_manager, txn);
 
-    // 更新事务的前序LSN为当前日志的LSN，建立日志链
-    txn->set_prev_lsn(log->lsn_);
-
-    // 注意：这里应该返回txn而不是nullptr，这是一个bug
-    return nullptr;
+    return txn;
 }
 
 /**
  * @brief 提交事务
- *
- * @details
- * 该函数需要执行以下操作：
- * 1. 提交写操作：
- *    - 确保所有修改都已经完成
- *    - 处理写缓冲区中的数据
- * 2. 锁的处理：
- *    - 按照2PL协议释放所有持有的锁
- *    - 更新锁管理器的状态
- * 3. 资源清理：
- *    - 释放事务持有的内存资源
- *    - 清空事务的锁集合
- * 4. 日志处理：
- *    - 写入COMMIT类型的日志记录
- *    - 确保日志被刷入磁盘
- * 5. 状态更新：
- *    - 将事务状态设置为COMMITTED
- * 6. MVCC支持（如果启用）：
- *    - 更新版本链
- *    - 处理事务时间戳
- *
+
  * @param txn 要提交的事务指针
  * @param log_manager 日志管理器指针
  */
@@ -133,14 +104,12 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // - 更新锁管理器状态
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-    for (auto lock : *lock_set) {
+    for (const LockDataId& lock : *lock_set) {
         lock_manager_->unlock(txn, lock);
     }
 
-    txn->get_write_set()->clear();
-    txn->get_lock_set()->clear();
-    txn->get_index_deleted_page_set()->clear();
-    txn->get_index_deleted_page_set()->clear();
+    // 清空事务相关的集合
+    txn->clear();
 
     // 3. 资源清理
     // - 释放事务占用的内存
@@ -152,9 +121,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // - 确保日志被刷入磁盘
 
     auto log = new CommitLogRecord(txn->get_transaction_id());
-    log->prev_lsn_ = txn->get_prev_lsn();
-    log_manager->add_log_to_buffer(log);
-    txn->set_prev_lsn(log->lsn_);
+    record_link_management(log, log_manager, txn);
 
     // 5. 更新事务状态
     // - 将状态设置为COMMITTED
@@ -194,7 +161,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
  * @param txn 要回滚的事务指针
  * @param log_manager 日志管理器指针
  */
-void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
+void TransactionManager::abort(Context* context, LogManager* log_manager) {
     // Todo: 实现事务回滚逻辑
 
     // 1. 回滚所有写操作
@@ -202,36 +169,108 @@ void TransactionManager::abort(Transaction* txn, LogManager* log_manager) {
     // - 对每条日志记录执行补偿操作
     // - 恢复修改前的数据状态
 
-    std::shared_ptr<std::deque<WriteRecord*>> write_set = txn->get_write_set();
-    while (!write_set->empty()) {
-        auto write_record = write_set->back();
-        write_set->pop_back();
+    Transaction* txn = context->txn_;
 
-        WType write_type = write_record->GetWriteType();
-        const std::string& table_name = write_record->GetTableName();
-        const RmRecord& record = write_record->GetRecord();
-        const Rid& rid = write_record->GetRid();
+    std::shared_ptr<std::deque<WriteRecord*>> write_set = txn->get_write_set();
+
+    for (auto iter = write_set->rbegin(); iter != write_set->rend(); iter++) {
+        const auto [write_type, table_name, rid, record] = (*iter)->GetAll();
+        std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
+
+        switch (write_type) {
+            case WType::INSERT_TUPLE: {
+                auto log_record = std::make_unique<DeleteLogRecord>(txn->get_transaction_id(), record, rid, table_name);
+                record_link_management(log_record.get(), log_manager, txn);
+
+                //  TODO: 删除索引
+                handle->delete_record(rid, context);
+                break;
+            }
+            case WType::UPDATE_TUPLE: {
+                auto old_record = handle->get_record(rid, context);
+                auto log_record =
+                    std::make_unique<UpdateLogRecord>(txn->get_transaction_id(), *old_record, record, rid, table_name);
+                record_link_management(log_record.get(), log_manager, txn);
+
+                //  TODO: 删除索引
+
+                handle->update_record(rid, record.data, context);
+                //  TODO: 添加索引
+
+                break;
+            }
+            case WType::DELETE_TUPLE: {
+                auto log_record = std::make_unique<InsertLogRecord>(txn->get_transaction_id(), record, rid, table_name);
+                record_link_management(log_record.get(), log_manager, txn);
+
+                // TODO: 添加索引
+                handle->insert_record(rid, record.data);
+
+                break;
+            }
+            default:
+                throw InternalError("Invalid write type");
+                break;
+        }
     }
+    write_set->clear();
 
     // 2. 释放所有锁
     // - 遍历并释放lock_set中的锁
     // - 通知锁管理器更新状态
 
+    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
+    for (const LockDataId& lock : *lock_set) {
+        lock_manager_->unlock(txn, lock);
+    }
+
     // 3. 资源清理
     // - 清空write_set和lock_set
     // - 释放相关内存
+
+    txn->clear();
 
     // 4. 日志处理
     // - 创建ABORT类型日志记录
     // - 更新日志序列号链
     // - 将日志刷入磁盘
 
+    AbortLogRecord* log = new AbortLogRecord(txn->get_transaction_id());
+    record_link_management(log, log_manager, txn);
+
     // 5. 更新事务状态
     // - 将状态设置为ABORTED
     // - 从全局事务表中移除
+
+    txn->set_state(TransactionState::ABORTED);
 
     // 6. MVCC相关清理（如果启用）
     // - 清理版本链
     // - 恢复时间戳状态
     // - 更新活跃事务水位线
+}
+
+/**
+ * @brief 管理日志记录的链接关系
+ *
+ * @details
+ * 该函数的主要作用是维护事务日志链的顺序关系，确保日志记录能够按照正确的顺序被写入和回放。
+ * 具体操作包括：
+ * 1. 设置当前日志记录的前序LSN（Log Sequence Number）。
+ * 2. 将日志记录添加到日志管理器的缓冲区中。
+ * 3. 更新事务的前序LSN为当前日志记录的LSN，以便后续日志能够正确链接。
+ *
+ * @param log_record 当前的日志记录指针
+ * @param log_manager 日志管理器指针，用于管理日志缓冲区
+ * @param txn 当前事务指针，用于更新事务的状态
+ */
+void TransactionManager::record_link_management(LogRecord* log_record, LogManager* log_manager, Transaction* txn) {
+    // 设置当前日志记录的前序LSN为事务的前序LSN，建立日志链
+    log_record->prev_lsn_ = txn->get_prev_lsn();
+
+    // 将当前日志记录添加到日志管理器的缓冲区中，等待刷盘
+    log_manager->add_log_to_buffer(log_record);
+
+    // 更新事务的前序LSN为当前日志记录的LSN，以便后续日志能够正确链接
+    txn->set_prev_lsn(log_record->lsn_);
 }
