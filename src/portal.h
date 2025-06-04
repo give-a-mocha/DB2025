@@ -115,8 +115,9 @@ class Portal {
                 }
                 case PlanTag::T_explain: {
                     std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
+                    std::vector<TabCol> sel_cols = p->sel_cols_;
                     std::unique_ptr<AbstractExecutor> root = convert_plan_explain_executor(p, context, 0);
-                    return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(p->sel_cols_), std::move(root), plan);
+                    return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(sel_cols), std::move(root), plan);
                 }
                 default:
                     throw InternalError("Unexpected field type");
@@ -189,13 +190,13 @@ class Portal {
                                                                     int offset) {
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
             return std::make_unique<ExplainProjectExecutor>(
-                convert_plan_explain_executor(x->subplan_, context, offset + 1), x->sel_cols_, offset, x->isStar_);
+                convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1), std::move(x->sel_cols_), offset, x->isStar_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if (x->conds_.empty()) {
-                return std::make_unique<ExplainScanExecutor>(x->tab_name_, offset);
+                return std::make_unique<ExplainScanExecutor>(std::move(x->tab_name_), offset);
             } else {
-                auto res = std::make_unique<ExplainScanExecutor>(x->tab_name_, offset + 1);
-                return std::make_unique<ExplainFilterExecutor>(std::move(res), x->conds_, offset);
+                auto res = std::make_unique<ExplainScanExecutor>(std::move(x->tab_name_), offset + 1);
+                return std::make_unique<ExplainFilterExecutor>(std::move(res), std::move(x->conds_), offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
             std::vector<Condition> solve_conds;
@@ -213,8 +214,8 @@ class Portal {
             } else {
                 add_offset = 1;
             }
-            auto left = convert_plan_explain_executor(x->left_, context, offset + add_offset);
-            auto right = convert_plan_explain_executor(x->right_, context, offset + add_offset);
+            auto left = convert_plan_explain_executor(std::move(x->left_), context, offset + add_offset);
+            auto right = convert_plan_explain_executor(std::move(x->right_), context, offset + add_offset);
             auto get_level = [](const std::unique_ptr<AbstractExecutor> &executor) -> std::string {
                 if (auto x = dynamic_cast<ExplainFilterExecutor *>(executor.get())) {
                     return "1_" + x->get_conds();  // Filter
@@ -226,19 +227,26 @@ class Portal {
                     return "4_" + x->get_tab_name();  // Scan
                 }
             };
-            if (get_level(left) > get_level(right)) {
+            std::string left_level = get_level(left);
+            std::string right_level = get_level(right);
+            std::vector<std::string> join_tables;
+            if(left_level[0] == '2'){
+                join_tables = dynamic_cast<ExplainJoinExecutor *>(left.get())->get_tables_vec();
+            }
+            join_tables.emplace_back(std::move(x->table_));
+            if (left_level > right_level) {
                 std::swap(left, right);
             }
             if (!conds.empty()) {
-                auto res = std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), x->tables_,
-                                                                 solve_conds, offset + 1);
+                auto res = std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), std::move(join_tables),
+                                                                 std::move(solve_conds), offset + 1);
                 return std::make_unique<ExplainFilterExecutor>(std::move(res), conds, offset);
             } else {
-                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), x->tables_, x->conds_,
+                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), std::move(join_tables), std::move(x->conds_),
                                                              offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-            return convert_plan_explain_executor(x->subplan_, context, offset);
+            return convert_plan_explain_executor(std::move(x->subplan_), context, offset);
         }
         return nullptr;
     }

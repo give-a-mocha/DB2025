@@ -108,7 +108,7 @@ public:
     // 连接条件
     std::vector<Condition> conds_;
     // 连接的表名
-    std::vector<std::string> tables_;
+    std::string table_;
     // future TODO: 后续可以支持的连接类型
     JoinType type;
 
@@ -127,12 +127,12 @@ public:
         conds_ = std::move(conds);
         this->type = type;
     }
-    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds, std::vector<std::string> tables){
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds, std::string table){
         Plan::tag = tag;
         left_ = std::move(left);
         right_ = std::move(right);
         conds_ = std::move(conds);
-        tables_ = std::move(tables);
+        table_ = std::move(table);
         type = JoinType::INNER_JOIN;
     }
 };

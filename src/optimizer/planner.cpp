@@ -836,24 +836,21 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
  * @brief 构建左深树连接计划
  * 这里使用贪心算法，选择基数最小的表开始连接
  */
-std::shared_ptr<Plan> Planner::build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans,
-                                                         std::list<Condition> &join_conditions) {
+std::shared_ptr<Plan> Planner::build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans, std::list<Condition> &join_conditions) {
     // 开始构建左深树
     std::shared_ptr<Plan> result = nullptr;
     std::unordered_set<std::string> joined_tables;
-    std::vector<std::string> now_tables;
 
     // 获取第一个表作为初始结果
     std::shared_ptr<ScanPlan> first_scan = std::dynamic_pointer_cast<ScanPlan>(table_plans.front());
     joined_tables.insert(first_scan->tab_name_);
     result = table_plans.front();
-    now_tables.push_back(first_scan->tab_name_);
     table_plans.pop_front();
 
     // 复杂度O(n)
-    auto join_table = [&](const std::string &current_table,
+    auto join_table = [&](const std::string current_table,
                           std::list<std::shared_ptr<Plan>>::iterator &table_it) -> void {
-        now_tables.push_back(current_table);
+        
         std::vector<Condition> applicable_conds;
         auto it = join_conditions.begin();
         while (it != join_conditions.end()) {
@@ -873,21 +870,21 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(std::list<std::shared_p
                 ++it;
             }
         }
+        joined_tables.insert(current_table);
         // 创建连接计划
         if (enable_nestedloop_join && enable_sortmerge_join) {
             result = std::make_shared<JoinPlan>(PlanTag::T_NestLoop, std::move(result), std::move(*table_it),
-                                                applicable_conds, now_tables);
+                                                std::move(applicable_conds), std::move(current_table));
         } else if (enable_nestedloop_join) {
             result = std::make_shared<JoinPlan>(PlanTag::T_NestLoop, std::move(result), std::move(*table_it),
-                                                applicable_conds, now_tables);
+                                                std::move(applicable_conds), std::move(current_table));
         } else if (enable_sortmerge_join) {
             result = std::make_shared<JoinPlan>(PlanTag::T_SortMerge, std::move(result), std::move(*table_it),
-                                                applicable_conds, now_tables);
+                                                std::move(applicable_conds), std::move(current_table));
         } else {
             throw RMDBError("No join executor selected!");
         }
         table_it = table_plans.erase(table_it);
-        joined_tables.insert(current_table);
     };
 
     // 连接第二个表（基数第二小的表）
