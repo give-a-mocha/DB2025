@@ -11,6 +11,7 @@ Desktop.ini
 .project
 .settings/
 .roo/
+memory-bank/
 
 # Node.js
 node_modules/
