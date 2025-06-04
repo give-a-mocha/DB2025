@@ -1002,7 +1002,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         if (ok) {
             return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
         }
-        return plan;
+        return x;
     } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
         for (auto &cond : x->conds_) {
             if (std::find(need_cols.begin(), need_cols.end(), cond.lhs_col) == need_cols.end()) {
@@ -1025,12 +1025,11 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         if (cnt != get_table_col_num(x->tab_name_)) {
             return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
         }
-        return plan;
+        return x;
     } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-        // 处理排序计划
-        //! 未完成
-        assert(1 == 0);
-    }else {
+        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
+        return x;
+    } else {
         throw InternalError("Unexpected plan type in projection optimization");
     }
     
