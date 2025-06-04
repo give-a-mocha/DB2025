@@ -50,8 +50,6 @@ static std::string LogTypeStr[] = {
     "ABORT"    // 事务中止的字符串表示
 };
 
-#define Serialize_data(data) serialize_data(dest, data, offset);
-
 /**
  * 日志记录基类
  * 所有类型的日志记录都继承自此类，包含所有日志的基本信息
@@ -87,9 +85,9 @@ class LogRecord {
     }
 
     template <typename T>
-    void serialize_data(char* dest, const T* data, int& offset) const {
-        memcpy(dest + offset, data, sizeof(T));
-        offset += sizeof(T);
+    void serialize_data(char* dest, int offset, const T* data, const int data_size = sizeof(T)) const {
+        memcpy(dest + offset, data, data_size);
+        offset += data_size;
     }
 
     /**
@@ -209,11 +207,14 @@ class InsertLogRecord : public LogRecord {
     void serialize(char* dest) const override {
         LogRecord::serialize(dest);
         int offset = OFFSET_LOG_DATA;
-        Serialize_data(&insert_value_.size);
-        Serialize_data(&insert_value_.data);
-        Serialize_data(&rid_);
-        Serialize_data(&table_name_size_);
-        Serialize_data(&table_name_);
+        auto Serialize = [this, dest, &offset]<typename T>(const T* data, const int data_size = sizeof(T)) -> void {
+            serialize_data(dest, offset, data, data_size);
+        };
+        Serialize(&insert_value_.size);
+        Serialize(insert_value_.data, insert_value_.size);
+        Serialize(&rid_);
+        Serialize(&table_name_size_);
+        Serialize(table_name_, table_name_size_);
     }
     // 从src中反序列化出一条Insert日志记录
     void deserialize(const char* src) override {
@@ -281,11 +282,14 @@ class DeleteLogRecord : public LogRecord {
     void serialize(char* dest) const override {
         LogRecord::serialize(dest);
         int offset = OFFSET_LOG_DATA;
-        Serialize_data(&delete_value_.size);
-        Serialize_data(&delete_value_.data);
-        Serialize_data(&rid_);
-        Serialize_data(&table_name_size_);
-        Serialize_data(&table_name_);
+        auto Serialize = [this, dest, &offset]<typename T>(const T* data, const int data_size = sizeof(T)) -> void {
+            serialize_data(dest, offset, data, data_size);
+        };
+        Serialize(&delete_value_.size);
+        Serialize(delete_value_.data, delete_value_.size);
+        Serialize(&rid_);
+        Serialize(&table_name_size_);
+        Serialize(table_name_, table_name_size_);
     }
     // 从src中反序列化出一条Delete日志记录
     void deserialize(const char* src) override {
@@ -358,20 +362,16 @@ class UpdateLogRecord : public LogRecord {
     void serialize(char* dest) const override {
         LogRecord::serialize(dest);
         int offset = OFFSET_LOG_DATA;
-        // TODO
-        memcpy(dest + offset, &before_value_.size, sizeof(int));
-        offset += sizeof(int);
-        memcpy(dest + offset, before_value_.data, before_value_.size);
-        offset += before_value_.size;
-        memcpy(dest + offset, &after_value_.size, sizeof(int));
-        offset += sizeof(int);
-        memcpy(dest + offset, after_value_.data, after_value_.size);
-        offset += after_value_.size;
-        memcpy(dest + offset, &rid_, sizeof(Rid));
-        offset += sizeof(Rid);
-        memcpy(dest + offset, &table_name_size_, sizeof(size_t));
-        offset += sizeof(size_t);
-        memcpy(dest + offset, table_name_, table_name_size_);
+        auto Serialize = [this, dest, &offset]<typename T>(const T* data, const int data_size = sizeof(T)) -> void {
+            serialize_data(dest, offset, data, data_size);
+        };
+        Serialize(&before_value_.size);
+        Serialize(before_value_.data, before_value_.size);
+        Serialize(&after_value_.size);
+        Serialize(after_value_.data, after_value_.size);
+        Serialize(&rid_);
+        Serialize(&table_name_size_);
+        Serialize(table_name_, table_name_size_);
     }
     // 从src中反序列化出一条Update日志记录
     void deserialize(const char* src) override {
@@ -478,5 +478,3 @@ class LogManager {
     lsn_t persist_lsn_;                 // 最后一条持久化日志的LSN
     DiskManager* disk_manager_;         // 底层磁盘管理器
 };
-
-#undef Serialize_data
