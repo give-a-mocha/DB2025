@@ -563,13 +563,22 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     auto sel_cols = query->cols;
     // joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-    plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols),
-                                                   x->cols.empty());
+    bool is_star = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)->cols.empty();
     
-    std::vector<TabCol> temp;
+    // 保证投影列不重复
+    std::vector<TabCol> project_cols;
     std::vector<TabCol> temp2;
-    plannerRoot = build_projection_plan(std::move(plannerRoot), temp, temp2);
+    for (auto &col : sel_cols) {
+        if (std::find(project_cols.begin(), project_cols.end(), col) == project_cols.end()) {
+            project_cols.emplace_back(col);
+        }
+    }
+    plannerRoot = build_projection_plan(std::move(plannerRoot), project_cols, temp2);
+    if(auto x = std::dynamic_pointer_cast<ProjectionPlan>(plannerRoot)) {
+        plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(x->subplan_), std::move(sel_cols),is_star);
+    }else{
+        plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols),is_star);
+    }
     return plannerRoot;
 }
 
@@ -963,22 +972,9 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
                                                      std::vector<TabCol> &all_cols) {
     size_t siz = need_cols.size();
     all_cols.clear();
-    if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
-        // 拿到需要投影到列
-        for (auto &col : x->sel_cols_) {
-            // 检查是否已经存在
-            if (std::find(need_cols.begin(), need_cols.end(), col) == need_cols.end()) {
-                need_cols.emplace_back(col);
-            }
-        }
-        std::vector<TabCol> temp;
-        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, temp);
-        while (need_cols.size() > siz) {
-            need_cols.pop_back();
-        }
-        return plan;
-    } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
+    if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
         for (auto &cond : x->conds_) {
+            // 检查是否已经存在
             if (std::find(need_cols.begin(), need_cols.end(), cond.lhs_col) == need_cols.end()) {
                 need_cols.emplace_back(cond.lhs_col);
             }
@@ -1030,5 +1026,12 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
             return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
         }
         return plan;
+    } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
+        // 处理排序计划
+        //! 未完成
+        assert(1 == 0);
+    }else {
+        throw InternalError("Unexpected plan type in projection optimization");
     }
+    
 }
