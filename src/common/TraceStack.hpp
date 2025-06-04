@@ -22,8 +22,8 @@ class TraceStackPrint {
 
     static constexpr const char* ENTERMSG = "{}ENTER: {}({}:{})";
     static constexpr const char* EXITMSG = "{}EXIT: {}({}:{})";
-    static constexpr const char* CallMSG = "=== Call Stack Trace ===";
-    static constexpr const char* SPLITMSG = "======================";
+    static constexpr const char* CallMSG = "======== Call Stack Trace ========";
+    static constexpr const char* SPLITMSG = "==================================";
 
    public:
     TraceStackPrint(const std::string& func, const std::string& file, int line)
