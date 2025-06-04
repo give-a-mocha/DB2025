@@ -1031,10 +1031,10 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         if (std::find(need_cols.begin(), need_cols.end(), x->sel_col_) == need_cols.end()) {
             need_cols.emplace_back(x->sel_col_);
         }
+        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         while(need_cols.size() > siz) {
             need_cols.pop_back();
         }
-        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         return x;
     } else {
         throw InternalError("Unexpected plan type in projection optimization");
