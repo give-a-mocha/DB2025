@@ -233,11 +233,11 @@ class Portal {
                 std::swap(left, right);
             }
             if (!conds.empty()) {
-                auto res = std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), std::move(join_tables),
+                auto res = std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), join_tables,
                                                                  std::move(solve_conds), offset + 1);
                 return std::make_unique<ExplainFilterExecutor>(std::move(res), conds, offset);
             } else {
-                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), std::move(join_tables), std::move(x->conds_),
+                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), join_tables, std::move(x->conds_),
                                                              offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
