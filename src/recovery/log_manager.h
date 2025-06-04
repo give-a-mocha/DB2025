@@ -113,13 +113,13 @@ class LogRecord {
      * 派生类可重写此方法以显示更多特定信息
      */
     virtual void format_print() const {
-        logINFO("log type in father_function: {}\n", LogTypeStr[log_type_]);
-        logINFO("Print Log Record:\n");
-        logINFO("log_type_: {}\n", LogTypeStr[log_type_]);  // 打印日志类型
-        logINFO("lsn: {}\n", lsn_);                         // 打印日志序列号
-        logINFO("log_tot_len: {}\n", log_tot_len_);         // 打印日志总长度
-        logINFO("log_tid: {}\n", log_tid_);                 // 打印事务ID
-        logINFO("prev_lsn: {}\n", prev_lsn_);               // 打印前一条日志的序列号
+        logINFO("log type in father_function: {}", LogTypeStr[log_type_]);
+        logINFO("Print Log Record:");
+        logINFO("log_type_: {}", LogTypeStr[log_type_]);  // 打印日志类型
+        logINFO("lsn: {}", lsn_);                         // 打印日志序列号
+        logINFO("log_tot_len: {}", log_tot_len_);         // 打印日志总长度
+        logINFO("log_tid: {}", log_tid_);                 // 打印事务ID
+        logINFO("prev_lsn: {}", prev_lsn_);               // 打印前一条日志的序列号
     }
 };
 
@@ -137,7 +137,7 @@ class BeginLogRecord : public LogRecord {
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
-        logINFO("log type in son_function: {}\n", LogTypeStr[log_type_]);
+        logINFO("log type in son_function: {}", LogTypeStr[log_type_]);
         LogRecord::format_print();  // 调用基类的打印方法
     }
 };
@@ -153,7 +153,7 @@ class CommitLogRecord : public LogRecord {
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
-        logINFO("log type in son_function: {}\n", LogTypeStr[log_type_]);
+        logINFO("log type in son_function: {}", LogTypeStr[log_type_]);
         LogRecord::format_print();
     }
 };
@@ -178,7 +178,7 @@ class AbortLogRecord : public LogRecord {
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
-        logINFO("log type in son_function: {}\n", LogTypeStr[log_type_]);
+        logINFO("log type in son_function: {}", LogTypeStr[log_type_]);
         LogRecord::format_print();
     }
 };
@@ -229,11 +229,11 @@ class InsertLogRecord : public LogRecord {
         memcpy(table_name_, src + offset, table_name_size_);
     }
     void format_print() const override {
-        logINFO("insert record\n");
+        logINFO("insert record");
         LogRecord::format_print();
-        logINFO("insert_value: {}\n", insert_value_.data);
-        logINFO("insert rid: {}, {}\n", rid_.page_no, rid_.slot_no);
-        logINFO("table name: {}\n", table_name_);
+        logINFO("insert_value: {}", insert_value_.data);
+        logINFO("insert rid: {}, {}", rid_.page_no, rid_.slot_no);
+        logINFO("table name: {}", table_name_);
     }
 
     RmRecord insert_value_;   // 插入的记录
@@ -304,11 +304,11 @@ class DeleteLogRecord : public LogRecord {
         memcpy(table_name_, src + offset, table_name_size_);
     }
     void format_print() const override {
-        logINFO("delete record\n");
+        logINFO("delete record");
         LogRecord::format_print();
-        logINFO("delete_value: {}\n", delete_value_.data);
-        logINFO("delete rid: {}, {}\n", rid_.page_no, rid_.slot_no);
-        logINFO("table name: {}\n", table_name_);
+        logINFO("delete_value: {}", delete_value_.data);
+        logINFO("delete rid: {}, {}", rid_.page_no, rid_.slot_no);
+        logINFO("table name: {}", table_name_);
     }
 
     RmRecord delete_value_;   // 删除的记录
@@ -388,12 +388,12 @@ class UpdateLogRecord : public LogRecord {
         memcpy(table_name_, src + offset, table_name_size_);
     }
     void format_print() const override {
-        logINFO("update record\n");
+        logINFO("update record");
         LogRecord::format_print();
-        logINFO("before_value: {}\n", before_value_.data);
-        logINFO("after_value: {}\n", after_value_.data);
-        logINFO("update rid: {}, {}\n", rid_.page_no, rid_.slot_no);
-        logINFO("table name: {}\n", table_name_);
+        logINFO("before_value: {}", before_value_.data);
+        logINFO("after_value: {}", after_value_.data);
+        logINFO("update rid: {}, {}", rid_.page_no, rid_.slot_no);
+        logINFO("table name: {}", table_name_);
     }
 
     RmRecord before_value_;   // 更新前的记录
