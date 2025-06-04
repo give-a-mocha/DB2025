@@ -40,6 +40,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
 
         // 处理JOIN表
+        std::vector<std::string> semi_join_tables;
+        std::vector<TabRef> semi_join_tableRefs;
+        
         if (!x->jointree.empty()) {
             for (const auto &join_expr : x->jointree) {
                 // 检查JOIN右侧的表是否存在
@@ -48,9 +51,17 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     throw TableNotFoundError(right_tab_name);
                 }
                 TabRef right_table(right_tab_name, join_expr->right->alias);
-                // 添加右表到表列表和tab_refs中
-                query->tables.push_back(right_tab_name);
-                tab_refs.push_back(right_table);
+                bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
+                // 在做列检查时不需要把半连接的表加入
+                if(isSemiJoin) {
+                    // 半连接表
+                    semi_join_tables.push_back(right_tab_name);  
+                    semi_join_tableRefs.push_back(right_table);
+                } else {
+                    // 普通JOIN表
+                    query->tables.push_back(right_tab_name);
+                    tab_refs.push_back(right_table);
+                }
             }
         }
 
@@ -78,6 +89,15 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 query->cols.push_back(sel_col);                // 添加到查询列表
             }
         }
+
+        // 处理条件，加入半连接的表
+        for(auto &semi_join_table : semi_join_tables) {
+            query->tables.push_back(semi_join_table);
+        }
+        for(auto &semi_join_tableRef : semi_join_tableRefs) {
+            tab_refs.push_back(semi_join_tableRef);
+        }
+        get_all_cols(semi_join_tables, all_cols);
 
         // 处理WHERE条件子句
         get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
