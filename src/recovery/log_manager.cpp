@@ -27,7 +27,7 @@ See the Mulan PSL v2 for more details. */
  *
  * @thread_safety 通过互斥锁保护并发访问
  */
-lsn_t LogManager::add_log_to_buffer(LogRecord* log_record) {}
+lsn_t LogManager::add_log_to_buffer(LogRecord* log_record) { return 0; }
 
 /**
  * @description: 将日志缓冲区内容刷写到磁盘
