@@ -29,6 +29,9 @@ struct TabCol {
     std::string tab_name;   // 表名
     std::string tab_alias;  // 表别名
     std::string col_name;   // 列名
+    std::string col_alias;  // 列别名
+
+    AggregateType agg_type{AggregateType::AGGREGATE_NONE};  // 聚合类型
 
     /**
      * @brief 默认构造函数，创建一个空的表列引用
@@ -176,6 +179,21 @@ struct Value {
                 throw StringOverflowError();  // 字符串长度溢出异常
             }
             memset(raw->data, 0, len);                           // 初始化缓冲区为0
+            memcpy(raw->data, str_val.c_str(), str_val.size());  // 复制字符串到缓冲区
+        }
+    }
+
+    void init_raw(){
+        assert(raw == nullptr);
+        if (type == ColType::TYPE_INT) {
+            raw = std::make_shared<RmRecord>(sizeof(int));
+            *(int *)(raw->data) = int_val;  // 将整数值写入缓冲区
+        } else if (type == ColType::TYPE_FLOAT) {
+            raw = std::make_shared<RmRecord>(sizeof(float));
+            *(float *)(raw->data) = float_val;  // 将浮点数值写入缓冲区
+        } else if (type == ColType::TYPE_STRING) {
+            raw = std::make_shared<RmRecord>(str_val.size() + 1);
+            memset(raw->data, 0, str_val.size() + 1);  // 初始化缓冲区为0
             memcpy(raw->data, str_val.c_str(), str_val.size());  // 复制字符串到缓冲区
         }
     }

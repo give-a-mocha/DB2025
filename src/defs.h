@@ -39,6 +39,15 @@ struct Rid {
 
 enum class ColType { TYPE_INT, TYPE_FLOAT, TYPE_STRING };
 
+enum AggregateType {
+    AGGREGATE_NONE,
+    AGGREGATE_COUNT,
+    AGGREGATE_SUM,
+    AGGREGATE_AVG,
+    AGGREGATE_MAX,
+    AGGREGATE_MIN
+};
+
 inline std::string coltype2str(ColType type) {
     switch (type) {
         case ColType::TYPE_INT:

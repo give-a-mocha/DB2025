@@ -25,7 +25,7 @@ using namespace ast;
 
 
 // SQL关键字 - 这些是保留字，在词法分析阶段识别
-%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
+%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER GROUP BY HAVING COUNT SUM AVG MIN MAX
 %token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
 %token EXPLAIN AS
 %token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON
@@ -83,6 +83,11 @@ using namespace ast;
 %type <sv_join_type> joinType               // JOIN类型
 %type <sv_join_expr> joinExpr               // JOIN表达式
 %type <sv_join_exprs> joinExprs optJoinExprs // JOIN表达式列表
+
+// group相关
+%type <sv_groupby> group_clause
+%type <sv_groupbys> group_clauses opt_group_clause
+%type <sv_having_conds> having_conds opt_having_conds
 
 // 配置相关
 %type <sv_setKnobType> set_knob_type        // 配置选项类型
@@ -200,9 +205,9 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_group_clause opt_having_conds opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8, $9);
     }
     |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
@@ -347,6 +352,50 @@ col:
     {
         $$ = std::make_shared<Col>("", $1, $2); // 表名为空字符串
     }
+    |   COUNT '(' '*' ')' optAlias        // COUNT(*) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", "*", $5, SV_AGGREGATE_COUNT); // 特殊处理COUNT(*)
+    }
+    |   COUNT '(' colName ')' optAlias  // COUNT(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_COUNT);
+    }
+    |   COUNT '(' tbName '.' colName ')' optAlias  // COUNT(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_COUNT);
+    }
+    |   SUM '(' colName ')' optAlias       // SUM(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_SUM);
+    }
+    |   SUM '(' tbName '.' colName ')' optAlias  // SUM(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_SUM);
+    }
+    |   AVG '(' colName ')' optAlias       // AVG(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_AVG);
+    }
+    |   AVG '(' tbName '.' colName ')' optAlias  // AVG(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_AVG);
+    }
+    |   MIN '(' colName ')' optAlias       // MIN(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_MIN);
+    }
+    |   MIN '(' tbName '.' colName ')' optAlias  // MIN(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_MIN);
+    }
+    |   MAX '(' colName ')' optAlias       // MAX(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_MAX);
+    }
+    |   MAX '(' tbName '.' colName ')' optAlias  // MAX(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_MAX);
+    }
     ;
 
 /* 列列表 - 用于SELECT等 */
@@ -486,7 +535,48 @@ opt_asc_desc:
     { 
         $$ = OrderBy_DEFAULT; 
     }
-    ;    
+    ;
+
+opt_group_clause:
+    GROUP BY group_clauses
+    {
+        $$ = $3;
+    }
+    |   /* epsilon */ { /* ignore*/ }
+    ;
+group_clause:
+      col
+    {
+        $$ = std::make_shared<GroupBy>($1);
+    }
+group_clauses:
+      group_clause
+    {
+        $$ = std::vector<std::shared_ptr<GroupBy>>{$1};
+    }
+    |	group_clauses ',' group_clause
+    {
+        $$.push_back($3);
+    }
+    ;
+opt_having_conds:
+       /* epsilon */ { /* ignore*/ }
+    |   HAVING having_conds
+    {
+        $$ = $2;
+    }
+    ;
+having_conds:
+        condition 
+    {
+        $$ = std::vector<std::shared_ptr<BinaryExpr>>{$1};
+    }
+    |   having_conds AND condition
+    {
+        $$.push_back($3);
+    }
+    ;
+
 
 /* 可选的JOIN表达式列表 */
 optJoinExprs:

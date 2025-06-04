@@ -156,6 +156,10 @@ class Query {
     std::vector<SetClause> set_clauses;    // UPDATE的SET子句
     std::vector<Value> values;             // INSERT的VALUES列表
 
+    std::vector<TabCol> group_cols;  // GROUP BY子句的列
+
+    std::vector<Condition> having_conds; // HAVING子句的条件
+
     /**
      * @brief 默认构造函数
      * @note 创建一个空的查询对象，各容器保持为空

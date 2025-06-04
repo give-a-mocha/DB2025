@@ -37,6 +37,39 @@ enum SetKnobType {
     EnableNestLoop, EnableSortMerge
 };
 
+enum SvAggregateType {
+    SV_AGGREGATE_NONE, SV_AGGREGATE_COUNT, SV_AGGREGATE_SUM, SV_AGGREGATE_AVG, SV_AGGREGATE_MAX, SV_AGGREGATE_MIN
+};
+
+inline std::string generate_alias(std::string tab_name, std::string col_name, SvAggregateType agg_type) {
+    std::string alias;
+    if (tab_name.empty()) {
+        alias = col_name;
+    } else {
+        alias = tab_name + "." + col_name;
+    }
+    switch (agg_type) {
+        case SV_AGGREGATE_COUNT:
+            alias = "COUNT(" + alias + ")";
+            break;
+        case SV_AGGREGATE_SUM:
+            alias = "SUM(" + alias + ")";
+            break;
+        case SV_AGGREGATE_AVG:
+            alias = "AVG(" + alias + ")";
+            break;
+        case SV_AGGREGATE_MAX:
+            alias = "MAX(" + alias + ")";
+            break;
+        case SV_AGGREGATE_MIN:
+            alias = "MIN(" + alias + ")";
+            break;
+        default:
+            break;
+    }
+    return alias;
+}
+
 // Base class for tree nodes
 struct TreeNode {
     virtual ~TreeNode() = default;  // enable polymorphism
@@ -155,11 +188,22 @@ struct Col : public Expr {
     std::string col_name;
     std::string alias;  // 列别名
 
+    SvAggregateType aggregate_type{SV_AGGREGATE_NONE};  // 聚合类型
+
     Col(std::string tab_name_, std::string col_name_) :
             tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias("") {}
     
     Col(std::string tab_name_, std::string col_name_, std::string alias_) :
             tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias(std::move(alias_)) {}
+    
+    Col(std::string tab_name_, std::string col_name_, std::string alias_, SvAggregateType aggregate_type_) :
+            tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), aggregate_type(aggregate_type_) {
+                if(alias_.empty()) {
+                    alias = generate_alias(tab_name, col_name, aggregate_type);
+                } else {
+                    alias = std::move(alias_);
+                }
+            }
 };
 
 struct SetClause : public TreeNode {
@@ -185,6 +229,11 @@ struct OrderBy : public TreeNode
     OrderByDir orderby_dir;
     OrderBy( std::shared_ptr<Col> cols_, OrderByDir orderby_dir_) :
        cols(std::move(cols_)), orderby_dir(std::move(orderby_dir_)) {}
+};
+
+struct GroupBy : public TreeNode {
+    std::shared_ptr<Col> cols;
+    GroupBy(std::shared_ptr<Col> cols_) : cols(std::move(cols_)) {}
 };
 
 struct InsertStmt : public TreeNode {
@@ -241,11 +290,13 @@ struct SelectStmt : public TreeNode {
 
     
     bool has_sort;
+    std::vector<std::shared_ptr<GroupBy>> group;  // 添加group by支持
+    std::vector<std::shared_ptr<BinaryExpr>> having_conds;  // 添加having支持
     std::shared_ptr<OrderBy> order;
 
 
 
-
+    
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
                std::vector<std::shared_ptr<TableRef>> tabs_,
                std::vector<std::shared_ptr<JoinExpr>> jointree_,
@@ -253,6 +304,18 @@ struct SelectStmt : public TreeNode {
                std::shared_ptr<OrderBy> order_) :
             cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)),
             jointree(std::move(jointree_)), order(std::move(order_)) {
+                has_sort = (bool)order;
+            }
+    SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
+               std::vector<std::shared_ptr<TableRef>> tabs_,
+               std::vector<std::shared_ptr<JoinExpr>> jointree_,
+               std::vector<std::shared_ptr<BinaryExpr>> conds_,
+               std::vector<std::shared_ptr<GroupBy>> group_,
+               std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
+               std::shared_ptr<OrderBy> order_) :
+            cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)),
+            jointree(std::move(jointree_)), group(std::move(group_)),
+            having_conds(std::move(having_conds_)), order(std::move(order_)) {
                 has_sort = (bool)order;
             }
 };
@@ -317,6 +380,11 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+
+    std::shared_ptr<GroupBy> sv_groupby;
+    std::vector<std::shared_ptr<GroupBy>> sv_groupbys;
+
+    std::vector<std::shared_ptr<BinaryExpr>> sv_having_conds;
 
     std::shared_ptr<JoinExpr> sv_join_expr;
     std::vector<std::shared_ptr<JoinExpr>> sv_join_exprs;
