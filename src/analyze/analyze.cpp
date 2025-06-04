@@ -557,6 +557,8 @@ JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
             return JoinType::RIGHT_JOIN;
         case ast::JoinType::SV_FULL_JOIN:  // 全外连接
             return JoinType::FULL_JOIN;
+        case ast::JoinType::SV_SEMI_JOIN:  // 半连接
+            return JoinType::SEMI_JOIN;
         default:
             // 未知的JOIN类型，抛出错误
             throw InternalError("Unknown join type in semantic analysis");
