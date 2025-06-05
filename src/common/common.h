@@ -17,8 +17,8 @@ See the Mulan PSL v2 for more details. */
 #include <vector>
 
 #include "defs.h"
-#include "record/rm_defs.h"
 #include "parser/ast.h"
+#include "record/rm_defs.h"
 
 /**
  * @brief 表列引用结构体，用于标识一个特定表中的列
@@ -88,28 +88,10 @@ struct TabCol {
     void set_col_alias(const std::string &alias) { col_alias = alias; }
 
     void set_agg_type(ast::SvAggregateType agg_type_) {
-        switch (agg_type_) {
-            case ast::SvAggregateType::NONE:
-                agg_type = AggregateType::NONE;
-                break;
-            case ast::SvAggregateType::COUNT:
-                agg_type = AggregateType::COUNT;
-                break;
-            case ast::SvAggregateType::SUM:
-                agg_type = AggregateType::SUM;
-                break;
-            case ast::SvAggregateType::AVG:
-                agg_type = AggregateType::AVG;
-                break;
-            case ast::SvAggregateType::MAX:
-                agg_type = AggregateType::MAX;
-                break;
-            case ast::SvAggregateType::MIN:
-                agg_type = AggregateType::MIN;
-                break;
-            default:
-                throw InternalError("Unknown aggregate type in TabCol::set_agg_type");
-        }
+        static AggregateType agg_type_map[5] = {
+            AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM, AggregateType::AVG, AggregateType::MAX,
+        };
+        agg_type = agg_type_map[static_cast<int>(agg_type_)];
     }
 };
 

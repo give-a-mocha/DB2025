@@ -364,6 +364,8 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     // 使用优化的连接顺序生成计划
     std::shared_ptr<Plan> plan = make_one_rel_optimized(query);
 
+    plan = generate_group_plan(query, std::move(plan));
+    plan = generate_aggregate_plan(query, std::move(plan));
     // 处理orderby
     plan = generate_sort_plan(query, std::move(plan));
 
@@ -549,6 +551,26 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
                                       x->order->orderby_dir == ast::OrderBy_DESC);
 }
 
+std::shared_ptr<Plan> generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
+    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
+
+    if (std::all_of(x->cols.begin(), x->cols.end(), [](auto &col) {
+            static_cast<int>(sel->aggregate_type) == static_cast<int>(AggregateType::NONE);
+        })) {
+        return plan;
+    }
+    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query->cols);
+}
+
+std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
+    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
+    if (x->group.empty()) {
+        return plan;
+    }
+    return std::make_shared<GroupPlan>(PlanTag::T_Group, std::move(plan), query->cols, query->group_cols,
+                                       query->having_conds);
+}
+
 /**
  * @brief select plan 生成
  *
@@ -565,7 +587,7 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     // joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
     bool is_star = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)->cols.empty();
-    
+
     // 保证投影列不重复
     std::vector<TabCol> project_cols;
     std::vector<TabCol> temp2;
@@ -575,10 +597,12 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
         }
     }
     plannerRoot = build_projection_plan(std::move(plannerRoot), project_cols, temp2);
-    if(auto x = std::dynamic_pointer_cast<ProjectionPlan>(plannerRoot)) {
-        plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(x->subplan_), std::move(sel_cols),is_star);
-    }else{
-        plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols),is_star);
+    if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plannerRoot)) {
+        plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(x->subplan_),
+                                                       std::move(sel_cols), is_star);
+    } else {
+        plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot),
+                                                       std::move(sel_cols), is_star);
     }
     return plannerRoot;
 }
@@ -1029,17 +1053,16 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         }
         return x;
     } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-        //!目前SortPlan的排序只有一个
+        //! 目前SortPlan的排序只有一个
         if (std::find(need_cols.begin(), need_cols.end(), x->sel_col_) == need_cols.end()) {
             need_cols.emplace_back(x->sel_col_);
         }
         x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
-        while(need_cols.size() > siz) {
+        while (need_cols.size() > siz) {
             need_cols.pop_back();
         }
         return x;
     } else {
         throw InternalError("Unexpected plan type in projection optimization");
     }
-    
 }

@@ -193,9 +193,10 @@ class AbstractExecutor {
      * - 缓存查找结果
      * - 批量查找优化
      */
-    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target) {
+    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
+                                                 bool has_table = true) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
-            return col.tab_name == target.tab_name && col.name == target.col_name;
+            return (!has_table || col.tab_name == target.tab_name) && col.name == target.col_name;
         });
         if (pos == rec_cols.end()) {
             throw ColumnNotFoundError(target.tab_name + '.' + target.col_name);
@@ -398,6 +399,73 @@ class AbstractExecutor {
                 return cmp >= 0;
             default:
                 throw InternalError("eval_cond::Unexpected op type at " + getType());
+        }
+    }
+
+    /**
+     * @brief 比较两个值的通用实现
+     * @param lhs 左操作数
+     * @param rhs 右操作数
+     * @param op 比较操作类型
+     * @return 比较结果
+     * @throw IncompatibleTypeError 类型不兼容时
+     *
+     * @details 比较流程：
+     * 1. 类型检查与转换
+     *    - 验证类型兼容性
+     *    - 数值类型隐式转换
+     *    - 特殊类型处理(如NULL)
+     *
+     * 2. 值比较策略
+     *    - 数值直接比较
+     *    - 字符串优化比较
+     *    - 边界条件处理
+     *
+     * 3. 性能优化
+     *    - 避免不必要转换
+     *    - 利用CPU指令
+     *    - 减少内存拷贝
+     *
+     * @note 优化考虑：
+     * - 常见类型快速路径
+     * - 大小写敏感性
+     * - 特殊值处理
+     */
+    bool compare(Value lhs, Value rhs, CompOp op) {
+        bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
+        if (lhs.type != rhs.type && !is_numeric) {
+            throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
+        }
+        int cmp;
+        if (is_numeric) {
+            // 整数比较
+            if (lhs.type == ColType::TYPE_INT && rhs.type == ColType::TYPE_INT) {
+                cmp = (lhs.int_val < rhs.int_val) ? -1 : (lhs.int_val > rhs.int_val) ? 1 : 0;
+            } else {
+                // 先转化成浮点数
+                convert(lhs, rhs);
+                // 浮点数比较
+                cmp = (lhs.float_val < rhs.float_val) ? -1 : (lhs.float_val > rhs.float_val) ? 1 : 0;
+            }
+        } else if (lhs.type == ColType::TYPE_STRING) {
+            size_t len = std::max(lhs.str_val.size(), rhs.str_val.size());
+            cmp = strncmp(lhs.str_val.c_str(), rhs.str_val.c_str(), len);
+        }
+        switch (op) {
+            case CompOp::OP_EQ:
+                return cmp == 0;
+            case CompOp::OP_NE:
+                return cmp != 0;
+            case CompOp::OP_LT:
+                return cmp < 0;
+            case CompOp::OP_GT:
+                return cmp > 0;
+            case CompOp::OP_LE:
+                return cmp <= 0;
+            case CompOp::OP_GE:
+                return cmp >= 0;
+            default:
+                throw InternalError("compare::Unexpected op type at " + getType());
         }
     }
 };

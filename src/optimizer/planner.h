@@ -65,10 +65,10 @@
  */
 class Planner {
    private:
-    SmManager *sm_manager_;          // 系统管理器指针
+    SmManager *sm_manager_;  // 系统管理器指针
 
-    bool enable_nestedloop_join = true;   // 是否启用嵌套循环连接
-    bool enable_sortmerge_join = false;   // 是否启用排序合并连接
+    bool enable_nestedloop_join = true;  // 是否启用嵌套循环连接
+    bool enable_sortmerge_join = false;  // 是否启用排序合并连接
 
    public:
     /**
@@ -231,7 +231,12 @@ class Planner {
      *    - 调整算子顺序
      *    - 优化资源使用
      */
-    std::shared_ptr<Plan> generate_select_plan(std::shared_ptr<Query> query, Context *context);
+
+    std::shared_ptr<Plan> generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
+
+    std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
+
+        std::shared_ptr<Plan> generate_select_plan(std::shared_ptr<Query> query, Context *context);
 
     // int get_indexNo(std::string tab_name, std::vector<Condition> curr_conds);
 
@@ -267,52 +272,52 @@ class Planner {
      *    - 选择最优索引组合
      */
     bool get_index_cols(std::string tab_name, std::vector<Condition> curr_conds,
-                       std::vector<std::string> &index_col_names);
-   /**
-    * @brief 获取表的列数信息
-    * @param tab_name 表名
-    * @return 表的总列数
-    * @throw TableNotFoundError 当表不存在时
-    *
-    * @details 统计内容：
-    * 1. 列类型统计
-    *    - 用户定义列数量
-    *    - 系统列数量
-    *    - 虚拟列数量
-    *
-    * 2. 元数据验证
-    *    - 检查表结构完整性
-    *    - 验证列定义有效性
-    *    - 处理隐藏列
-    *
-    * @note 该信息用于：
-    * - 资源分配
-    * - 执行计划生成
-    * - 结果集处理
-    */
+                        std::vector<std::string> &index_col_names);
+    /**
+     * @brief 获取表的列数信息
+     * @param tab_name 表名
+     * @return 表的总列数
+     * @throw TableNotFoundError 当表不存在时
+     *
+     * @details 统计内容：
+     * 1. 列类型统计
+     *    - 用户定义列数量
+     *    - 系统列数量
+     *    - 虚拟列数量
+     *
+     * 2. 元数据验证
+     *    - 检查表结构完整性
+     *    - 验证列定义有效性
+     *    - 处理隐藏列
+     *
+     * @note 该信息用于：
+     * - 资源分配
+     * - 执行计划生成
+     * - 结果集处理
+     */
     int get_table_col_num(const std::string &tab_name);
-   /**
-    * @brief 获取表的记录数统计
-    * @param tab_name 表名
-    * @return 表中的记录总数
-    * @throw TableNotFoundError 当表不存在时
-    *
-    * @details 统计过程：
-    * 1. 基础统计
-    *    - 活跃记录数
-    *    - 已删除记录数
-    *    - 总页面数
-    *
-    * 2. 更新机制
-    *    - 统计信息缓存
-    *    - 定期更新策略
-    *    - 增量维护方法
-    *
-    * 3. 优化器使用
-    *    - 估算查询代价
-    *    - 选择执行计划
-    *    - 预测中间结果大小
-    */
+    /**
+     * @brief 获取表的记录数统计
+     * @param tab_name 表名
+     * @return 表中的记录总数
+     * @throw TableNotFoundError 当表不存在时
+     *
+     * @details 统计过程：
+     * 1. 基础统计
+     *    - 活跃记录数
+     *    - 已删除记录数
+     *    - 总页面数
+     *
+     * 2. 更新机制
+     *    - 统计信息缓存
+     *    - 定期更新策略
+     *    - 增量维护方法
+     *
+     * 3. 优化器使用
+     *    - 估算查询代价
+     *    - 选择执行计划
+     *    - 预测中间结果大小
+     */
     size_t get_table_cardinality(const std::string &tab_name);
 
     /**
@@ -360,18 +365,16 @@ class Planner {
      *    - 删除冗余的投影
      *    - 投影下推优化
      */
-    std::shared_ptr<Plan> build_projection_plan(std::shared_ptr<Plan> plan,
-                                              std::vector<TabCol> &need_cols,
-                                              std::vector<TabCol> &all_cols);
+    std::shared_ptr<Plan> build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols,
+                                                std::vector<TabCol> &all_cols);
     /**
      * @brief 构建左深树连接计划
      * @param table_plans 表扫描计划列表
      * @param join_conditions 连接条件
      * @return 连接计划
      */
-    std::shared_ptr<Plan> build_left_deep_join_tree(
-        std::list<std::shared_ptr<Plan>>& table_plans,
-        std::list<Condition>& join_conditions);
+    std::shared_ptr<Plan> build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans,
+                                                    std::list<Condition> &join_conditions);
 
     /**
      * @brief 将 AST 中的数据类型转换为系统内部的列类型。
@@ -392,15 +395,12 @@ class Planner {
      * @note 确保类型转换的安全性和精度
      */
     ColType interp_sv_type(ast::SvType sv_type) {
-        switch (sv_type) {
-            case ast::SV_TYPE_INT:
-                return ColType::TYPE_INT;
-            case ast::SV_TYPE_FLOAT:
-                return ColType::TYPE_FLOAT;
-            case ast::SV_TYPE_STRING:
-                return ColType::TYPE_STRING;
-            default:
-                throw InternalError("Unsupported sv_type: " + std::to_string(sv_type));
-        }
+        static ColType type_map[] = {
+            ColType::TYPE_INT,
+            ColType::TYPE_FLOAT,
+            ColType::TYPE_STRING,
+        };
+        assert(sv_type >= ast::SvType::SV_TYPE_INT && sv_type <= ast::SvType::SV_TYPE_STRING);
+        return type_map[static_cast<int>(sv_type)];
     }
 };
