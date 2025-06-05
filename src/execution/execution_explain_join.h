@@ -141,4 +141,5 @@ class ExplainJoinExecutor : public AbstractExecutor {
         }
         return res;
     }
+    std::vector<std::string> get_tables_vec() const { return tables_; }
 };
