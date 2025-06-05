@@ -6,7 +6,7 @@
 
 using uint64 = unsigned long long;
 
-constexpr uint64 getHashCode(const std::string &str, uint64 hash = 5381) {
+inline uint64 getHashCode(std::string_view str, uint64 hash = 5381) {
     for (char c : str) {
         hash = ((hash << 5) + hash) + c;  // hash * 33 + c
     }

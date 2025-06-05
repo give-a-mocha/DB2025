@@ -53,12 +53,6 @@ class SortExecutor : public AbstractExecutor {
     /**
      * @brief 构造函数
      * @param prev 前序执行器
-     * @param sel_col 用于排序的列
-     * @param is_desc 是否为降序排序
-     */
-    /**
-     * @brief 构造函数
-     * @param prev 前序执行器
      * @param sel_col 排序列的表列引用
      * @param is_desc 是否降序排序
      *
@@ -78,11 +72,6 @@ class SortExecutor : public AbstractExecutor {
         current_tuple = nullptr;
     }
 
-    /**
-     * @brief 开始处理元组序列
-     *
-     * 初始化排序过程，选择第一个最小（或最大）元素
-     */
     /**
      * @brief 初始化排序过程并找到第一个元组
      *
@@ -114,11 +103,6 @@ class SortExecutor : public AbstractExecutor {
         used_tuple.push_back(now);
     }
 
-    /**
-     * @brief 获取下一个元组
-     *
-     * 在未处理的元组中选择下一个最小（或最大）元素
-     */
     /**
      * @brief 获取下一个排序后的元组
      *
@@ -170,12 +154,6 @@ class SortExecutor : public AbstractExecutor {
      */
     Rid& rid() override { return _abstract_rid; }
 
-    /**
-     * @brief 比较两个元组在排序字段上的值
-     * @param a 第一个元组
-     * @param b 第二个元组
-     * @return 根据排序规则(升序/降序)返回比较结果
-     */
     /**
      * @brief 比较两个元组在排序列上的大小
      * @param a 第一个元组
