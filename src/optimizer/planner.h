@@ -236,17 +236,9 @@ class Planner {
 
     std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
-        std::shared_ptr<Plan> generate_select_plan(std::shared_ptr<Query> query, Context *context);
+    std::shared_ptr<Plan> generate_select_plan(std::shared_ptr<Query> query, Context *context);
 
     // int get_indexNo(std::string tab_name, std::vector<Condition> curr_conds);
-
-    /**
-     * @brief 根据当前条件获取用于索引扫描的列名。
-     * @param tab_name 表名。
-     * @param curr_conds 当前应用于该表的条件。
-     * @param index_col_names 输出参数，用于存储索引列的名称。
-     * @return 如果找到了合适的索引列，则返回 true；否则返回 false。
-     */
     /**
      * @brief 识别条件中可用的索引列
      * @param tab_name 表名
@@ -374,8 +366,22 @@ class Planner {
      * @return 连接计划
      */
     std::shared_ptr<Plan> build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans,
-                                                    std::list<Condition> &join_conditions);
+                                                    std::list<Condition> &join_conditions,
+                                                    std::list<JoinNode> &semi_join,
+                                                    std::list<std::shared_ptr<Plan>> &semi_join_plans);
 
+    std::shared_ptr<Plan> add_semi_join(std::shared_ptr<Plan> result, std::unordered_set<std::string> &joined_tables,
+                                        std::list<JoinNode> &semi_join,
+                                        std::list<std::shared_ptr<Plan>> &semi_join_plans);
+
+    std::shared_ptr<Plan> add_join(std::shared_ptr<Plan> result, std::unordered_set<std::string> &joined_tables,
+                                   std::list<std::shared_ptr<Plan>> &table_plans, std::list<Condition> &join_conditions,
+                                   bool &flag);
+
+    std::shared_ptr<Plan> join_tables(std::shared_ptr<Plan> result, const std::string &current_table,
+                                      std::shared_ptr<Plan> current_scan,
+                                      std::unordered_set<std::string> &joined_tables,
+                                      std::list<Condition> &join_conditions, JoinType join_type);
     /**
      * @brief 将 AST 中的数据类型转换为系统内部的列类型。
      * @param sv_type AST 中的数据类型。

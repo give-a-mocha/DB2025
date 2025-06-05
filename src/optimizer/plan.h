@@ -110,29 +110,24 @@ class JoinPlan : public Plan {
     std::shared_ptr<Plan> right_;
     // 连接条件
     std::vector<Condition> conds_;
-    // 连接的表名
-    std::vector<std::string> tables_;
     // future TODO: 后续可以支持的连接类型
     JoinType type;
 
-    ~JoinPlan() = default;
-    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds)
-        : Plan(tag),
-          left_(std::move(left)),
-          right_(std::move(right)),
-          conds_(std::move(conds)),
-          type(JoinType::INNER_JOIN) {}
-    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds,
-             JoinType type)
-        : Plan(tag), left_(std::move(left)), right_(std::move(right)), conds_(std::move(conds)), type(type) {}
-    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds,
-             std::vector<std::string> tables)
-        : Plan(tag),
-          left_(std::move(left)),
-          right_(std::move(right)),
-          conds_(std::move(conds)),
-          tables_(std::move(tables)),
-          type(JoinType::INNER_JOIN) {}
+    ~JoinPlan(){}
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds){
+        Plan::tag = tag;
+        left_ = std::move(left);
+        right_ = std::move(right);
+        conds_ = std::move(conds);
+        type = JoinType::INNER_JOIN;
+    }
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds, JoinType type){
+        Plan::tag = tag;
+        left_ = std::move(left);
+        right_ = std::move(right);
+        conds_ = std::move(conds);
+        this->type = type;
+    }
 };
 
 /**

@@ -229,7 +229,7 @@ enum class JoinType {
     LEFT_JOIN,   // 左外连接
     RIGHT_JOIN,  // 右外连接
     FULL_JOIN,   // 全外连接
-    CROSS_JOIN   // 交叉连接(笛卡尔积)
+    SEMI_JOIN    // 半连接
 };
 
 /**
