@@ -230,6 +230,9 @@ class Portal {
                     return "3_" + y->get_cols();  // Project
                 } else if (auto y = dynamic_cast<ExplainScanExecutor *>(executor.get())) {
                     return "4_" + y->get_tab_name();  // Scan
+                } else{
+                    //未知类型
+                    return "unknown";
                 }
             };
             if (get_level(left) > get_level(right)) {
