@@ -34,8 +34,10 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+#include "common/Hash.h"
 #include "common/common.h"
 #include "parser/parser.h"
 #include "system/sm.h"
@@ -47,13 +49,11 @@
  * 预先构建映射表以提高查询效率，适用于大量列检查操作的场景。
  */
 class ColCheck {
+   private:
+    // 列名到表名的映射, bool判断是否重复
+    std::unordered_map<uint64, std::pair<std::string, bool>> cols;
+
    public:
-    // 列名到表名的映射，用于处理无表名列引用
-    std::map<std::string, std::vector<std::string>> mp;
-
-    // (表名,列名)对到出现次数的映射，用于检测重复列
-    std::map<std::pair<std::string, std::string>, int> cols;
-
     /**
      * @brief 构造函数，预处理所有列信息建立索引
      *
@@ -61,20 +61,14 @@ class ColCheck {
      */
     ColCheck(const std::vector<ColMeta> &all_cols) {
         for (const auto &col : all_cols) {
-            // 记录每个(表名,列名)对的出现次数
-            cols[{col.tab_name, col.name}]++;
+            uint64 hashcode = getHashCode(col.name);
+            hashcode = getHashCode(col.tab_name, hashcode);
 
-            // 构建列名到表名的映射，最多记录两个表
-            // (如果有两个以上的表包含同名列，我们只需知道有歧义即可)
-            auto it = mp.find(col.name);
-            if (it == mp.end()) {
-                // 第一次遇到该列名，创建新条目
-                mp[col.name] = std::vector<std::string>({col.tab_name});
+            auto it = cols.find(hashcode);
+            if (it == cols.end()) {
+                cols.emplace(hashcode, std::make_pair(col.tab_name, false));
             } else {
-                // 已经存在该列名，检查是否需要添加新表名
-                if (it->second.size() < 2) {
-                    it->second.push_back(col.tab_name);
-                }
+                it->second.second = true;
             }
         }
     }
@@ -89,27 +83,32 @@ class ColCheck {
      * @return TabCol 处理后的列引用(可能添加了推断出的表名)
      */
     TabCol check(TabCol target_col) {
+        uint64 hashcode = getHashCode(target_col.col_name);
+
         if (target_col.tab_name.empty()) {
-            // 情况1: 未指定表名，需要查找并可能推断表名
-            auto it = mp.find(target_col.col_name);
-            if (it == mp.end()) {
+            auto it = cols.find(hashcode);
+
+            if (it == cols.end()) {
                 // 列名不存在
                 throw ColumnNotFoundError(target_col.col_name);
+            } else {
+                if (it->second.second) {
+                    // 列名重复，无法确定表名
+                    throw AmbiguousColumnError(target_col.col_name);
+                } else {
+                    target_col.tab_name = it->second.first;
+                }
             }
-            if (it->second.size() > 1) {
-                // 存在多个表包含该列名，无法唯一确定
-                throw AmbiguousColumnError(target_col.col_name);
-            }
-            // 找到唯一的表名并设置
-            target_col.tab_name = it->second[0];
+
         } else {
+            hashcode = getHashCode(target_col.tab_name, hashcode);
             // 情况2: 已指定表名，验证(表名,列名)对是否存在
-            auto it = cols.find({target_col.tab_name, target_col.col_name});
+            auto it = cols.find(hashcode);
             if (it == cols.end()) {
                 // 在指定表中未找到该列
                 throw ColumnNotFoundError(target_col.col_name);
             }
-            if (it->second > 1) {
+            if (it->second.second == true) {
                 // 在同一表中存在多个同名列(应该不会发生，但以防万一)
                 throw AmbiguousColumnError(target_col.col_name);
             }
@@ -145,20 +144,20 @@ class Query {
     std::shared_ptr<ast::TreeNode> parse;  // 语法分析树根节点
 
     // 查询的逻辑结构
-    std::vector<JoinNode> jointree;        // JOIN操作的层次结构
-    std::vector<TabCol> cols;              // 投影列表(SELECT子句)
-    std::vector<std::string> tables;       // 相关表名列表
+    std::vector<JoinNode> jointree;   // JOIN操作的层次结构
+    std::vector<TabCol> cols;         // 投影列表(SELECT子句)
+    std::vector<std::string> tables;  // 相关表名列表
 
     // 查询条件和约束
-    std::vector<Condition> conds;          // WHERE子句条件列表
+    std::vector<Condition> conds;  // WHERE子句条件列表
 
     // 数据修改相关
-    std::vector<SetClause> set_clauses;    // UPDATE的SET子句
-    std::vector<Value> values;             // INSERT的VALUES列表
+    std::vector<SetClause> set_clauses;  // UPDATE的SET子句
+    std::vector<Value> values;           // INSERT的VALUES列表
 
     std::vector<TabCol> group_cols;  // GROUP BY子句的列
 
-    std::vector<Condition> having_conds; // HAVING子句的条件
+    std::vector<Condition> having_conds;  // HAVING子句的条件
 
     /**
      * @brief 默认构造函数

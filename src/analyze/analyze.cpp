@@ -62,7 +62,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 情况1: 如果没有明确指定列(SELECT *)，则查询所有列
         if (x->cols.empty()) {
             query->cols.reserve(all_cols.size());
-            for (auto &col : all_cols) {
+            for (const auto &col : all_cols) {
                 TabCol sel_col = {col.tab_name, col.name};     // 创建表列引用
                 convert_tabname(all_cols, sel_col, tab_refs);  // 处理表名和别名
                 query->cols.push_back(sel_col);                // 添加到查询列表
@@ -102,6 +102,13 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         for (auto &join_node : query->jointree) {
             check_clause(query->tables, join_node.join_conds);
         }
+
+        // 处理group by
+        for (auto& group_col : query->group_cols) {
+            group_col = check_column(all_cols, group_col);
+        }
+        
+
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
         query->tables.push_back(x->tab_name);
