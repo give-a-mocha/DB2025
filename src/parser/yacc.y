@@ -354,47 +354,47 @@ col:
     }
     |   COUNT '(' '*' ')' optAlias        // COUNT(*) [AS 别名]
     {
-        $$ = std::make_shared<Col>("", "*", $5, SV_AGGREGATE_COUNT); // 特殊处理COUNT(*)
+        $$ = std::make_shared<Col>("", "*", $5, SvAggregateType::COUNT); // 特殊处理COUNT(*)
     }
     |   COUNT '(' colName ')' optAlias  // COUNT(列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_COUNT);
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::COUNT);
     }
     |   COUNT '(' tbName '.' colName ')' optAlias  // COUNT(表名.列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_COUNT);
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::COUNT);
     }
     |   SUM '(' colName ')' optAlias       // SUM(列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_SUM);
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::SUM);
     }
     |   SUM '(' tbName '.' colName ')' optAlias  // SUM(表名.列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_SUM);
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::SUM);
     }
     |   AVG '(' colName ')' optAlias       // AVG(列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_AVG);
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::AVG);
     }
     |   AVG '(' tbName '.' colName ')' optAlias  // AVG(表名.列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_AVG);
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::AVG);
     }
     |   MIN '(' colName ')' optAlias       // MIN(列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_MIN);
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::MIN);
     }
     |   MIN '(' tbName '.' colName ')' optAlias  // MIN(表名.列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_MIN);
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::MIN);
     }
     |   MAX '(' colName ')' optAlias       // MAX(列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>("", $3, $5, SV_AGGREGATE_MAX);
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::MAX);
     }
     |   MAX '(' tbName '.' colName ')' optAlias  // MAX(表名.列名) [AS 别名]
     {
-        $$ = std::make_shared<Col>($3, $5, $7, SV_AGGREGATE_MAX);
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::MAX);
     }
     ;
 
