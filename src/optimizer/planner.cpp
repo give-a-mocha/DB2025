@@ -808,18 +808,12 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
 
     
     // 继续连接剩余的表
-    while (!table_plans.empty() || !semi_join.empty()) {
+    while (!table_plans.empty()) {
         result = add_semi_join(result, joined_tables, semi_join, semi_join_plans);
         bool flag = false;
         result = add_join(result, joined_tables, table_plans, join_conditions, flag);
         // 如果没有找到可连接的表，强制连接剩余的第一个未使用表
         if (!flag) {
-            if(table_plans.empty()) {
-                if(!semi_join.empty()) {
-                    throw RMDBError("No more tables to join, but semi-join conditions remain.");
-                }
-                break; // 没有更多表可连接
-            }
             std::shared_ptr<ScanPlan> current_scan = std::dynamic_pointer_cast<ScanPlan>(*table_plans.begin());
             std::string current_table = current_scan->tab_name_;
             result = join_tables(std::move(result), current_table, std::move(current_scan), joined_tables, join_conditions,
@@ -827,6 +821,12 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
             joined_tables.insert(current_scan->tab_name_);
             table_plans.pop_front();
         }
+    }
+    
+    // 最后处理剩余的半连接
+    result = add_semi_join(result, joined_tables, semi_join, semi_join_plans);
+    if (!semi_join.empty()) {
+        throw RMDBError("Unprocessed semi-join conditions remain");
     }
 
     // 处理剩余的连接条件（理论来说不会有,但是保留处理）
