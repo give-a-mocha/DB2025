@@ -861,8 +861,8 @@ std::shared_ptr<Plan> Planner::add_semi_join(
         bool can_join = true;
         for(const auto &cond : it->join_conds) {
             // 检查连接条件是否涉及已连接的表
-            if (!((cond.lhs_col.tab_name == current_table && joined_tables.count(cond.lhs_col.tab_name) > 0) ||
-                (cond.rhs_col.tab_name == current_table && joined_tables.count(cond.rhs_col.tab_name) > 0))) {
+            if (!((cond.lhs_col.tab_name == current_table && joined_tables.count(cond.rhs_col.tab_name) > 0) ||
+                (cond.rhs_col.tab_name == current_table && joined_tables.count(cond.lhs_col.tab_name) > 0))) {
                 can_join = false;
                 break;
             }
