@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "defs.h"
 #include "record/rm_defs.h"
+#include "parser/ast.h"
 
 /**
  * @brief 表列引用结构体，用于标识一个特定表中的列
@@ -83,6 +84,33 @@ struct TabCol {
      * @return 格式为"表名.列名"的字符串
      */
     std::string to_string() const { return get_tab_name() + "." + col_name; }
+
+    void set_col_alias(const std::string &alias) { col_alias = alias; }
+
+    void set_agg_type(ast::SvAggregateType agg_type_) {
+        switch (agg_type_) {
+            case ast::SvAggregateType::NONE:
+                agg_type = AggregateType::NONE;
+                break;
+            case ast::SvAggregateType::COUNT:
+                agg_type = AggregateType::COUNT;
+                break;
+            case ast::SvAggregateType::SUM:
+                agg_type = AggregateType::SUM;
+                break;
+            case ast::SvAggregateType::AVG:
+                agg_type = AggregateType::AVG;
+                break;
+            case ast::SvAggregateType::MAX:
+                agg_type = AggregateType::MAX;
+                break;
+            case ast::SvAggregateType::MIN:
+                agg_type = AggregateType::MIN;
+                break;
+            default:
+                throw InternalError("Unknown aggregate type in TabCol::set_agg_type");
+        }
+    }
 };
 
 /**
