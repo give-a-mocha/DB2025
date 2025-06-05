@@ -821,7 +821,8 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
                 break; // 没有更多表可连接
             }
             std::shared_ptr<ScanPlan> current_scan = std::dynamic_pointer_cast<ScanPlan>(*table_plans.begin());
-            result = join_tables(std::move(result), current_scan->tab_name_, std::move(current_scan), joined_tables, join_conditions,
+            std::string current_table = current_scan->tab_name_;
+            result = join_tables(std::move(result), current_table, std::move(current_scan), joined_tables, join_conditions,
                                  JoinType::INNER_JOIN);
             joined_tables.insert(current_scan->tab_name_);
             table_plans.pop_front();
