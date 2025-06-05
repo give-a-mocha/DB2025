@@ -822,7 +822,7 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
             table_plans.pop_front();
         }
     }
-    
+
     // 最后处理剩余的半连接
     result = add_semi_join(result, joined_tables, semi_join, semi_join_plans);
     if (!semi_join.empty()) {
@@ -1012,18 +1012,20 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
             if (std::find(need_cols.begin(), need_cols.end(), cond.lhs_col) == need_cols.end()) {
                 need_cols.emplace_back(cond.lhs_col);
             }
-            if(x->type != JoinType::SEMI_JOIN){
-                if (std::find(need_cols.begin(), need_cols.end(), cond.rhs_col) == need_cols.end()) {
-                    need_cols.emplace_back(cond.rhs_col);
-                }
+            if (std::find(need_cols.begin(), need_cols.end(), cond.rhs_col) == need_cols.end()) {
+                need_cols.emplace_back(cond.rhs_col);
             }
+            
         }
         std::vector<TabCol> left, right;
         x->left_ = build_projection_plan(std::move(x->left_), need_cols, left);
         x->right_ = build_projection_plan(std::move(x->right_), need_cols, right);
-        left.insert(left.end(), right.begin(), right.end());
-        sort(left.begin(), left.end());
-        left.erase(std::unique(left.begin(), left.end()), left.end());
+        // 半连接没有右子树的结果
+        if(x->type != JoinType::SEMI_JOIN) {
+            left.insert(left.end(), right.begin(), right.end());
+            sort(left.begin(), left.end());
+            left.erase(std::unique(left.begin(), left.end()), left.end());
+        }
         while (need_cols.size() > siz) {
             need_cols.pop_back();
         }
