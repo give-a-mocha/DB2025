@@ -816,9 +816,9 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
         if (!flag) {
             std::shared_ptr<ScanPlan> current_scan = std::dynamic_pointer_cast<ScanPlan>(*table_plans.begin());
             std::string current_table = current_scan->tab_name_;
+            joined_tables.insert(current_scan->tab_name_);
             result = join_tables(std::move(result), current_table, std::move(current_scan), joined_tables, join_conditions,
                                  JoinType::INNER_JOIN);
-            joined_tables.insert(current_scan->tab_name_);
             table_plans.pop_front();
         }
     }
@@ -847,6 +847,9 @@ std::shared_ptr<Plan> Planner::add_semi_join(
         std::list<JoinNode>& semi_join,
         std::list<std::shared_ptr<Plan>>& semi_join_plans
 ) {
+    if(semi_join.empty()) {
+        return result;
+    }
     auto it = semi_join.begin();
     auto it_plan = semi_join_plans.begin();
     while(it != semi_join.end()){
@@ -899,7 +902,11 @@ std::shared_ptr<Plan> Planner::add_join(
         std::list<std::shared_ptr<Plan>>& table_plans,
         std::list<Condition>& join_conditions,
         bool& flag
-) {    
+) {
+    //进入这个函数一定是非空，但是保留检查
+    if(table_plans.empty()) {
+        return result;
+    }
     flag = false;
     auto it = table_plans.begin();
     while (it != table_plans.end()) {
@@ -929,6 +936,8 @@ std::shared_ptr<Plan> Planner::add_join(
             it = table_plans.erase(it);
             flag = true;
             break;
+        } else{
+            it++;
         }
     }
     return result;
