@@ -58,6 +58,13 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
 
+        // 处理group by子句
+        for (auto &sv_group_col : x->group) {
+            TabCol group_col = {"", sv_group_col->cols->col_name, sv_group_col->cols->tab_name};
+            convert_tabname(all_cols, group_col, tab_refs);  // 处理表名和别名
+            query->group_cols.push_back(group_col);          // 添加到查询的分组列列表
+        }
+
         // 处理要查询的列：
         // 情况1: 如果没有明确指定列(SELECT *)，则查询所有列
         if (x->cols.empty()) {
@@ -74,14 +81,30 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             for (auto &sv_sel_col : x->cols) {
                 // 创建列引用，初始状态下表名可能为空
                 TabCol sel_col = {"", sv_sel_col->col_name, sv_sel_col->tab_name};
-                convert_tabname(all_cols, sel_col, tab_refs);  // 处理表名和别名
-                query->cols.push_back(sel_col);                // 添加到查询列表
+                sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
+                sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
+                convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
+                query->cols.push_back(sel_col);                    // 添加到查询列表
             }
         }
 
         // 处理WHERE条件子句
         get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
         check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性
+        // 检查where条件中是否有聚合列
+        check_where_with_aggregate(query->conds);
+
+        // 处理having条件
+        get_clause_alias(all_cols, x->having_conds, query->having_conds, tab_refs);
+        check_clause(query->tables, query->having_conds);
+        // 检查having条件中是否有不是聚合函数也不是group by的列
+        check_having_conds(query->having_conds, query->group_cols);
+        // 检查select和group中的列是否符合规范
+        check_select_and_group(query->cols, query->group_cols);
+        // 如果没有GROUP BY子句但有HAVING条件，则抛出错误
+        if (query->group_cols.empty() && !query->having_conds.empty()) {
+            throw InternalError("HAVING clause without GROUP BY is not allowed");
+        }
 
         // 处理JOIN操作及其条件
         if (!x->jointree.empty()) {
@@ -177,6 +200,10 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
  */
 void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target,
                               const std::vector<TabRef> &tab_refs) {
+    // COUNT(*) 的特殊情况 - 不需要表名和别名
+    if (target.col_name == "*" && target.agg_type == AggregateType::COUNT) {
+        return;
+    }
     // 情况1: 有表名但没有别名 - 尝试找到表名对应的真实表并处理表别名
     if (target.tab_alias.empty() && !target.tab_name.empty()) {
         TabRef res = {target.tab_name, target.tab_alias};  // 初始化结果
@@ -250,6 +277,10 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
  * @return TabCol 验证后的列引用
  */
 TabCol Analyze::check_column(const std::vector<ColMeta> &all_cols, TabCol target) {
+    // COUNT(*) 的特殊情况 - 不需要表名和别名
+    if (target.col_name == "*" && target.agg_type == AggregateType::COUNT) {
+        return target;
+    }
     if (target.tab_name.empty()) {
         // 情况1: 未指定表名，需要从列名推断表名
         std::string tab_name;
@@ -323,10 +354,12 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
     for (auto &expr : sv_conds) {
         Condition cond;
         // 处理条件左侧的列引用
-        cond.lhs_col.tab_alias = expr->lhs->tab_name;       // 设置左侧列的表别名
-        cond.lhs_col.col_name = expr->lhs->col_name;        // 设置左侧列名
-        convert_tabname(all_cols, cond.lhs_col, tab_refs);  // 处理表别名，转换为真实表名
-        cond.op = convert_sv_comp_op(expr->op);             // 转换比较操作符
+        cond.lhs_col.tab_alias = expr->lhs->tab_name;          // 设置左侧列的表别名
+        cond.lhs_col.col_name = expr->lhs->col_name;           // 设置左侧列名
+        cond.lhs_col.set_col_alias(expr->lhs->alias);          // 设置左侧列的别名
+        cond.lhs_col.set_agg_type(expr->lhs->aggregate_type);  // 设置左侧列的聚合类型
+        convert_tabname(all_cols, cond.lhs_col, tab_refs);     // 处理表别名，转换为真实表名
+        cond.op = convert_sv_comp_op(expr->op);                // 转换比较操作符
 
         // 处理右侧操作数，可能是值或列引用
         if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
@@ -336,9 +369,11 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
         } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
             // 右侧是列引用
             cond.is_rhs_val = false;
-            cond.rhs_col.tab_alias = rhs_col->tab_name;         // 设置右侧列的表别名
-            cond.rhs_col.col_name = rhs_col->col_name;          // 设置右侧列名
-            convert_tabname(all_cols, cond.rhs_col, tab_refs);  // 处理表别名，转换为真实表名
+            cond.rhs_col.tab_alias = rhs_col->tab_name;          // 设置右侧列的表别名
+            cond.rhs_col.col_name = rhs_col->col_name;           // 设置右侧列名
+            cond.rhs_col.set_col_alias(rhs_col->alias);          // 设置右侧列的别名
+            cond.rhs_col.set_agg_type(rhs_col->aggregate_type);  // 设置右侧列的聚合类型
+            convert_tabname(all_cols, cond.rhs_col, tab_refs);   // 处理表别名，转换为真实表名
         }
         conds.push_back(cond);  // 添加条件到结果集
     }
@@ -409,10 +444,21 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             cond.rhs_col = check_column(all_cols, cond.rhs_col);
         }
 
+        ColType lhs_type;
+        std::vector<ColMeta>::iterator lhs_col;
         // 获取左侧列的类型信息
-        TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
-        auto lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
-        ColType lhs_type = lhs_col->type;
+        if (cond.lhs_col.agg_type != AggregateType::COUNT) {
+            TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
+            lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
+            lhs_type = lhs_col->type;  // 获取左侧列的类型
+            if (cond.lhs_col.agg_type != AggregateType::NONE && lhs_type == ColType::TYPE_STRING) {
+                // 如果是聚合函数且列类型为字符串，抛出不支持的聚合类型错误
+                throw InternalError("Unsupported aggregate type for string column: " + coltype2str(lhs_type));
+            }
+        } else {
+            lhs_type = ColType::TYPE_INT;
+            lhs_col->len = sizeof(int);
+        }
 
         // 获取右侧的类型信息(可能是值或列)
         ColType rhs_type;
@@ -421,10 +467,18 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             cond.rhs_val.init_raw(lhs_col->len);
             rhs_type = cond.rhs_val.type;
         } else {
-            // 如果右侧是列引用，获取其类型
-            TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
-            auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
-            rhs_type = rhs_col->type;
+            if (cond.rhs_col.agg_type != AggregateType::COUNT) {
+                // 如果右侧是列引用，获取其类型
+                TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
+                auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
+                rhs_type = rhs_col->type;
+                if (cond.rhs_col.agg_type != AggregateType::NONE && rhs_type == ColType::TYPE_STRING) {
+                    // 如果是聚合函数且列类型为字符串，抛出不支持的聚合类型错误
+                    throw InternalError("Unsupported aggregate type for string column: " + coltype2str(rhs_type));
+                }
+            } else {
+                rhs_type = ColType::TYPE_INT;
+            }
         }
 
         // 允许数值类型之间的比较(INT与FLOAT)
@@ -567,5 +621,68 @@ JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
         default:
             // 未知的JOIN类型，抛出错误
             throw InternalError("Unknown join type in semantic analysis");
+    }
+}
+
+void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
+    for (const auto &cond : conds) {
+        if (cond.lhs_col.agg_type != AggregateType::NONE ||
+            (!cond.is_rhs_val && cond.rhs_col.agg_type != AggregateType::NONE)) {
+            throw InternalError("WHERE clause cannot contain aggregate columns");
+        }
+    }
+}
+
+void Analyze::check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols) {
+    for (auto &cond : conds) {
+        if (cond.lhs_col.agg_type == AggregateType::NONE) {
+            bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
+                if (cond.lhs_col.col_name == group_col.col_name && cond.lhs_col.tab_name == group_col.tab_name) {
+                    return true;
+                }
+                return false;
+            });
+            if (!found) {
+                throw InternalError("having_cond: Non aggregate column not in group by");
+            }
+        }
+        if (!cond.is_rhs_val && cond.rhs_col.agg_type == AggregateType::NONE) {
+            bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
+                if (cond.rhs_col.col_name == group_col.col_name && cond.rhs_col.tab_name == group_col.tab_name) {
+                    return true;
+                }
+                return false;
+            });
+            if (!found) {
+                throw InternalError("having_cond: Non aggregate column not in group by");
+            }
+        }
+    }
+}
+
+void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols) {
+    if (group_cols.empty()) {
+        bool has_aggr = std::any_of(cols.begin(), cols.end(),
+                                    [](const TabCol &col) { return col.agg_type != AggregateType::NONE; });
+        bool has_non_aggr = std::any_of(cols.begin(), cols.end(),
+                                        [](const TabCol &col) { return col.agg_type == AggregateType::NONE; });
+        if (has_aggr && has_non_aggr) {
+            throw InternalError("SELECT must not contain both aggregate and non-aggregate columns without GROUP BY");
+        }
+    } else {
+        for (auto &col : cols) {
+            if (col.agg_type != AggregateType::NONE) {
+                continue;
+            }
+            bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
+                if (col.col_name == group_col.col_name) {
+                    return true;
+                }
+                return false;
+            });
+            if (!found) {
+                throw InternalError("SELECT column not in GROUP BY: " + col.col_name);
+            }
+        }
     }
 }

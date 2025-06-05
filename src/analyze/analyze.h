@@ -380,4 +380,33 @@ class Analyze {
      * 3. 自然连接需要自动推断连接条件
      */
     JoinType convert_sv_join_type(ast::JoinType type);
+
+    /**
+     * @brief 检查WHERE条件中是否包含聚合函数
+     * @param conds WHERE子句的条件表达式集合
+     * @throw SemanticError 当条件中包含聚合函数时
+     *
+     * @details 检查过程：
+     * 1. 遍历所有条件表达式
+     * 2. 检测是否有聚合函数调用
+     * 3. 如果存在，抛出语义错误异常
+     *
+     * @note 聚合函数通常只能在HAVING子句中使用
+     */
+    void check_where_with_aggregate(const std::vector<Condition> &conds);
+
+    /**
+     * @brief 检查HAVING子句中的条件表达式
+     * @param conds HAVING子句的条件表达式集合
+     * @param group_cols GROUP BY子句的列列表
+     * @throw SemanticError 当HAVING条件不合法时
+     *
+     * @details 检查过程：
+     * 1. 确保HAVING条件中只包含聚合函数或GROUP BY列
+     * 2. 验证聚合函数的使用是否符合SQL标准
+     * 3. 抛出错误如果条件不满足要求
+     */
+    void check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols);
+
+    void check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols);
 };
