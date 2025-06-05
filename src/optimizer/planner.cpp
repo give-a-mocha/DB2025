@@ -713,7 +713,7 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
     for (auto &join_node : query->jointree) {
         bool is_semi_join = join_node.join_type == JoinType::SEMI_JOIN;
         if (is_semi_join) {
-            semi_join.emplace_back(std::move(join_node), nullptr);
+            semi_join.emplace_back(std::move(join_node));
         } else{
             for (auto &cond : join_node.join_conds) {
                 query->conds.emplace_back(std::move(cond));
