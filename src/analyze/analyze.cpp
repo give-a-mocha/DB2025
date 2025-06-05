@@ -39,10 +39,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             query->tables.push_back(tab_name);  // 添加到查询的表列表
         }
 
-        // 处理JOIN表
-        std::vector<std::string> semi_join_tables;
-        std::vector<TabRef> semi_join_tableRefs;
-        
+        // 处理JOIN表     
         if (!x->jointree.empty()) {
             for (const auto &join_expr : x->jointree) {
                 // 检查JOIN右侧的表是否存在
@@ -53,11 +50,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 TabRef right_table(right_tab_name, join_expr->right->alias);
                 bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
                 // 在做列检查时不需要把半连接的表加入
-                if(isSemiJoin) {
-                    // 半连接表
-                    semi_join_tables.push_back(right_tab_name);  
-                    semi_join_tableRefs.push_back(right_table);
-                } else {
+                if(!isSemiJoin) {
                     // 普通JOIN表
                     query->tables.push_back(right_tab_name);
                     tab_refs.push_back(right_table);
@@ -90,15 +83,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             }
         }
 
-        // 处理条件，加入半连接的表
-        for(auto &semi_join_table : semi_join_tables) {
-            query->tables.push_back(semi_join_table);
-        }
-        for(auto &semi_join_tableRef : semi_join_tableRefs) {
-            tab_refs.push_back(semi_join_tableRef);
-        }
-        get_all_cols(semi_join_tables, all_cols);
-
         // 处理WHERE条件子句
         get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
         check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性
@@ -107,21 +91,47 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         if (!x->jointree.empty()) {
             query->jointree.reserve(x->jointree.size());
             for (auto &join_expr : x->jointree) {
-                // 转换JOIN条件
                 std::string right_tab_name = join_expr->right->tab_name;
+                TabRef right_table(right_tab_name, join_expr->right->alias);
+                bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
+                const int siz = all_cols.size();
+                // 获取SEMI JOIN表的列
+                if(isSemiJoin){
+                    query->tables.push_back(right_tab_name);
+                    tab_refs.push_back(right_table);
+                    get_all_cols({right_tab_name}, all_cols);  
+                }
+                // 转换JOIN条件
                 std::vector<Condition> join_conds;
                 get_clause_alias(all_cols, join_expr->conds, join_conds, tab_refs);
-
+                
+                if(isSemiJoin){
+                    // 条件右侧是连接表
+                    for(auto &cond : join_conds) {
+                        if(cond.lhs_col.tab_name == right_tab_name) {
+                            std::swap(cond.lhs_col, cond.rhs_col);
+                            cond.op = swap_op(cond.op);
+                        }
+                    }
+                }
+                
+                // 检查JOIN条件的有效性
+                check_clause(query->tables, join_conds);
                 // 创建JOIN节点并指定JOIN类型
                 JoinType join_type = convert_sv_join_type(join_expr->type);
-                query->jointree.emplace_back(right_tab_name, join_conds, join_type);
+                query->jointree.emplace_back(std::move(right_tab_name), std::move(join_conds), join_type);
+                
+                if(isSemiJoin){
+                    query->tables.pop_back();
+                    tab_refs.pop_back();
+                    // 移除SEMI JOIN表的列
+                    while(all_cols.size() > siz) {
+                        all_cols.pop_back();  
+                    }
+                }
             }
         }
 
-        // 校验所有JOIN条件的有效性
-        for (auto &join_node : query->jointree) {
-            check_clause(query->tables, join_node.join_conds);
-        }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
         query->tables.push_back(x->tab_name);
