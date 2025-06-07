@@ -16,10 +16,12 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/common.h"
 #include "common/print.hpp"
+#include "execution/execution_aggregate.h"
 #include "execution/execution_explain_filter.h"
 #include "execution/execution_explain_join.h"
 #include "execution/execution_explain_project.h"
 #include "execution/execution_explain_scan.h"
+#include "execution/execution_group.h"
 #include "execution/execution_sort.h"
 #include "execution/executor_abstract.h"
 #include "execution/executor_delete.h"
@@ -178,17 +180,22 @@ class Portal {
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
             std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context);
             std::unique_ptr<AbstractExecutor> right = convert_plan_executor(x->right_, context);
-            if(x->type == JoinType::SEMI_JOIN){
-                return std::make_unique<NestedLoopSemiJoinExecutor>(std::move(left), std::move(right), std::move(x->conds_));
-            }else{
-                return std::make_unique<NestedLoopJoinExecutor>(std::move(left), std::move(right), std::move(x->conds_));
+            if (x->type == JoinType::SEMI_JOIN) {
+                return std::make_unique<NestedLoopSemiJoinExecutor>(std::move(left), std::move(right),
+                                                                    std::move(x->conds_));
+            } else {
+                return std::make_unique<NestedLoopJoinExecutor>(std::move(left), std::move(right),
+                                                                std::move(x->conds_));
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context), x->sel_col_,
                                                   x->is_desc_);
         } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
-            
+            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
+                                                       x->agg_types_);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
+            return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
+                                                   x->group_cols_, x->having_conds_);
         }
         return nullptr;
     }
@@ -197,7 +204,8 @@ class Portal {
                                                                     int offset, std::vector<std::string> &join_tables) {
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
             return std::make_unique<ExplainProjectExecutor>(
-                convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables), std::move(x->sel_cols_), offset, x->isStar_);
+                convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
+                std::move(x->sel_cols_), offset, x->isStar_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             join_tables.push_back(x->tab_name_);
             if (x->conds_.empty()) {
@@ -233,8 +241,8 @@ class Portal {
                     return "3_" + y->get_cols();  // Project
                 } else if (auto y = dynamic_cast<ExplainScanExecutor *>(executor.get())) {
                     return "4_" + y->get_tab_name();  // Scan
-                } else{
-                    //未知类型
+                } else {
+                    // 未知类型
                     return "unknown";
                 }
             };
@@ -246,8 +254,8 @@ class Portal {
                                                                  std::move(solve_conds), offset + 1);
                 return std::make_unique<ExplainFilterExecutor>(std::move(res), conds, offset);
             } else {
-                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), join_tables, std::move(x->conds_),
-                                                             offset);
+                return std::make_unique<ExplainJoinExecutor>(std::move(left), std::move(right), join_tables,
+                                                             std::move(x->conds_), offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);

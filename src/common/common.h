@@ -88,9 +88,8 @@ struct TabCol {
     void set_col_alias(const std::string &alias) { col_alias = alias; }
 
     void set_agg_type(ast::SvAggregateType agg_type_) {
-        static AggregateType agg_type_map[5] = {
-            AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM, AggregateType::AVG, AggregateType::MAX,
-        };
+        static AggregateType agg_type_map[] = {AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM,
+                                               AggregateType::AVG,  AggregateType::MAX,   AggregateType::MIN};
         agg_type = agg_type_map[static_cast<int>(agg_type_)];
     }
 };
@@ -199,8 +198,8 @@ struct Value {
             raw = std::make_shared<RmRecord>(sizeof(int));
             *(int *)(raw->data) = int_val;
         } else if (type == ColType::TYPE_FLOAT) {
-            raw = std::make_shared<RmRecord>(sizeof(double));
-            *(double *)(raw->data) = float_val;
+            raw = std::make_shared<RmRecord>(sizeof(float));
+            *(float *)(raw->data) = float_val;
         } else if (type == ColType::TYPE_STRING) {
             raw = std::make_shared<RmRecord>(str_val.size());
             memcpy(raw->data, str_val.c_str(), str_val.size());

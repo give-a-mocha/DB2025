@@ -185,8 +185,8 @@ class SortExecutor : public AbstractExecutor {
             if (is_desc_) return value_a > value_b;
             else return value_a < value_b;
         } else if (col_.type == ColType::TYPE_FLOAT) {
-            double value_a = *reinterpret_cast<double*>(rec_buf_a);
-            double value_b = *reinterpret_cast<double*>(rec_buf_b);
+            float value_a = *reinterpret_cast<float*>(rec_buf_a);
+            float value_b = *reinterpret_cast<float*>(rec_buf_b);
             if (is_desc_) return value_a > value_b;
             else return value_a < value_b;
         } else if (col_.type == ColType::TYPE_STRING) {

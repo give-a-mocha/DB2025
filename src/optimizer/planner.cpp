@@ -475,7 +475,15 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
         })) {
         return plan;
     }
-    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query->cols);
+    std::vector<AggregateType> agg_types;
+    static AggregateType agg_type_map[] = {
+        AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM, AggregateType::AVG, AggregateType::MAX, AggregateType::MIN
+    };
+    agg_types.reserve(x->cols.size());
+    for (const auto &agg : x->cols) {
+        agg_types.push_back(agg_type_map[static_cast<int>(agg->aggregate_type)]);
+    }
+    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query->cols, agg_types);
 }
 
 std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
@@ -503,6 +511,7 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     // joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
     bool is_star = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)->cols.empty();
+    return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), sel_cols, is_star);
 
     // select * 不做投影下推
     if (is_star) {

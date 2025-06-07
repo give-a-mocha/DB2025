@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/print.hpp"
 #include "execution/execution_group.h"
 #include "execution/executor_abstract.h"
 
@@ -27,6 +28,9 @@ class AggregateExecutor : public AbstractExecutor {
     AggregateExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
                       const std::vector<AggregateType>& agg_types)
         : prev_(std::move(prev)), agg_types_(agg_types) {
+        // for (const auto& type : agg_types_) {
+        //     INFO("AggregateExecutor: agg_type: {}", static_cast<int>(type));
+        // }
         // 构造输出列元数据
         for (const auto& sel_col : sel_cols) {
             // 处理COUNT(*)的特殊情况
@@ -171,6 +175,7 @@ class AggregateExecutor : public AbstractExecutor {
             Value res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
             res.init_raw();
             size += res.raw->size;
+            INFO("Value: {}", res.float_val);
             values[i] = std::move(res);
         }
         auto result = std::make_unique<RmRecord>(size);

@@ -176,7 +176,7 @@ class AbstractExecutor {
      * @param type 要检查的列类型
      * @return 如果是INT或FLOAT类型返回true，否则返回false
      */
-    bool is_numeric_type(ColType type) { return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT; }
+    static bool is_numeric_type(ColType type) { return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT; }
 
     /**
      * @brief 从原始数据中提取值
@@ -222,7 +222,7 @@ class AbstractExecutor {
      * @param a 第一个Value对象(会被修改)
      * @param b 第二个Value对象(会被修改)
      */
-    void convert(Value &a, Value &b) {
+    static void convert(Value &a, Value &b) {
         // 数值类型的转化(int, float)
         // int -> float
         if (a.type == b.type) return;
@@ -339,7 +339,7 @@ class AbstractExecutor {
      * - 大小写敏感性
      * - 特殊值处理
      */
-    bool compare(Value lhs, Value rhs, CompOp op) {
+    static bool compare(Value lhs, Value rhs, CompOp op) {
         bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
         if (lhs.type != rhs.type && !is_numeric) {
             throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
@@ -373,7 +373,7 @@ class AbstractExecutor {
             case CompOp::OP_GE:
                 return cmp >= 0;
             default:
-                throw InternalError("compare::Unexpected op type at " + getType());
+                throw InternalError("compare::Unexpected op type at compare.");
         }
     }
 
@@ -420,7 +420,7 @@ class AbstractExecutor {
                 val.set_int(sum);
             } else if (col_meta.type == ColType::TYPE_FLOAT) {
                 // 浮点数求和
-                double sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](double acc, const auto &record) {
+                float sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
                     return acc + *(int *)(record->data + col_meta.offset);
                 });
                 val.set_float(sum);
@@ -438,9 +438,9 @@ class AbstractExecutor {
                 val.set_int(max);
             } else if (col_meta.type == ColType::TYPE_FLOAT) {
                 // 浮点数最大值计算
-                double max = std::numeric_limits<double>::lowest();  // 初始化为浮点数最小值
+                float max = std::numeric_limits<float>::lowest();  // 初始化为浮点数最小值
                 for (const auto &record : rec) {
-                    max = std::max(max, *(double *)(record->data + col_meta.offset));
+                    max = std::max(max, *(float *)(record->data + col_meta.offset));
                 }
                 val.set_float(max);
             } else if (col_meta.type == ColType::TYPE_STRING) {
@@ -463,9 +463,10 @@ class AbstractExecutor {
                 val.set_int(min);
             } else if (col_meta.type == ColType::TYPE_FLOAT) {
                 // 浮点数最小值计算
-                double min = std::numeric_limits<double>::max();  // 初始化为浮点数最大值
+                float min = std::numeric_limits<float>::max();  // 初始化为浮点数最大值
                 for (const auto &record : rec) {
-                    min = std::min(min, *(double *)(record->data + col_meta.offset));
+                    min = std::min(min, *(float *)(record->data + col_meta.offset));
+                    INFO("min: {}", *(float *)(record->data + col_meta.offset));
                 }
                 val.set_float(min);
             } else if (col_meta.type == ColType::TYPE_STRING) {
@@ -483,14 +484,16 @@ class AbstractExecutor {
                     int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
                         return acc + *(int *)(record->data + col_meta.offset);
                     });
-                    val.set_float(static_cast<double>(sum) / static_cast<double>(rec.size()));
+                    val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
                 } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                    INFO("AVG size: {}", rec.size());
                     // 浮点数求和
-                    double sum =
-                        std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](double acc, const auto &record) {
+                    float sum =
+                        std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
                             return acc + *(int *)(record->data + col_meta.offset);
                         });
-                    val.set_float(static_cast<double>(sum) / static_cast<double>(rec.size()));
+                    INFO("AVG sum: {}", sum);
+                    val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
                 } else if (col_meta.type == ColType::TYPE_STRING) {
                     throw AggregateError("Aggregate function AVG is not supported for string type column.");
                 }

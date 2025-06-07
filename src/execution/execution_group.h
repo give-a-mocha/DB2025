@@ -75,11 +75,13 @@ class GroupExecutor : public AbstractExecutor {
 
         // 根据 HAVING 条件过滤分组
         if (!having_conds_.empty()) {
-            auto iter = std::remove_if(grouped_records.begin(), grouped_records.end(), [this](const auto& group) {
-                const auto& [key, records] = group;
-                return !eval_aggr_conds(cols_, having_conds_, records);
-            });
-            grouped_records.erase(iter, grouped_records.end());
+            for (auto it = grouped_records.begin(); it != grouped_records.end();) {
+                if (!eval_aggr_conds(cols_, having_conds_, it->second)) {
+                    it = grouped_records.erase(it);
+                } else {
+                    ++it;
+                }
+            }
         }
 
         nextTuple();
@@ -166,7 +168,7 @@ class GroupExecutor : public AbstractExecutor {
      * @return 如果所有条件都满足，则返回 true；否则返回 false。
      */
     bool eval_aggr_conds(const std::vector<ColMeta>& rec_cols, const std::vector<Condition>& conds,
-                         std::vector<std::unique_ptr<RmRecord>>& records) {
+                         const std::vector<std::unique_ptr<RmRecord>>& records) const {
         return std::all_of(conds.begin(), conds.end(), [&](const Condition& cond) {
             // 对每个条件调用 eval_aggr_cond
             return eval_aggr_cond(rec_cols, cond, records);
@@ -181,7 +183,7 @@ class GroupExecutor : public AbstractExecutor {
      * @return 如果条件满足，则返回 true；否则返回 false。
      */
     bool eval_aggr_cond(const std::vector<ColMeta>& rec_cols, const Condition& cond,
-                        std::vector<std::unique_ptr<RmRecord>>& rec) {
+                        const std::vector<std::unique_ptr<RmRecord>>& rec) const {
         auto copy_cond = cond;  // 创建条件的副本以防修改原始条件
         // 计算条件的左侧聚合值
         Value lhs_val = get_aggr_value(rec_cols, rec, copy_cond.lhs_col, cond.lhs_col.agg_type);

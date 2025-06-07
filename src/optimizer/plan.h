@@ -113,15 +113,16 @@ class JoinPlan : public Plan {
     // future TODO: 后续可以支持的连接类型
     JoinType type;
 
-    ~JoinPlan(){}
-    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds){
+    ~JoinPlan() {}
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds) {
         Plan::tag = tag;
         left_ = std::move(left);
         right_ = std::move(right);
         conds_ = std::move(conds);
         type = JoinType::INNER_JOIN;
     }
-    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds, JoinType type){
+    JoinPlan(PlanTag tag, std::shared_ptr<Plan> left, std::shared_ptr<Plan> right, std::vector<Condition> conds,
+             JoinType type) {
         Plan::tag = tag;
         left_ = std::move(left);
         right_ = std::move(right);
@@ -150,8 +151,10 @@ class AggregatePlan : public Plan {
    public:
     std::shared_ptr<Plan> subplan_;
     std::vector<TabCol> sel_cols_;
-    AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols)
-        : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)) {}
+    std::vector<AggregateType> agg_types_;
+    AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols,
+                  std::vector<AggregateType> agg_types)
+        : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)), agg_types_(std::move(agg_types)) {}
     ~AggregatePlan() = default;
 };
 

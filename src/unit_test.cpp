@@ -617,8 +617,8 @@ TEST(RecordManagerTest, SimpleTest) {
     size_t upd_cnt = 0;
     size_t del_cnt = 0;
     for (int round = 0; round < 1000; round++) {
-        double insert_prob = 1. - mock.size() / 250.;
-        double dice = rand() * 1. / RAND_MAX;
+        float insert_prob = 1. - mock.size() / 250.;
+        float dice = rand() * 1. / RAND_MAX;
         if (mock.empty() || dice < insert_prob) {
             rand_buf(file_handle->file_hdr_.record_size, write_buf);
             Rid rid = file_handle->insert_record(write_buf, nullptr);
