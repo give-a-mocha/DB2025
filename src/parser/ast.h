@@ -17,7 +17,9 @@ See the Mulan PSL v2 for more details. */
 
 namespace ast {
 
-enum JoinType { SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN };
+enum JoinType {
+    SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN, SV_SEMI_JOIN
+};
 
 enum SvType { SV_TYPE_INT, SV_TYPE_FLOAT, SV_TYPE_STRING, SV_TYPE_BOOL };
 

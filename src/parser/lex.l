@@ -91,6 +91,7 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "LEFT_JOIN" { return LEFT_JOIN; }
 "RIGHT_JOIN" { return RIGHT_JOIN; }
 "FULL_JOIN" { return FULL_JOIN; }
+"SEMI" { return SEMI; }
 "ON" { return ON; }
 "EXIT" { return EXIT; }
 "HELP" { return HELP; }
