@@ -37,6 +37,11 @@ class InternalError : public RMDBError {
     InternalError(const std::string &msg) : RMDBError(msg) {}
 };
 
+class AggregateError : public RMDBError {
+   public:
+    AggregateError(const std::string &msg) : RMDBError(msg) {}
+};
+
 // PF errors
 class UnixError : public RMDBError {
    public:

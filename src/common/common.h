@@ -197,14 +197,29 @@ struct Value {
         assert(raw == nullptr);
         if (type == ColType::TYPE_INT) {
             raw = std::make_shared<RmRecord>(sizeof(int));
-            *(int *)(raw->data) = int_val;  // 将整数值写入缓冲区
+            *(int *)(raw->data) = int_val;
         } else if (type == ColType::TYPE_FLOAT) {
-            raw = std::make_shared<RmRecord>(sizeof(float));
-            *(float *)(raw->data) = float_val;  // 将浮点数值写入缓冲区
+            raw = std::make_shared<RmRecord>(sizeof(double));
+            *(double *)(raw->data) = float_val;
         } else if (type == ColType::TYPE_STRING) {
-            raw = std::make_shared<RmRecord>(str_val.size() + 1);
-            memcpy(raw->data, str_val.c_str(), str_val.size());  // 复制字符串到缓冲区
-            raw->data[str_val.size()] = '\0';
+            raw = std::make_shared<RmRecord>(str_val.size());
+            memcpy(raw->data, str_val.c_str(), str_val.size());
+        }
+    }
+
+    void set_col_data(ColType type, char *data, size_t data_len = 0) {
+        switch (type) {
+            case ColType::TYPE_INT:
+                set_int(*(int *)data);
+                break;
+            case ColType::TYPE_FLOAT:
+                set_float(*(float *)data);
+                break;
+            case ColType::TYPE_STRING:
+                set_str(std::string(data, data_len));
+                break;
+            default:
+                break;
         }
     }
 };

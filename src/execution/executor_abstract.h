@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <algorithm>
 #include <cstring>
+#include <numeric>
 #include <string>
 #include <string_view>
 
@@ -148,20 +149,6 @@ class AbstractExecutor {
      * @param target 目标列的表列引用
      * @return 列的完整元数据
      * @throw ColumnNotFoundError 当列不存在时
-     *
-     * @details 获取信息包括：
-     * 1. 列的物理位置
-     *    - 字节偏移量
-     *    - 对齐要求
-     *
-     * 2. 列的属性
-     *    - 数据类型
-     *    - 长度信息
-     *    - 是否允许NULL
-     *
-     * 3. 访问优化
-     *    - 缓存常用列
-     *    - 批量获取优化
      */
     virtual ColMeta get_col_offset(const TabCol &target) { return ColMeta(); };
 
@@ -171,30 +158,9 @@ class AbstractExecutor {
      * @param target 目标列引用
      * @return 列的迭代器位置
      * @throw ColumnNotFoundError 当列不存在时
-     *
-     * @details 查找过程：
-     * 1. 列匹配规则
-     *    - 完整匹配：表名和列名
-     *    - 部分匹配：仅列名(需唯一)
-     *    - 别名处理
-     *
-     * 2. 搜索优化
-     *    - 使用find_if快速定位
-     *    - 处理特殊情况
-     *    - 错误恢复机制
-     *
-     * 3. 结果验证
-     *    - 检查唯一性
-     *    - 验证访问权限
-     *    - 确保列可用
-     *
-     * @note 性能考虑：
-     * - 对频繁访问的列建立索引
-     * - 缓存查找结果
-     * - 批量查找优化
      */
-    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
-                                                 bool has_table = true) {
+    static std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
+                                                        bool has_table = true) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
             return (!has_table || col.tab_name == target.tab_name) && col.name == target.col_name;
         });
@@ -276,27 +242,6 @@ class AbstractExecutor {
      * @param rec 待评估的记录
      * @return true表示满足所有条件
      * @throw ExecutionError 当评估过程出错时
-     *
-     * @details 评估策略：
-     * 1. 短路求值
-     *    - 任一条件不满足立即返回false
-     *    - 按条件选择性优化顺序
-     *    - 减少不必要的计算
-     *
-     * 2. 条件重排序
-     *    - 高选择性条件前置
-     *    - 低代价条件前置
-     *    - 考虑列访问局部性
-     *
-     * 3. 批量处理优化
-     *    - 缓存频繁访问的值
-     *    - 复用中间计算结果
-     *    - 减少内存访问
-     *
-     * @note 性能优化：
-     * - 对于大量记录的评估，考虑向量化
-     * - 条件表达式的复用和缓存
-     * - 避免重复的类型转换
      */
     bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds, const RmRecord *rec) {
         for (const auto &cond : conds) {
@@ -317,26 +262,6 @@ class AbstractExecutor {
      * @throw InternalError 当遇到非法操作符时
      *
      * @details 评估过程：
-     * 1. 值提取和准备
-     *    - 定位左值的偏移位置
-     *    - 处理右值(常量或列值)
-     *    - 准备比较数据
-     *
-     * 2. 类型处理
-     *    - 验证类型兼容性
-     *    - 执行必要的类型转换
-     *    - 特殊类型的比较处理
-     *
-     * 3. 值比较策略
-     *    - 数值类型的高效比较
-     *    - 字符串的优化比较
-     *    - NULL值的特殊处理
-     *
-     * 4. 错误处理
-     *    - 类型不兼容检查
-     *    - 非法操作符检查
-     *    - 数值范围检查
-     *
      * @note 支持的优化：
      * - 数值比较的快速路径
      * - 字符串比较的长度优化
@@ -409,23 +334,6 @@ class AbstractExecutor {
      * @param op 比较操作类型
      * @return 比较结果
      * @throw IncompatibleTypeError 类型不兼容时
-     *
-     * @details 比较流程：
-     * 1. 类型检查与转换
-     *    - 验证类型兼容性
-     *    - 数值类型隐式转换
-     *    - 特殊类型处理(如NULL)
-     *
-     * 2. 值比较策略
-     *    - 数值直接比较
-     *    - 字符串优化比较
-     *    - 边界条件处理
-     *
-     * 3. 性能优化
-     *    - 避免不必要转换
-     *    - 利用CPU指令
-     *    - 减少内存拷贝
-     *
      * @note 优化考虑：
      * - 常见类型快速路径
      * - 大小写敏感性
@@ -467,5 +375,127 @@ class AbstractExecutor {
             default:
                 throw InternalError("compare::Unexpected op type at " + getType());
         }
+    }
+
+    /**
+     * @brief 计算指定列的聚合函数值
+     * @param rec_cols 记录的列元数据信息，用于查找目标列的类型和偏移量
+     * @param rec 参与聚合计算的记录集合
+     * @param tab_col 目标列信息（包含表名和列名）
+     * @param agg_type 聚合函数类型（COUNT、SUM、MAX、MIN、NONE等）
+     * @return 计算得到的聚合值
+     */
+    static Value get_aggr_value(const std::vector<ColMeta> &rec_cols, const std::vector<std::unique_ptr<RmRecord>> &rec,
+                                const TabCol &tab_col, AggregateType agg_type) {
+        Value val;         // 存储最终的聚合结果
+        ColMeta col_meta;  // 目标列的元数据信息
+
+        // 特殊处理 COUNT(*) 情况
+        if (agg_type == AggregateType::COUNT && tab_col.col_name == "*") {
+            // 为 COUNT(*) 创建虚拟的列元数据，类型为整数
+            col_meta = ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0};
+        } else {
+            // 从记录列信息中查找指定的目标列，不比较表名
+            col_meta = *get_col(rec_cols, tab_col, false);
+        }
+        // 根据聚合函数类型进行不同的计算
+        if (agg_type == AggregateType::NONE) {
+            // 非聚合情况：直接返回第一条记录中该列的值
+            for (auto &col_meta : rec_cols) {
+                if (col_meta.name == tab_col.col_name) {
+                    val.set_col_data(col_meta.type, rec[0]->data + col_meta.offset, col_meta.len);
+                    break;
+                }
+            }
+        } else if (agg_type == AggregateType::COUNT) {
+            // COUNT 聚合：返回记录总数
+            val.set_int(rec.size());
+        } else if (agg_type == AggregateType::SUM) {
+            // SUM 聚合：计算指定列所有值的总和
+            if (col_meta.type == ColType::TYPE_INT) {
+                // 整数求和
+                int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
+                    return acc + *(int *)(record->data + col_meta.offset);
+                });
+                val.set_int(sum);
+            } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                // 浮点数求和
+                double sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](double acc, const auto &record) {
+                    return acc + *(int *)(record->data + col_meta.offset);
+                });
+                val.set_float(sum);
+            } else if (col_meta.type == ColType::TYPE_STRING) {
+                throw AggregateError("Aggregate function SUM is not supported for string type column.");
+            }
+        } else if (agg_type == AggregateType::MAX) {
+            // MAX 聚合：找出指定列的最大值
+            if (col_meta.type == ColType::TYPE_INT) {
+                // 整数最大值计算
+                int max = std::numeric_limits<int>::min();  // 初始化为整数最小值
+                for (const auto &record : rec) {
+                    max = std::max(max, *(int *)(record->data + col_meta.offset));
+                }
+                val.set_int(max);
+            } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                // 浮点数最大值计算
+                double max = std::numeric_limits<double>::lowest();  // 初始化为浮点数最小值
+                for (const auto &record : rec) {
+                    max = std::max(max, *(double *)(record->data + col_meta.offset));
+                }
+                val.set_float(max);
+            } else if (col_meta.type == ColType::TYPE_STRING) {
+                // 字符串最大值计算（按字典序）
+                std::string_view max = "";  // 初始化为空字符串（字典序最小）
+                for (const auto &record : rec) {
+                    std::string_view str(record->data + col_meta.offset, col_meta.len);
+                    max = std::max(max, str);  // 字典序比较
+                }
+                val.set_str(std::string(max));
+            }
+        } else if (agg_type == AggregateType::MIN) {
+            // MIN 聚合：找出指定列的最小值
+            if (col_meta.type == ColType::TYPE_INT) {
+                // 整数最小值计算
+                int min = std::numeric_limits<int>::max();  // 初始化为整数最大值
+                for (const auto &record : rec) {
+                    min = std::min(min, *(int *)(record->data + col_meta.offset));
+                }
+                val.set_int(min);
+            } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                // 浮点数最小值计算
+                double min = std::numeric_limits<double>::max();  // 初始化为浮点数最大值
+                for (const auto &record : rec) {
+                    min = std::min(min, *(double *)(record->data + col_meta.offset));
+                }
+                val.set_float(min);
+            } else if (col_meta.type == ColType::TYPE_STRING) {
+                std::string_view min(rec.front()->data + col_meta.offset, col_meta.len);
+                for (size_t i = 1; i < rec.size(); i++) {
+                    const auto &record = rec[i];
+                    std::string_view str(record->data + col_meta.offset, col_meta.len);
+                    min = std::min(min, str);
+                }
+                val.set_str(std::string(min));
+            } else if (agg_type == AggregateType::AVG) {
+                // SUM 聚合：计算指定列所有值的总和
+                if (col_meta.type == ColType::TYPE_INT) {
+                    // 整数求和
+                    int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
+                        return acc + *(int *)(record->data + col_meta.offset);
+                    });
+                    val.set_float(static_cast<double>(sum) / static_cast<double>(rec.size()));
+                } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                    // 浮点数求和
+                    double sum =
+                        std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](double acc, const auto &record) {
+                            return acc + *(int *)(record->data + col_meta.offset);
+                        });
+                    val.set_float(static_cast<double>(sum) / static_cast<double>(rec.size()));
+                } else if (col_meta.type == ColType::TYPE_STRING) {
+                    throw AggregateError("Aggregate function AVG is not supported for string type column.");
+                }
+            }
+        }
+        return val;  // 返回计算得到的聚合值
     }
 };
