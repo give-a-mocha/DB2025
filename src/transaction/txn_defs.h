@@ -50,7 +50,12 @@ enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };
  * ----------------------------------------------
  */
 class WriteRecord {
-   public:
+private:
+    WType wtype_;
+    std::string tab_name_;
+    Rid rid_;
+    RmRecord record_;
+public:
     WriteRecord() = default;
 
     // constructor for insert operation
@@ -75,11 +80,6 @@ class WriteRecord {
         return std::make_tuple(wtype_, tab_name_, rid_, record_);
     }
 
-   private:
-    WType wtype_;
-    std::string tab_name_;
-    Rid rid_;
-    RmRecord record_;
 };
 
 /* 多粒度锁，加锁对象的类型，包括记录和表 */
@@ -89,7 +89,10 @@ enum class LockDataType { TABLE = 0, RECORD = 1 };
  * @description: 加锁对象的唯一标识
  */
 class LockDataId {
-   public:
+public:
+    int fd_;
+    Rid rid_;
+    LockDataType type_;
     /* 表级锁 */
     LockDataId(int fd, LockDataType type) {
         assert(type == LockDataType::TABLE);
@@ -123,9 +126,6 @@ class LockDataId {
         if (fd_ != other.fd_) return false;
         return rid_ == other.rid_;
     }
-    int fd_;
-    Rid rid_;
-    LockDataType type_;
 };
 
 template <>

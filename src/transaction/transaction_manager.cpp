@@ -183,6 +183,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
                 record_link_management(log_record.get(), log_manager, txn);
 
                 //  TODO: 删除索引
+                delete_index_record(sm_manager_->db_.get_table(table_name), handle->get_record(rid, context).get(), rid, context );
                 handle->delete_record(rid, context);
                 break;
             }
@@ -193,10 +194,10 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
                 record_link_management(log_record.get(), log_manager, txn);
 
                 //  TODO: 删除索引
-
+                delete_index_record(sm_manager_->db_.get_table(table_name), old_record.get(), rid, context);
                 handle->update_record(rid, record.data, context);
                 //  TODO: 添加索引
-
+                insert_index_record(sm_manager_->db_.get_table(table_name), &record, rid, context);
                 break;
             }
             case WType::DELETE_TUPLE: {
@@ -204,6 +205,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
                 record_link_management(log_record.get(), log_manager, txn);
 
                 // TODO: 添加索引
+                insert_index_record(sm_manager_->db_.get_table(table_name), &record, rid, context);
                 handle->insert_record(rid, record.data);
 
                 break;
@@ -273,4 +275,30 @@ void TransactionManager::record_link_management(LogRecord* log_record, LogManage
 
     // 更新事务的前序LSN为当前日志记录的LSN，以便后续日志能够正确链接
     txn->set_prev_lsn(log_record->lsn_);
+}
+
+void TransactionManager::delete_index_record(TabMeta tab_, RmRecord* rec, Rid rid, Context *context){
+    for(const auto& index : tab_.indexes) {
+        auto ix_ = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(index.tab_name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
+            memcpy(key.get() + offset, rec->data + index.cols[i].offset, index.cols[i].len);
+            offset += index.cols[i].len;
+        }
+        ix_->delete_entry(key.get(), context->txn_);
+    }
+}
+
+void TransactionManager::insert_index_record(TabMeta tab_, const RmRecord* rec, Rid rid, Context *context){
+    for(const auto& index : tab_.indexes) {
+        auto ix_ = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(index.tab_name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
+            memcpy(key.get() + offset, rec->data + index.cols[i].offset, index.cols[i].len);
+            offset += index.cols[i].len;
+        }
+        ix_->insert_entry(key.get(), rid, context->txn_);
+    }
 }
