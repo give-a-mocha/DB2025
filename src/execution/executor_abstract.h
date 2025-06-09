@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <string_view>
 
+#include "common/TraceStack.hpp"
 #include "common/common.h"
 #include "execution_defs.h"
 #include "index/ix.h"
@@ -23,35 +24,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 执行器抽象基类，定义查询执行引擎的核心接口
- *
- * 执行器架构设计：
- * 1. 火山模型接口
- *    - next(): 获取下一个元组
- *    - beginTuple(): 初始化扫描
- *    - is_end(): 检查是否结束
- *
- * 2. 数据访问接口
- *    - 元组遍历和定位
- *    - 列值提取和类型转换
- *    - 条件评估和过滤
- *
- * 3. 资源管理
- *    - 内存分配和释放
- *    - 缓冲区管理
- *    - 异常处理机制
- *
- * 4. 扩展设计
- *    - 支持流水线执行
- *    - 允许向量化处理
- *    - 便于添加新算子
- *
- * @note 具体执行器实现：
- * - SeqScan: 顺序扫描
- * - IndexScan: 索引扫描
- * - NestedLoop: 嵌套循环连接
- * - HashJoin: 哈希连接
- * - Sort: 排序
- * - Projection: 投影
  */
 class AbstractExecutor {
    public:
@@ -268,6 +240,7 @@ class AbstractExecutor {
      * - 类型转换的缓存机制
      */
     bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
+        TRACE_FUNCTION
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
         char *lhs_data = rec->data + lhs_col->offset;
         char *rhs_data;
@@ -340,6 +313,7 @@ class AbstractExecutor {
      * - 特殊值处理
      */
     static bool compare(Value lhs, Value rhs, CompOp op) {
+        TRACE_FUNCTION
         bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
         if (lhs.type != rhs.type && !is_numeric) {
             throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
@@ -387,6 +361,7 @@ class AbstractExecutor {
      */
     static Value get_aggr_value(const std::vector<ColMeta> &rec_cols, const std::vector<std::unique_ptr<RmRecord>> &rec,
                                 const TabCol &tab_col, AggregateType agg_type) {
+        TRACE_FUNCTION
         Value val;         // 存储最终的聚合结果
         ColMeta col_meta;  // 目标列的元数据信息
 
@@ -421,7 +396,7 @@ class AbstractExecutor {
             } else if (col_meta.type == ColType::TYPE_FLOAT) {
                 // 浮点数求和
                 float sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
-                    return acc + *(int *)(record->data + col_meta.offset);
+                    return acc + *(float *)(record->data + col_meta.offset);
                 });
                 val.set_float(sum);
             } else if (col_meta.type == ColType::TYPE_STRING) {
@@ -466,7 +441,6 @@ class AbstractExecutor {
                 float min = std::numeric_limits<float>::max();  // 初始化为浮点数最大值
                 for (const auto &record : rec) {
                     min = std::min(min, *(float *)(record->data + col_meta.offset));
-                    INFO("min: {}", *(float *)(record->data + col_meta.offset));
                 }
                 val.set_float(min);
             } else if (col_meta.type == ColType::TYPE_STRING) {
@@ -477,26 +451,23 @@ class AbstractExecutor {
                     min = std::min(min, str);
                 }
                 val.set_str(std::string(min));
-            } else if (agg_type == AggregateType::AVG) {
-                // SUM 聚合：计算指定列所有值的总和
-                if (col_meta.type == ColType::TYPE_INT) {
-                    // 整数求和
-                    int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
-                        return acc + *(int *)(record->data + col_meta.offset);
-                    });
-                    val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
-                } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                    INFO("AVG size: {}", rec.size());
-                    // 浮点数求和
-                    float sum =
-                        std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
-                            return acc + *(int *)(record->data + col_meta.offset);
-                        });
-                    INFO("AVG sum: {}", sum);
-                    val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
-                } else if (col_meta.type == ColType::TYPE_STRING) {
-                    throw AggregateError("Aggregate function AVG is not supported for string type column.");
-                }
+            }
+        } else if (agg_type == AggregateType::AVG) {
+            // SUM 聚合：计算指定列所有值的总和
+            if (col_meta.type == ColType::TYPE_INT) {
+                // 整数求和
+                int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
+                    return acc + *(int *)(record->data + col_meta.offset);
+                });
+                val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
+            } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                // 浮点数求和
+                float sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
+                    return acc + *(float *)(record->data + col_meta.offset);
+                });
+                val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
+            } else if (col_meta.type == ColType::TYPE_STRING) {
+                throw AggregateError("Aggregate function AVG is not supported for string type column.");
             }
         }
         return val;  // 返回计算得到的聚合值

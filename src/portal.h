@@ -65,6 +65,7 @@ class Portal {
 
     // 将查询执行计划转换成对应的算子树
     std::shared_ptr<PortalStmt> start(std::shared_ptr<Plan> plan, Context *context) {
+        TRACE_FUNCTION
         // 这里可以将select进行拆分，例如：一个select，带有return的select等
         if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
             return std::make_shared<PortalStmt>(PORTAL_CMD_UTILITY, std::vector<TabCol>(),
@@ -135,6 +136,7 @@ class Portal {
 
     // 遍历算子树并执行算子生成执行结果
     void run(std::shared_ptr<PortalStmt> portal, QlManager *ql, txn_id_t *txn_id, Context *context) {
+        TRACE_FUNCTION
         switch (portal->tag) {
             case PORTAL_ONE_SELECT: {
                 ql->select_from(std::move(portal->root), std::move(portal->sel_cols), context);
@@ -168,9 +170,12 @@ class Portal {
     void drop() {}
 
     std::unique_ptr<AbstractExecutor> convert_plan_executor(std::shared_ptr<Plan> plan, Context *context) {
+        TRACE_FUNCTION
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
+            INFO("ProjectionPlan");
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
+            INFO("ScanPlan");
             if (x->tag == PlanTag::T_SeqScan) {
                 return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
             } else {
@@ -178,6 +183,7 @@ class Portal {
                                                            context);
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
+            INFO("JoinPlan");
             std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context);
             std::unique_ptr<AbstractExecutor> right = convert_plan_executor(x->right_, context);
             if (x->type == JoinType::SEMI_JOIN) {
@@ -188,12 +194,15 @@ class Portal {
                                                                 std::move(x->conds_));
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
+            INFO("SortPlan");
             return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context), x->sel_col_,
                                                   x->is_desc_);
         } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
+            INFO("AggregatePlan");
             return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
                                                        x->agg_types_);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
+            INFO("GroupPlan");
             return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
                                                    x->group_cols_, x->having_conds_);
         }
@@ -202,6 +211,7 @@ class Portal {
 
     std::unique_ptr<AbstractExecutor> convert_plan_explain_executor(std::shared_ptr<Plan> plan, Context *context,
                                                                     int offset, std::vector<std::string> &join_tables) {
+        TRACE_FUNCTION
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
             return std::make_unique<ExplainProjectExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),

@@ -41,6 +41,7 @@
 #include "common/common.h"
 #include "parser/parser.h"
 #include "system/sm.h"
+#include "common/TraceStack.hpp"
 
 /**
  * @brief 列检查器类，用于高效验证列引用的有效性
@@ -60,6 +61,7 @@ class ColCheck {
      * @param all_cols 所有相关表的列元数据集合
      */
     ColCheck(const std::vector<ColMeta> &all_cols) {
+        TRACE_FUNCTION
         for (const auto &col : all_cols) {
             uint64 hashcode = getHashCode(col.name);
             hashcode = getHashCode(col.tab_name, hashcode);
@@ -83,6 +85,7 @@ class ColCheck {
      * @return TabCol 处理后的列引用(可能添加了推断出的表名)
      */
     TabCol check(TabCol target_col) {
+        TRACE_FUNCTION
         uint64 hashcode = getHashCode(target_col.col_name);
 
         if (target_col.tab_name.empty()) {

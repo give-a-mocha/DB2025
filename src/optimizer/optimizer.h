@@ -29,15 +29,16 @@
 
 #include <map>
 
+#include "common/TraceStack.hpp"
+#include "common/context.h"
+#include "common/print.hpp"
 #include "errors.h"
 #include "execution/execution.h"
 #include "parser/parser.h"
-#include "system/sm.h"
-#include "common/context.h"
-#include "transaction/transaction_manager.h"
-#include "planner.h"
 #include "plan.h"
-#include "common/print.hpp"
+#include "planner.h"
+#include "system/sm.h"
+#include "transaction/transaction_manager.h"
 
 /**
  * @brief 查询优化器类
@@ -61,8 +62,8 @@
  */
 class Optimizer {
    private:
-    SmManager *sm_manager_;        // 系统管理器指针
-    Planner *planner_;            // 计划生成器指针
+    SmManager *sm_manager_;  // 系统管理器指针
+    Planner *planner_;       // 计划生成器指针
 
    public:
     /**
@@ -77,13 +78,13 @@ class Optimizer {
      * @param planner 计划生成器指针
      * @throw InternalError 如果任一指针为空
      */
-    Optimizer(SmManager *sm_manager, Planner *planner)
-        : sm_manager_(sm_manager), planner_(planner) {
+    Optimizer(SmManager *sm_manager, Planner *planner) : sm_manager_(sm_manager), planner_(planner) {
+        TRACE_FUNCTION
         if (!sm_manager || !planner) {
             throw InternalError("Null pointer in Optimizer constructor");
         }
     }
-    
+
     /**
      * @brief 为查询生成执行计划
      * @param query 查询对象
@@ -114,6 +115,7 @@ class Optimizer {
      * 具体执行逻辑由执行器实现
      */
     std::shared_ptr<Plan> plan_query(std::shared_ptr<Query> query, Context *context) {
+        TRACE_FUNCTION
         try {
             // 1. 系统命令处理
             if (auto x = std::dynamic_pointer_cast<ast::Help>(query->parse)) {
@@ -143,9 +145,8 @@ class Optimizer {
             else {
                 return planner_->do_planner(query, context);
             }
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             throw InternalError("Failed to generate plan: " + std::string(e.what()));
         }
     }
-
 };

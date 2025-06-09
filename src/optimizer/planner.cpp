@@ -20,6 +20,7 @@
 #include <memory>
 #include <unordered_set>
 
+#include "common/TraceStack.hpp"
 #include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
 #include "execution/executor_insert.h"
@@ -63,7 +64,7 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
     // TabMeta& tab = sm_manager_->db_.get_table(tab_name);
     // if(tab.is_index(index_col_names)) return true;
     // return false;
-
+    TRACE_FUNCTION
     index_col_names.clear();
     TabMeta &tab = sm_manager_->db_.get_table(tab_name);
     if (tab.indexes.empty()) {
@@ -125,6 +126,7 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
     // auto has_tab = [&](const std::string &tab_name) {
     //     return std::find(tab_names.begin(), tab_names.end(), tab_name) != tab_names.end();
     // };
+    TRACE_FUNCTION
     std::vector<Condition> solved_conds;
     std::vector<Condition> temp;
     for (auto &it : conds) {
@@ -161,6 +163,7 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
  *    - 必要时交换条件的左右操作数
  */
 int push_conds(Condition *cond, std::shared_ptr<Plan> plan) {
+    TRACE_FUNCTION
     if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
         if (x->tab_name_.compare(cond->lhs_col.tab_name) == 0) {
             return 1;
@@ -208,6 +211,7 @@ int push_conds(Condition *cond, std::shared_ptr<Plan> plan) {
  */
 std::shared_ptr<Plan> pop_scan(std::vector<int> &scantbl, std::string table, std::vector<std::string> &joined_tables,
                                std::vector<std::shared_ptr<Plan>> plans) {
+                                TRACE_FUNCTION
     for (size_t i = 0; i < plans.size(); i++) {
         auto x = std::dynamic_pointer_cast<ScanPlan>(plans[i]);
         if (x->tab_name_.compare(table) == 0) {
@@ -220,6 +224,7 @@ std::shared_ptr<Plan> pop_scan(std::vector<int> &scantbl, std::string table, std
 }
 
 std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> query, Context *context) {
+    TRACE_FUNCTION
     if (query == nullptr) return nullptr;
 
     // 1. 条件下推优化：将单表条件尽早执行
@@ -276,6 +281,7 @@ std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> quer
 }
 
 std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> query, Context *context) {
+    TRACE_FUNCTION
     // 使用优化的连接顺序生成计划
     std::shared_ptr<Plan> plan = make_one_rel_optimized(query);
 
@@ -293,6 +299,7 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
  * @return 生成的扫描计划或基础连接计划。
  */
 std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
+    TRACE_FUNCTION
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
     // Scan table , 生成表算子列表tab_nodes
@@ -445,6 +452,7 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
  */
 std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
+    TRACE_FUNCTION
     if (!x->has_sort) {
         return plan;
     }
@@ -467,6 +475,7 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
 }
 
 std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
+    TRACE_FUNCTION
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
 
     // 检查是否所有选定列都没有聚合类型
@@ -476,9 +485,8 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
         return plan;
     }
     std::vector<AggregateType> agg_types;
-    static AggregateType agg_type_map[] = {
-        AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM, AggregateType::AVG, AggregateType::MAX, AggregateType::MIN
-    };
+    static AggregateType agg_type_map[] = {AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM,
+                                           AggregateType::AVG,  AggregateType::MAX,   AggregateType::MIN};
     agg_types.reserve(x->cols.size());
     for (const auto &agg : x->cols) {
         agg_types.push_back(agg_type_map[static_cast<int>(agg->aggregate_type)]);
@@ -487,6 +495,7 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
 }
 
 std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
+    TRACE_FUNCTION
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     if (x->group.empty()) {
         return plan;
@@ -503,6 +512,7 @@ std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query,
  * @param conds select plan 选取条件
  */
 std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query, Context *context) {
+    TRACE_FUNCTION
     // 逻辑优化
     // query = logical_optimization(std::move(query), context);
 
@@ -563,6 +573,7 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
  * 4. 处理错误情况
  */
 std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context *context) {
+    TRACE_FUNCTION
     std::shared_ptr<Plan> plannerRoot;
     if (auto x = std::dynamic_pointer_cast<ast::CreateTable>(query->parse)) {
         // create table;
@@ -671,6 +682,7 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
  * @brief 获取表的基数（记录数量）
  */
 size_t Planner::get_table_cardinality(const std::string &tab_name) {
+    TRACE_FUNCTION
     // 通过文件句柄获取表的记录数量
     auto it = sm_manager_->fhs_.find(tab_name);
     size_t res = 0;
@@ -690,6 +702,7 @@ size_t Planner::get_table_cardinality(const std::string &tab_name) {
  * 3. 返回列数量
  */
 int Planner::get_table_col_num(const std::string &tab_name) {
+    TRACE_FUNCTION
     // 获取表的列数
     auto it = sm_manager_->db_.get_table(tab_name);
     if (it.cols.empty()) {
@@ -699,6 +712,7 @@ int Planner::get_table_col_num(const std::string &tab_name) {
 }
 // 遗弃不使用
 std::vector<Condition> pop_conds_optimized(std::list<Condition> &conds, const std::string &tab_names) {
+    TRACE_FUNCTION
     std::vector<Condition> solved_conds;
     auto it = conds.begin();
     while (it != conds.end()) {
@@ -737,6 +751,7 @@ std::vector<Condition> pop_conds_optimized(std::list<Condition> &conds, const st
  *    - 构建左深连接树
  */
 std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> query) {
+    TRACE_FUNCTION
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
     std::list<JoinNode> semi_join;

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/Hash.h"
+#include "common/TraceStack.hpp"
 #include "executor_abstract.h"
 
 struct ListHash {
@@ -37,6 +38,7 @@ class GroupExecutor : public AbstractExecutor {
 
     GroupExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
                   const std::vector<TabCol>& group_cols, std::vector<Condition> conds) {
+        TRACE_FUNCTION
         prev_ = std::move(prev);  // 移动上一个执行器的所有权
 
         std::for_each(sel_cols.begin(), sel_cols.end(), [this](const auto& sel_col) {
@@ -51,6 +53,7 @@ class GroupExecutor : public AbstractExecutor {
         });
         // 处理 GROUP BY 列元数据
         std::for_each(group_cols.begin(), group_cols.end(), [this](const auto& group_col) {
+            // WARN("group_cols_: {}", *get_col(this->prev_->cols(), group_col));
             this->group_cols_.push_back(*get_col(this->prev_->cols(), group_col));
         });
         having_conds_ = std::move(conds);  // 移动 HAVING 条件的所有权
@@ -61,17 +64,32 @@ class GroupExecutor : public AbstractExecutor {
      * 从上一个执行器获取所有元组，进行分组，并根据 HAVING 条件过滤组。
      */
     void beginTuple() override {
+        TRACE_FUNCTION
         prev_->beginTuple();      // 初始化上一个执行器
         grouped_records.clear();  // 清空上一次执行的分组记录
 
         // 从上一个执行器获取所有元组并进行分组
         while (!prev_->is_end()) {
-            auto tuple = prev_->Next();                                       // 获取下一个元组
+            auto tuple = prev_->Next();
+
+            // 获取下一个元组
             std::list<std::string_view> group_key = generateGroupKey(tuple);  // 生成分组键
+            std::string dbg_tmp;
+            for (auto i : group_key) dbg_tmp += i;
+            // INFO("group_key: {}", dbg_tmp);
             // 将元组添加到对应的分组中
             grouped_records[group_key].emplace_back(std::move(tuple));
             prev_->nextTuple();  // 移动到上一个执行器的下一个元组
         }
+
+        // for (const auto& [key, value] : grouped_records) {
+        //     // ERROR("umap key: {}", key);
+        //     for (auto& i : value) {
+        //         ERROR("tuple: course: {}, id: {}, score: {}", std::string_view(i->data, 20), *(int*)(i->data + 20),
+        //               *(float*)(i->data + 24));
+        //     }
+        //     ERROR("====");
+        // }
 
         // 根据 HAVING 条件过滤分组
         if (!having_conds_.empty()) {
@@ -84,7 +102,10 @@ class GroupExecutor : public AbstractExecutor {
             }
         }
 
-        nextTuple();
+        auto& front = grouped_records.begin()->second.front();
+        // 创建一个新的 RmRecord 来存储代表元组的数据
+        auto temp_tuple = std::make_unique<RmRecord>(front->size, front->data);
+        current_tuple = std::move(temp_tuple);  // 移动所有权
     }
 
     /**
@@ -92,12 +113,13 @@ class GroupExecutor : public AbstractExecutor {
      * 更新 current_group 和 current_tuple。
      */
     void nextTuple() override {
+        TRACE_FUNCTION
         if (!grouped_records.empty()) {
+            grouped_records.erase(grouped_records.begin());
             auto& front = grouped_records.begin()->second.front();
             // 创建一个新的 RmRecord 来存储代表元组的数据
             auto temp_tuple = std::make_unique<RmRecord>(front->size, front->data);
             current_tuple = std::move(temp_tuple);  // 移动所有权
-            grouped_records.erase(grouped_records.begin());
         } else {
             current_tuple = nullptr;
         }

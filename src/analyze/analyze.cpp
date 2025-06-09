@@ -10,6 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "analyze.h"
 
+#include "common/TraceStack.hpp"
 #include "common/print.hpp"
 
 /**
@@ -23,7 +24,7 @@ See the Mulan PSL v2 for more details. */
  * @param tab_refs 查询中的所有表引用(包含表名和别名信息)
  */
 std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse) {
-    std::cerr << "DEBUG: Starting semantic analysis..." << std::endl;
+    TRACE_FUNCTION
     std::shared_ptr<Query> query = std::make_shared<Query>();          // 创建查询对象
     if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse)) {  // 处理SELECT查询
         // 检查所有表是否存在并处理表名和别名
@@ -39,7 +40,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             query->tables.push_back(tab_name);  // 添加到查询的表列表
         }
 
-        // 处理JOIN表     
+        // 处理JOIN表
         if (!x->jointree.empty()) {
             for (const auto &join_expr : x->jointree) {
                 // 检查JOIN右侧的表是否存在
@@ -50,7 +51,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 TabRef right_table(right_tab_name, join_expr->right->alias);
                 bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
                 // 在做列检查时不需要把半连接的表加入
-                if(!isSemiJoin) {
+                if (!isSemiJoin) {
                     // 普通JOIN表
                     query->tables.push_back(right_tab_name);
                     tab_refs.push_back(right_table);
@@ -119,37 +120,37 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
                 const int siz = all_cols.size();
                 // 获取SEMI JOIN表的列
-                if(isSemiJoin){
+                if (isSemiJoin) {
                     query->tables.push_back(right_tab_name);
                     tab_refs.push_back(right_table);
-                    get_all_cols({right_tab_name}, all_cols);  
+                    get_all_cols({right_tab_name}, all_cols);
                 }
                 // 转换JOIN条件
                 std::vector<Condition> join_conds;
                 get_clause_alias(all_cols, join_expr->conds, join_conds, tab_refs);
-                
-                if(isSemiJoin){
+
+                if (isSemiJoin) {
                     // 条件右侧是连接表
-                    for(auto &cond : join_conds) {
-                        if(cond.lhs_col.tab_name == right_tab_name) {
+                    for (auto &cond : join_conds) {
+                        if (cond.lhs_col.tab_name == right_tab_name) {
                             std::swap(cond.lhs_col, cond.rhs_col);
                             cond.op = swap_op(cond.op);
                         }
                     }
                 }
-                
+
                 // 检查JOIN条件的有效性
                 check_clause(query->tables, join_conds);
                 // 创建JOIN节点并指定JOIN类型
                 JoinType join_type = convert_sv_join_type(join_expr->type);
                 query->jointree.emplace_back(std::move(right_tab_name), std::move(join_conds), join_type);
-                
-                if(isSemiJoin){
+
+                if (isSemiJoin) {
                     query->tables.pop_back();
                     tab_refs.pop_back();
                     // 移除SEMI JOIN表的列
-                    while(all_cols.size() > siz) {
-                        all_cols.pop_back();  
+                    while (all_cols.size() > siz) {
+                        all_cols.pop_back();
                     }
                 }
             }
@@ -223,6 +224,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
  */
 void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target,
                               const std::vector<TabRef> &tab_refs) {
+    TRACE_FUNCTION
     // COUNT(*) 的特殊情况 - 不需要表名和别名
     if (target.col_name == "*" && target.agg_type == AggregateType::COUNT) {
         return;
@@ -300,6 +302,7 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
  * @return TabCol 验证后的列引用
  */
 TabCol Analyze::check_column(const std::vector<ColMeta> &all_cols, TabCol target) {
+    TRACE_FUNCTION
     // COUNT(*) 的特殊情况 - 不需要表名和别名
     if (target.col_name == "*" && target.agg_type == AggregateType::COUNT) {
         return target;
@@ -351,6 +354,7 @@ TabCol Analyze::check_column(const std::vector<ColMeta> &all_cols, TabCol target
  * @param all_cols 输出参数，用于存储收集到的所有列元数据
  */
 void Analyze::get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols) {
+    TRACE_FUNCTION
     for (auto &sel_tab_name : tab_names) {
         // 这里db_不能写成get_db(), 注意要传指针
         const auto &sel_tab_cols = sm_manager_->db_.get_table(sel_tab_name).cols;
@@ -372,6 +376,7 @@ void Analyze::get_all_cols(const std::vector<std::string> &tab_names, std::vecto
 void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
                                const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds,
                                std::vector<Condition> &conds, const std::vector<TabRef> &tab_refs) {
+    TRACE_FUNCTION
     conds.clear();                   // 清空输出条件向量
     conds.reserve(sv_conds.size());  // 预分配空间以提高性能
     for (auto &expr : sv_conds) {
@@ -412,6 +417,7 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
  * @param conds 输出参数，用于存储转换后的条件对象
  */
 void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds) {
+    TRACE_FUNCTION
     // 清空输出条件向量
     conds.clear();
     // 预留足够空间以避免后续插入时的内存重分配
@@ -453,6 +459,7 @@ void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv
  * @param conds 需要检查的条件表达式集合(将被修改以填充完整的列信息)
  */
 void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds) {
+    TRACE_FUNCTION
     // 获取相关表的所有列信息
     std::vector<ColMeta> all_cols;
     get_all_cols(tab_names, all_cols);
@@ -527,6 +534,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
  */
 void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds,
                            ColCheck &col_check) {
+    TRACE_FUNCTION
     // 遍历检查每个条件
     for (auto &cond : conds) {
         // 使用自定义检查器推断并验证左侧列
@@ -576,6 +584,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
  * @return Value 转换后的系统内部值对象
  */
 Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
+    TRACE_FUNCTION
     Value val;
     if (auto int_lit = std::dynamic_pointer_cast<ast::IntLit>(sv_val)) {
         // 整数类型值
@@ -603,6 +612,7 @@ Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
  * @return CompOp 转换后的系统内部比较操作符
  */
 CompOp Analyze::convert_sv_comp_op(ast::SvCompOp op) {
+    TRACE_FUNCTION
     switch (op) {
         case ast::SV_OP_EQ:  // 等于
             return CompOp::OP_EQ;
@@ -632,6 +642,7 @@ CompOp Analyze::convert_sv_comp_op(ast::SvCompOp op) {
  * @return JoinType 转换后的系统内部JOIN类型
  */
 JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
+    TRACE_FUNCTION
     switch (type) {
         case ast::JoinType::SV_INNER_JOIN:  // 内连接
             return JoinType::INNER_JOIN;
@@ -650,6 +661,7 @@ JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
 }
 
 void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
+    TRACE_FUNCTION
     for (const auto &cond : conds) {
         if (cond.lhs_col.agg_type != AggregateType::NONE ||
             (!cond.is_rhs_val && cond.rhs_col.agg_type != AggregateType::NONE)) {
@@ -659,6 +671,7 @@ void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
 }
 
 void Analyze::check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols) {
+    TRACE_FUNCTION
     for (auto &cond : conds) {
         if (cond.lhs_col.agg_type == AggregateType::NONE) {
             bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
@@ -686,6 +699,7 @@ void Analyze::check_having_conds(const std::vector<Condition> &conds, const std:
 }
 
 void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols) {
+    TRACE_FUNCTION
     if (group_cols.empty()) {
         bool has_aggr = std::any_of(cols.begin(), cols.end(),
                                     [](const TabCol &col) { return col.agg_type != AggregateType::NONE; });

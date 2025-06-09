@@ -1,5 +1,6 @@
 #pragma once
 
+#include "common/TraceStack.hpp"
 #include "common/print.hpp"
 #include "execution/execution_group.h"
 #include "execution/executor_abstract.h"
@@ -32,6 +33,7 @@ class AggregateExecutor : public AbstractExecutor {
         //     INFO("AggregateExecutor: agg_type: {}", static_cast<int>(type));
         // }
         // 构造输出列元数据
+        TRACE_FUNCTION
         for (const auto& sel_col : sel_cols) {
             // 处理COUNT(*)的特殊情况
             if (sel_col.col_name == "*" && sel_col.agg_type == AggregateType::COUNT) {
@@ -68,6 +70,7 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 开始元组遍历，执行聚合操作
      */
     void beginTuple() override {
+        TRACE_FUNCTION
         prev_->beginTuple();
 
         // 检查前一个执行器是否为分组执行器
@@ -99,6 +102,7 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 移动到下一个元组
      */
     void nextTuple() override {
+        TRACE_FUNCTION
         if (current_record_ != aggregated_records_.end()) {
             ++current_record_;
         }
@@ -141,6 +145,7 @@ class AggregateExecutor : public AbstractExecutor {
      * @return 聚合后的记录，如果为空则返回nullptr
      */
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
+        TRACE_FUNCTION
         // 检查是否所有聚合类型都是COUNT
         bool is_count = true;
         for (const auto& agg_type : agg_types_) {
@@ -175,7 +180,6 @@ class AggregateExecutor : public AbstractExecutor {
             Value res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
             res.init_raw();
             size += res.raw->size;
-            INFO("Value: {}", res.float_val);
             values[i] = std::move(res);
         }
         auto result = std::make_unique<RmRecord>(size);

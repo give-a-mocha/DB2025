@@ -17,49 +17,29 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 投影执行器，负责实现SELECT语句的列选择功能
- *
- * @details 主要功能和特点：
- * 1. 列处理：
- *    - 选择指定列
- *    - 重组列布局
- *    - 优化内存结构
- *
- * 2. 性能优化：
- *    - 预计算偏移量
- *    - 批量数据处理
- *    - 减少内存拷贝
- *
- * 3. 内存管理：
- *    - 动态空间分配
- *    - 对齐优化
- *    - 缓存友好
- *
- * 4. 特殊处理：
- *    - NULL值处理
- *    - 列不存在检查
- *    - 类型转换支持
  */
 class ProjectionExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
     std::vector<ColMeta> cols_;               // 输出列元数据
     size_t len_;                              // 结果记录长度
-    std::vector<size_t> sel_idxs_;           // 选中列在原记录中的索引
+    std::vector<size_t> sel_idxs_;            // 选中列在原记录中的索引
+
+    bool prev_is_aggr_ = false;
 
    public:
     /**
      * @brief 构造函数
-     *
-     * 初始化投影执行器：
-     * 1. 设置输入执行器
-     * 2. 计算输出记录的列布局
-     * 3. 记录需要选择的列的索引位置
      *
      * @param prev 输入执行器
      * @param sel_cols 需要投影的列
      */
     ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol> &sel_cols) {
         prev_ = std::move(prev);
+
+        if (prev_->getType() == "AggregateExecutor") {
+            prev_is_aggr_ = true;
+        }
 
         size_t curr_offset = 0;
         auto &prev_cols = prev_->cols();
@@ -72,6 +52,8 @@ class ProjectionExecutor : public AbstractExecutor {
             cols_.push_back(col);
         }
         len_ = curr_offset;
+
+        if (prev_is_aggr_) cols_ = prev_cols;
     }
 
     /**
@@ -93,34 +75,8 @@ class ProjectionExecutor : public AbstractExecutor {
     bool is_end() const override { return prev_->is_end(); }
 
     /**
-     * @brief 获取投影后的下一条记录
-     *
-     * 处理步骤：
-     * 1. 获取输入执行器的下一条记录
-     * 2. 创建新记录并分配空间
-     * 3. 将选中的列从输入记录复制到新记录
-     *
-     * @return 投影后的记录指针，如果输入记录为空则返回nullptr
-     */
-    /**
      * @brief 获取投影后的结果记录
      * @return 投影记录的智能指针，如果输入为空返回nullptr
-     *
-     * @details 执行步骤：
-     * 1. 数据获取：
-     *    - 读取输入记录
-     *    - 验证记录有效性
-     *    - 准备缓冲区
-     *
-     * 2. 列处理：
-     *    - 提取目标列
-     *    - 计算新偏移
-     *    - 复制字段数据
-     *
-     * 3. 优化处理：
-     *    - 减少内存拷贝
-     *    - 批量数据移动
-     *    - 保持对齐访问
      */
     std::unique_ptr<RmRecord> Next() override {
         // 获取输入记录
@@ -137,13 +93,14 @@ class ProjectionExecutor : public AbstractExecutor {
         // 复制选中的列数据
         for (size_t i = 0; i < sel_idxs_.size(); ++i) {
             size_t prev_idx = sel_idxs_[i];
+            if (prev_is_aggr_) {
+                prev_idx = i;
+            }
             auto &prev_col = prev_cols[prev_idx];
             auto &proj_col = cols_[i];
 
             // 将列数据复制到新位置
-            memcpy(proj_rec->data + proj_col.offset,
-                  prev_rec->data + prev_col.offset,
-                  proj_col.len);
+            memcpy(proj_rec->data + proj_col.offset, prev_rec->data + prev_col.offset, proj_col.len);
         }
 
         return proj_rec;
