@@ -473,9 +473,9 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         if (!cond.is_rhs_val) {
             cond.rhs_col = check_column(all_cols, cond.rhs_col);
         }
-
         ColType lhs_type;
         std::vector<ColMeta>::iterator lhs_col;
+        size_t lhs_col_len = 0;
         // 获取左侧列的类型信息
         if (cond.lhs_col.agg_type != AggregateType::COUNT) {
             TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
@@ -485,16 +485,17 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
                 // 如果是聚合函数且列类型为字符串，抛出不支持的聚合类型错误
                 throw InternalError("Unsupported aggregate type for string column: " + coltype2str(lhs_type));
             }
+            lhs_col_len = lhs_col->len;
         } else {
             lhs_type = ColType::TYPE_INT;
-            lhs_col->len = sizeof(int);
+            lhs_col_len = sizeof(int);
         }
 
         // 获取右侧的类型信息(可能是值或列)
         ColType rhs_type;
         if (cond.is_rhs_val) {
             // 如果右侧是常量值，初始化其原始数据，并获取类型
-            cond.rhs_val.init_raw(lhs_col->len);
+            cond.rhs_val.init_raw(lhs_col_len);
             rhs_type = cond.rhs_val.type;
         } else {
             if (cond.rhs_col.agg_type != AggregateType::COUNT) {

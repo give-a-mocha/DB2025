@@ -101,8 +101,11 @@ class GroupExecutor : public AbstractExecutor {
                 }
             }
         }
-
-        auto& front = grouped_records.begin()->second.front();
+        if (grouped_records.empty()) {
+            current_tuple = nullptr;
+            return;
+        }
+        const auto& front = grouped_records.begin()->second.front();
         // 创建一个新的 RmRecord 来存储代表元组的数据
         auto temp_tuple = std::make_unique<RmRecord>(front->size, front->data);
         current_tuple = std::move(temp_tuple);  // 移动所有权
@@ -172,6 +175,7 @@ class GroupExecutor : public AbstractExecutor {
      * @return 生成的分组键字符串。
      */
     std::list<std::string_view> generateGroupKey(std::unique_ptr<RmRecord>& record) {
+        TRACE_FUNCTION
         std::list<std::string_view> group_key_list;
         // 遍历所有分组列
         for (const auto& group_col : group_cols_) {
@@ -191,6 +195,7 @@ class GroupExecutor : public AbstractExecutor {
      */
     bool eval_aggr_conds(const std::vector<ColMeta>& rec_cols, const std::vector<Condition>& conds,
                          const std::vector<std::unique_ptr<RmRecord>>& records) const {
+        TRACE_FUNCTION
         return std::all_of(conds.begin(), conds.end(), [&](const Condition& cond) {
             // 对每个条件调用 eval_aggr_cond
             return eval_aggr_cond(rec_cols, cond, records);
