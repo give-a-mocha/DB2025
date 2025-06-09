@@ -42,12 +42,11 @@ See the Mulan PSL v2 for more details. */
  */
 class SortExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
-    ColMeta col_;                             // 排序列的元数据
-    size_t tuple_num;                         // 已处理的元组数量
-    bool is_desc_;                            // 是否为降序排序
-    std::vector<size_t> used_tuple;           // 已选择元组的索引表
-    std::unique_ptr<RmRecord> current_tuple;  // 当前处理的元组
+    std::unique_ptr<AbstractExecutor> prev_;            // 前序执行器
+    ColMeta col_;                                       // 排序列的元数据
+    bool is_desc_;                                      // 是否为降序排序
+    std::vector<std::unique_ptr<RmRecord>> sorted_tuples_;  // 排序后的元组缓存
+    size_t current_index_;                              // 当前访问的元组索引
 
    public:
     /**
@@ -67,9 +66,7 @@ class SortExecutor : public AbstractExecutor {
         auto pos = get_col(prev_->cols(), sel_col);
         col_ = *pos;
         is_desc_ = is_desc;
-        tuple_num = 0;
-        used_tuple.clear();
-        current_tuple = nullptr;
+        current_index_ = 0;
     }
 
     /**
@@ -86,21 +83,22 @@ class SortExecutor : public AbstractExecutor {
      * - 通过used_tuple记录已选择的位置
      */
     void beginTuple() override {
+        // 清空缓存
+        sorted_tuples_.clear();
+        current_index_ = 0;
+
+        // 读取所有元组
         prev_->beginTuple();
-        int cnt = 0;
-        int now = -1;
-        current_tuple = nullptr;
-        // 扫描找出第一个最值
         while (!prev_->is_end()) {
-            if (cmp(prev_->Next(), current_tuple)) {
-                current_tuple = prev_->Next();
-                now = cnt;
-            }
+            sorted_tuples_.push_back(prev_->Next());
             prev_->nextTuple();
-            cnt++;
         }
-        tuple_num++;
-        used_tuple.push_back(now);
+
+        // 使用std::sort排序
+        std::sort(sorted_tuples_.begin(), sorted_tuples_.end(),
+                 [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) {
+                     return this->cmp(a, b);
+                 });
     }
 
     /**
@@ -118,29 +116,25 @@ class SortExecutor : public AbstractExecutor {
      * - 正确维护排序状态和计数
      */
     void nextTuple() override {
-        prev_->beginTuple();
-        int cnt = 0;
-        int now = -1;
-        current_tuple = nullptr;
-        while (!prev_->is_end()) {
-            // 跳过已经选择过的元组
-            if (std::find(used_tuple.begin(), used_tuple.end(), cnt) == used_tuple.end() &&
-                cmp(prev_->Next(), current_tuple)) {
-                current_tuple = prev_->Next();
-                now = cnt;
-            }
-            prev_->nextTuple();
-            cnt++;
+        if (!is_end()) {
+            current_index_++;
         }
-        tuple_num++;
-        used_tuple.push_back(now);
     }
 
     /**
      * @brief 返回当前排序位置的元组
      * @return 当前元组的智能指针
      */
-    std::unique_ptr<RmRecord> Next() override { return std::move(current_tuple); }
+    std::unique_ptr<RmRecord> Next() override {
+        if (is_end()) {
+            return nullptr;
+        }
+        return std::make_unique<RmRecord>(*sorted_tuples_[current_index_]);
+    }
+
+    bool is_end() const override {
+        return current_index_ >= sorted_tuples_.size();
+    }
 
     /**
      * @brief 获取输出列的元数据
@@ -168,36 +162,41 @@ class SortExecutor : public AbstractExecutor {
      *    - 字符串: 使用strncmp比较
      * 3. 根据排序方向(升序/降序)返回结果
      */
-    bool cmp(std::unique_ptr<RmRecord> a, std::unique_ptr<RmRecord>& b) {
+    bool cmp(const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) const {
         // 处理空值情况
-        if (b == nullptr) {
-            return true;
+        if (!a || !b) {
+            if (!a && !b) return false;  // 两个都是null，认为相等
+            return !a ? (!is_desc_) : is_desc_;  // null值在升序时排在最后，降序时排在最前
         }
 
         // 获取要比较的字段值
-        char* rec_buf_a = a->data + col_.offset;
-        char* rec_buf_b = b->data + col_.offset;
+        const char* rec_buf_a = a->data + col_.offset;
+        const char* rec_buf_b = b->data + col_.offset;
 
         // 根据字段类型进行比较
-        if (col_.type == ColType::TYPE_INT) {
-            int value_a = *reinterpret_cast<int*>(rec_buf_a);
-            int value_b = *reinterpret_cast<int*>(rec_buf_b);
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
-        } else if (col_.type == ColType::TYPE_FLOAT) {
-            float value_a = *reinterpret_cast<float*>(rec_buf_a);
-            float value_b = *reinterpret_cast<float*>(rec_buf_b);
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
-        } else if (col_.type == ColType::TYPE_STRING) {
-            int comparison_result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
-            if (is_desc_) {
-                return comparison_result > 0;
-            } else {
-                return comparison_result < 0;
+        int result = 0;
+        switch (col_.type) {
+            case ColType::TYPE_INT: {
+                int value_a = *reinterpret_cast<const int*>(rec_buf_a);
+                int value_b = *reinterpret_cast<const int*>(rec_buf_b);
+                result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
+                break;
             }
+            case ColType::TYPE_FLOAT: {
+                float value_a = *reinterpret_cast<const float*>(rec_buf_a);
+                float value_b = *reinterpret_cast<const float*>(rec_buf_b);
+                result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
+                break;
+            }
+            case ColType::TYPE_STRING: {
+                result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
+                break;
+            }
+            default:
+                return false;
         }
-        return false;
+        
+        return is_desc_ ? (result > 0) : (result < 0);
     }
 
     /**
