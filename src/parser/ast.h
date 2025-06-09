@@ -17,9 +17,7 @@ See the Mulan PSL v2 for more details. */
 
 namespace ast {
 
-enum JoinType {
-    SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN, SV_SEMI_JOIN
-};
+enum JoinType { SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN, SV_SEMI_JOIN };
 
 enum SvType { SV_TYPE_INT, SV_TYPE_FLOAT, SV_TYPE_STRING, SV_TYPE_BOOL };
 
@@ -37,11 +35,16 @@ inline std::string SvAggregateType2Str(SvAggregateType agg_type) {
 }
 
 inline std::string generate_alias(std::string tab_name, std::string col_name, SvAggregateType agg_type) {
+    if (agg_type == SvAggregateType::NONE) {
+        return "";
+    }
     if (!tab_name.empty()) {
         tab_name += ".";
         tab_name += col_name;
+        return util::format("{}({})", SvAggregateType2Str(agg_type), tab_name);
+    } else {
+        return util::format("{}({})", SvAggregateType2Str(agg_type), col_name);
     }
-    return util::format("{}({})", SvAggregateType2Str(agg_type), tab_name);
 }
 
 // Base class for tree nodes

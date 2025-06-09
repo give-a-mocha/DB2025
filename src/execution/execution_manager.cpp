@@ -206,7 +206,6 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
             captions.push_back(sel_col.col_alias);
         else
             captions.push_back(sel_col.col_name);
-
     }
 
     // Print header into buffer
