@@ -82,15 +82,6 @@ class GroupExecutor : public AbstractExecutor {
             prev_->nextTuple();  // 移动到上一个执行器的下一个元组
         }
 
-        // for (const auto& [key, value] : grouped_records) {
-        //     // ERROR("umap key: {}", key);
-        //     for (auto& i : value) {
-        //         ERROR("tuple: course: {}, id: {}, score: {}", std::string_view(i->data, 20), *(int*)(i->data + 20),
-        //               *(float*)(i->data + 24));
-        //     }
-        //     ERROR("====");
-        // }
-
         // 根据 HAVING 条件过滤分组
         if (!having_conds_.empty()) {
             for (auto it = grouped_records.begin(); it != grouped_records.end();) {

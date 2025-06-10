@@ -11,12 +11,12 @@
  */
 class AggregateExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;                                    // 前一个执行器
-    std::vector<ColMeta> cols_;                                                // 输入列的元数据
-    std::vector<ColMeta> output_cols_;                                         // 输出列的元数据
-    std::vector<AggregateType> agg_types_;                                     // 聚合类型列表
-    std::vector<std::unique_ptr<RmRecord>> aggregated_records_;                // 聚合后的记录
-    std::vector<std::unique_ptr<RmRecord>>::iterator current_record_;          // 当前记录迭代器
+    std::unique_ptr<AbstractExecutor> prev_;                           // 前一个执行器
+    std::vector<ColMeta> cols_;                                        // 输入列的元数据
+    std::vector<ColMeta> output_cols_;                                 // 输出列的元数据
+    std::vector<AggregateType> agg_types_;                             // 聚合类型列表
+    std::vector<std::unique_ptr<RmRecord>> aggregated_records_;        // 聚合后的记录
+    std::vector<std::unique_ptr<RmRecord>>::iterator current_record_;  // 当前记录迭代器
 
    public:
     /**
@@ -28,10 +28,6 @@ class AggregateExecutor : public AbstractExecutor {
     AggregateExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
                       const std::vector<AggregateType>& agg_types)
         : prev_(std::move(prev)), agg_types_(agg_types) {
-        // for (const auto& type : agg_types_) {
-        //     INFO("AggregateExecutor: agg_type: {}", static_cast<int>(type));
-        // }
-        // 构造输出列元数据
         TRACE_FUNCTION
         for (const auto& sel_col : sel_cols) {
             // 处理COUNT(*)的特殊情况
@@ -195,8 +191,30 @@ class AggregateExecutor : public AbstractExecutor {
         std::vector<Value> values(agg_types_.size());
         for (size_t i = 0; i < agg_types_.size(); ++i) {
             // 调用聚合函数计算结果
-            Value res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
-            res.init_raw();
+            Value res;
+            try {
+                res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
+                res.init_raw();
+            } catch (InternalError& e) {
+                // 处理NULL值情况
+                switch (agg_types_[i]) {
+                    case AggregateType::COUNT:
+                        res.set_int(0);
+                        break;
+                    case AggregateType::SUM:
+                    case AggregateType::AVG:
+                        if (output_cols_[i].type == ColType::TYPE_INT) res.set_int(0);
+                        else res.set_float(0.0);
+                        break;
+                    case AggregateType::MIN:
+                    case AggregateType::MAX:
+                        // MIN/MAX对空值返回NULL
+                        throw InternalError("NULL result in MIN/MAX");
+                    default:
+                        throw InternalError("Unknown aggregate type");
+                }
+                res.init_raw();
+            }
             size += res.raw->size;
             values[i] = std::move(res);
         }
