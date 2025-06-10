@@ -463,15 +463,16 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
         const auto &sel_tab_cols = sm_manager_->db_.get_table(sel_tab_name).cols;
         all_cols.insert(all_cols.end(), sel_tab_cols.begin(), sel_tab_cols.end());
     }
-    TabCol sel_col;
-    for (auto &col : all_cols) {
-        if (col.name.compare(x->order->cols->col_name) == 0) {
-            sel_col.tab_name = col.tab_name;
-            sel_col.col_name = col.name;
-        }
+    std::vector<TabCol> sel_cols;
+    std::vector<bool> is_desc_list;
+    
+    // 处理所有排序列
+    for (const auto &orderby_info : query->order_bys) {
+        sel_cols.push_back(orderby_info.col);
+        is_desc_list.push_back(orderby_info.dir == ast::OrderByDir::OrderBy_DESC);
     }
-    return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), sel_col,
-                                      x->order->orderby_dir == ast::OrderBy_DESC);
+    
+    return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), sel_cols, is_desc_list);
 }
 
 std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
@@ -1108,9 +1109,11 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         }
         return x;
     } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-        //! 目前SortPlan的排序只有一个
-        if (std::find(need_cols.begin(), need_cols.end(), x->sel_col_) == need_cols.end()) {
-            need_cols.emplace_back(x->sel_col_);
+        // 添加所有排序列到需要的列中
+        for (const auto& sort_col : x->sel_cols_) {
+            if (std::find(need_cols.begin(), need_cols.end(), sort_col) == need_cols.end()) {
+                need_cols.emplace_back(sort_col);
+            }
         }
         x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         while (need_cols.size() > siz) {

@@ -15,4 +15,5 @@ select id,MAX(score) as max_score from grade group by id having COUNT(*) >  3;
 select id,MAX(score) as max_score,MIN(score) as min_score from grade group by id having COUNT(*) > 1 and MIN(score) > 88;
 select course ,COUNT(*) as row_num , COUNT(id) as student_num , MAX(score) as top_score, MIN(score) as lowest_score from grade group by course;
 select course, id, score from grade order by score desc;
+select course, id, score from grade order by score desc, id desc;
 drop table grade;

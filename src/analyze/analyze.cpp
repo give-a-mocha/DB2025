@@ -156,6 +156,18 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             }
         }
 
+       // 处理ORDER BY子句
+       if (x->has_sort) {
+           for (auto &sv_order_by : x->orders) {
+               OrderbyInfo order_by_info;
+               order_by_info.dir = sv_order_by->orderby_dir;
+
+               TabCol order_by_col = {"", sv_order_by->cols->col_name, sv_order_by->cols->tab_name};
+               convert_tabname(all_cols, order_by_col, tab_refs);
+               order_by_info.col = check_column(all_cols, order_by_col);
+               query->order_bys.push_back(order_by_info);
+           }
+       }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
         query->tables.push_back(x->tab_name);

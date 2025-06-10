@@ -186,8 +186,8 @@ class GroupPlan : public Plan {
 class SortPlan : public Plan {
    public:
     std::shared_ptr<Plan> subplan_;  ///< 子计划
-    TabCol sel_col_;                 ///< 用于排序的列
-    bool is_desc_;                   ///< 是否为降序排序
+    std::vector<TabCol> sel_cols_;   ///< 用于排序的列
+    std::vector<bool> is_desc_;      ///< 是否为降序排序
 
     ~SortPlan() = default;
 
@@ -195,11 +195,11 @@ class SortPlan : public Plan {
      * @brief 构造排序计划节点
      * @param tag 计划类型(T_Sort)
      * @param subplan 子计划
-     * @param sel_col 排序列
+     * @param sel_cols 排序列
      * @param is_desc 是否降序
      */
-    SortPlan(PlanTag tag, std::shared_ptr<Plan> subplan, TabCol sel_col, bool is_desc)
-        : Plan(tag), subplan_(std::move(subplan)), sel_col_(sel_col), is_desc_(is_desc) {}
+    SortPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols, std::vector<bool> is_desc)
+        : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)), is_desc_(std::move(is_desc)) {}
 };
 
 /**

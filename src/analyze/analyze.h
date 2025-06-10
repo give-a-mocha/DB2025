@@ -38,10 +38,10 @@
 #include <vector>
 
 #include "common/Hash.h"
+#include "common/TraceStack.hpp"
 #include "common/common.h"
 #include "parser/parser.h"
 #include "system/sm.h"
-#include "common/TraceStack.hpp"
 
 /**
  * @brief 列检查器类，用于高效验证列引用的有效性
@@ -162,6 +162,7 @@ class Query {
 
     std::vector<Condition> having_conds;  // HAVING子句的条件
 
+    std::vector<OrderbyInfo> order_bys;  // ORDER BY 子句
     /**
      * @brief 默认构造函数
      * @note 创建一个空的查询对象，各容器保持为空

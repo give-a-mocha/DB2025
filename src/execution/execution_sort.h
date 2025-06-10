@@ -23,30 +23,21 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 排序执行器，负责实现ORDER BY的排序功能
- *
- * @details 主要功能和特点：
- * 1. 排序功能:
- *    - 支持按指定列排序
- *    - 支持升序(ASC)和降序(DESC)
- *    - 处理多种数据类型(INT,FLOAT,STRING)
- *
- * 2. 实现策略:
- *    - 采用选择排序算法
- *    - 使用索引记录已处理的元组
- *    - 支持按需获取下一个元组
- *
- * 3. 资源管理:
- *    - 动态分配排序空间
- *    - 避免重复处理数据
- *    - 优化内存使用效率
  */
+
 class SortExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;            // 前序执行器
-    ColMeta col_;                                       // 排序列的元数据
-    bool is_desc_;                                      // 是否为降序排序
+    struct SortColumn {
+        ColMeta col;   // 列元数据
+        bool is_desc;  // 是否降序
+
+        SortColumn(const ColMeta& c, bool desc) : col(c), is_desc(desc) {}
+    };
+
+    std::unique_ptr<AbstractExecutor> prev_;                // 前序执行器
+    std::vector<SortColumn> sort_cols_;                     // 排序列信息
     std::vector<std::unique_ptr<RmRecord>> sorted_tuples_;  // 排序后的元组缓存
-    size_t current_index_;                              // 当前访问的元组索引
+    size_t current_index_;                                  // 当前访问的元组索引
 
    public:
     /**
@@ -54,18 +45,15 @@ class SortExecutor : public AbstractExecutor {
      * @param prev 前序执行器
      * @param sel_col 排序列的表列引用
      * @param is_desc 是否降序排序
-     *
-     * @details 初始化排序执行器:
-     * 1. 设置前序执行器
-     * 2. 获取排序列的元数据
-     * 3. 初始化排序状态
      */
-    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const TabCol& sel_col, bool is_desc) {
+    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
+                 const std::vector<bool>& is_desc) {
         prev_ = std::move(prev);
-        // 查找排序列的元数据
-        auto pos = get_col(prev_->cols(), sel_col);
-        col_ = *pos;
-        is_desc_ = is_desc;
+        // 获取所有排序列的元数据
+        for (size_t i = 0; i < sel_cols.size(); i++) {
+            auto col_meta = get_col(prev_->cols(), sel_cols[i]);
+            sort_cols_.emplace_back(*col_meta, is_desc[i]);
+        }
         current_index_ = 0;
     }
 
@@ -95,25 +83,13 @@ class SortExecutor : public AbstractExecutor {
         }
 
         // 使用std::sort排序
-        std::sort(sorted_tuples_.begin(), sorted_tuples_.end(),
-                 [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) {
-                     return this->cmp(a, b);
-                 });
+        std::sort(
+            sorted_tuples_.begin(), sorted_tuples_.end(),
+            [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) { return this->cmp(a, b); });
     }
 
     /**
      * @brief 获取下一个排序后的元组
-     *
-     * @details 实现步骤:
-     * 1. 重新扫描所有输入元组
-     * 2. 排除已经选择过的元组
-     * 3. 在剩余元组中找出极值
-     * 4. 更新排序状态
-     *
-     * 注意事项:
-     * - 每次都需要完整扫描剩余元组
-     * - 通过used_tuple跳过已处理的元组
-     * - 正确维护排序状态和计数
      */
     void nextTuple() override {
         if (!is_end()) {
@@ -132,9 +108,7 @@ class SortExecutor : public AbstractExecutor {
         return std::make_unique<RmRecord>(*sorted_tuples_[current_index_]);
     }
 
-    bool is_end() const override {
-        return current_index_ >= sorted_tuples_.size();
-    }
+    bool is_end() const override { return current_index_ >= sorted_tuples_.size(); }
 
     /**
      * @brief 获取输出列的元数据
@@ -166,37 +140,41 @@ class SortExecutor : public AbstractExecutor {
         // 处理空值情况
         if (!a || !b) {
             if (!a && !b) return false;  // 两个都是null，认为相等
-            return !a ? (!is_desc_) : is_desc_;  // null值在升序时排在最后，降序时排在最前
+            return !a;                   // null值始终排在最后
         }
 
-        // 获取要比较的字段值
-        const char* rec_buf_a = a->data + col_.offset;
-        const char* rec_buf_b = b->data + col_.offset;
+        // 逐列比较
+        for (const auto& sort_col : sort_cols_) {
+            const char* rec_buf_a = a->data + sort_col.col.offset;
+            const char* rec_buf_b = b->data + sort_col.col.offset;
 
-        // 根据字段类型进行比较
-        int result = 0;
-        switch (col_.type) {
-            case ColType::TYPE_INT: {
-                int value_a = *reinterpret_cast<const int*>(rec_buf_a);
-                int value_b = *reinterpret_cast<const int*>(rec_buf_b);
-                result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
-                break;
+            int result = 0;
+            switch (sort_col.col.type) {
+                case ColType::TYPE_INT: {
+                    int value_a = *reinterpret_cast<const int*>(rec_buf_a);
+                    int value_b = *reinterpret_cast<const int*>(rec_buf_b);
+                    result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
+                    break;
+                }
+                case ColType::TYPE_FLOAT: {
+                    float value_a = *reinterpret_cast<const float*>(rec_buf_a);
+                    float value_b = *reinterpret_cast<const float*>(rec_buf_b);
+                    result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
+                    break;
+                }
+                case ColType::TYPE_STRING: {
+                    result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(sort_col.col.len));
+                    break;
+                }
+                default:
+                    continue;  // 跳过不支持的类型
             }
-            case ColType::TYPE_FLOAT: {
-                float value_a = *reinterpret_cast<const float*>(rec_buf_a);
-                float value_b = *reinterpret_cast<const float*>(rec_buf_b);
-                result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
-                break;
+
+            if (result != 0) {
+                return sort_col.is_desc ? (result > 0) : (result < 0);
             }
-            case ColType::TYPE_STRING: {
-                result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
-                break;
-            }
-            default:
-                return false;
         }
-        
-        return is_desc_ ? (result > 0) : (result < 0);
+        return false;  // 所有列都相等
     }
 
     /**

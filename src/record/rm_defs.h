@@ -163,11 +163,6 @@ struct RmRecord {
      * @param size_ 记录的大小(字节)
      * @throw InvalidRecordSizeError 如果size超出限制
      *
-     * @details 分配过程：
-     * 1. 验证记录大小的合法性
-     * 2. 分配指定大小的内存
-     * 3. 设置分配标记
-     *
      * @note 分配的内存会在析构时自动释放
      */
     RmRecord(int size_) {
@@ -182,11 +177,6 @@ struct RmRecord {
      * @param data_ 初始数据指针
      * @throw InvalidRecordSizeError 如果size超出限制
      * @throw std::bad_alloc 如果内存分配失败
-     *
-     * @details 创建过程：
-     * 1. 分配内存空间
-     * 2. 复制初始数据
-     * 3. 设置分配标记
      *
      * @warning data_指向的内存必须至少有size_字节
      */
@@ -206,15 +196,6 @@ struct RmRecord {
     /**
      * @brief 从序列化数据中恢复记录
      * @param data_ 序列化的数据缓冲区
-     *
-     * @details 反序列化过程：
-     * 1. 读取记录大小(前4字节)
-     * 2. 释放现有数据(如果已分配)
-     * 3. 分配新的内存空间
-     * 4. 复制实际数据
-     *
-     * @note 序列化格式：
-     * [size(4字节)][data(size字节)]
      */
     void Deserialize(const char* data_) {
         size = *reinterpret_cast<const int*>(data_);

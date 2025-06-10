@@ -26,6 +26,7 @@
 #include <cstdio>
 
 #include "analyze/analyze.h"
+#include "common/TraceStack.hpp"
 #include "common/print.hpp"
 #include "errors.h"
 #include "optimizer/optimizer.h"
@@ -36,9 +37,6 @@
 
 #define SOCK_PORT 8765
 #define MAX_CONN_LIMIT 8
-
-#define ENABLE_TRACE
-#include "common/TraceStack.hpp"
 
 static bool should_exit = false;
 

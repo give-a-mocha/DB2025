@@ -323,6 +323,10 @@ struct SetClause {
     Value rhs;
 };
 
+struct OrderbyInfo {
+    TabCol col;
+    ast::OrderByDir dir;
+};
 inline CompOp swap_op(CompOp op) {
     switch (op) {
         case CompOp::OP_EQ:

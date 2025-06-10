@@ -17,9 +17,7 @@ See the Mulan PSL v2 for more details. */
 
 namespace ast {
 
-enum JoinType {
-    SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN, SV_SEMI_JOIN
-};
+enum JoinType { SV_INNER_JOIN, SV_LEFT_JOIN, SV_RIGHT_JOIN, SV_FULL_JOIN, SV_SEMI_JOIN };
 
 enum SvType { SV_TYPE_INT, SV_TYPE_FLOAT, SV_TYPE_STRING, SV_TYPE_BOOL };
 
@@ -253,38 +251,38 @@ struct SelectStmt : public TreeNode {
     bool has_sort;
     std::vector<std::shared_ptr<GroupBy>> group;            // 添加group by支持
     std::vector<std::shared_ptr<BinaryExpr>> having_conds;  // 添加having支持
-    std::shared_ptr<OrderBy> order;
+    std::vector<std::shared_ptr<OrderBy>> orders;
 
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
                std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-               std::shared_ptr<OrderBy> order_)
+               std::vector<std::shared_ptr<OrderBy>> orders_ = std::vector<std::shared_ptr<OrderBy>>())
         : cols(std::move(cols_)),
           tabs(std::move(tabs_)),
           conds(std::move(conds_)),
           jointree(std::move(jointree_)),
-          order(std::move(order_)) {
-        has_sort = (bool)order;
+          orders(std::move(orders_)) {
+        has_sort = !orders.empty();
     }
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
                std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::vector<std::shared_ptr<GroupBy>> group_, std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
-               std::shared_ptr<OrderBy> order_)
+               std::vector<std::shared_ptr<OrderBy>> orders_ = std::vector<std::shared_ptr<OrderBy>>())
         : cols(std::move(cols_)),
           tabs(std::move(tabs_)),
           conds(std::move(conds_)),
           jointree(std::move(jointree_)),
           group(std::move(group_)),
           having_conds(std::move(having_conds_)),
-          order(std::move(order_)) {
-        has_sort = (bool)order;
+          orders(std::move(orders_)) {
+        has_sort = !orders.empty();
     }
 };
 
 struct ExplainStmt : public SelectStmt {
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
                 std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-                std::shared_ptr<OrderBy> order_)
-        : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_), std::move(order_)) {}
+                std::vector<std::shared_ptr<OrderBy>> orders_)
+        : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_), std::move(orders_)) {}
 };
 
 // set enable_nestloop
@@ -331,6 +329,7 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+    std::vector<std::shared_ptr<OrderBy>> sv_orderbys;
 
     std::shared_ptr<GroupBy> sv_groupby;
     std::vector<std::shared_ptr<GroupBy>> sv_groupbys;

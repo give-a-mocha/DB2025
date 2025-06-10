@@ -76,7 +76,8 @@ using namespace ast;
 %type <sv_conds> whereClause optWhereClause // WHERE子句
 
 // ORDER BY相关
-%type <sv_orderby> order_clause opt_order_clause  // ORDER BY子句
+%type <sv_orderby> order_clause 
+%type <sv_orderbys> opt_order_clause  // ORDER BY子句
 %type <sv_orderby_dir> opt_asc_desc               // 排序方向
 
 // JOIN相关
@@ -505,7 +506,11 @@ tableList:
 opt_order_clause:
     ORDER BY order_clause                   // 有ORDER BY子句
     { 
-        $$ = $3; 
+        $$ = std::vector<std::shared_ptr<OrderBy>>{$3};
+    }
+    |   opt_order_clause ',' order_clause
+    { 
+        $1.push_back($3);
     }
     |   /* epsilon */                       // 没有ORDER BY子句
     { 
