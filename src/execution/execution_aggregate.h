@@ -53,6 +53,11 @@ class AggregateExecutor : public AbstractExecutor {
         for (size_t i = 1; i < output_cols_.size(); ++i) {
             // 根据聚合类型设置输出类型
             switch (agg_types[i]) {
+                case AggregateType::NONE:
+                    // 如果没有聚合，保持原始类型
+                    output_cols_[i].type = cols_[i].type;
+                    output_cols_[i].len = cols_[i].len;
+                    break;
                 case AggregateType::COUNT:
                     output_cols_[i].type = ColType::TYPE_INT;
                     output_cols_[i].len = sizeof(int);

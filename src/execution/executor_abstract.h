@@ -370,14 +370,14 @@ class AbstractExecutor {
             // 为 COUNT(*) 创建虚拟的列元数据，类型为整数
             col_meta = ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0};
         } else {
-            // 从记录列信息中查找指定的目标列，不比较表名
-            col_meta = *get_col(rec_cols, tab_col, false);
+            // 从记录列信息中查找指定的目标列
+            col_meta = *get_col(rec_cols, tab_col);
         }
         // 根据聚合函数类型进行不同的计算
         if (agg_type == AggregateType::NONE) {
             // 非聚合情况：直接返回第一条记录中该列的值
             for (auto &col_meta : rec_cols) {
-                if (col_meta.name == tab_col.col_name) {
+                if (col_meta.name == tab_col.col_name && col_meta.tab_name == tab_col.tab_name) {
                     val.set_col_data(col_meta.type, rec[0]->data + col_meta.offset, col_meta.len);
                     break;
                 }

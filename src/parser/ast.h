@@ -36,7 +36,13 @@ inline std::string SvAggregateType2Str(SvAggregateType agg_type) {
 
 inline std::string generate_alias(std::string tab_name, std::string col_name, SvAggregateType agg_type) {
     if (agg_type == SvAggregateType::NONE) {
-        return "";
+        if (!tab_name.empty()) {
+            tab_name += ".";
+            tab_name += col_name;
+            return tab_name;
+        } else {
+            return col_name;
+        }
     }
     if (!tab_name.empty()) {
         tab_name += ".";
@@ -159,10 +165,16 @@ struct Col : public Expr {
     SvAggregateType aggregate_type{SvAggregateType::NONE};  // 聚合类型
 
     Col(std::string tab_name_, std::string col_name_)
-        : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias("") {}
+        : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias(generate_alias(tab_name, col_name, SvAggregateType::NONE)) {}
 
     Col(std::string tab_name_, std::string col_name_, std::string alias_)
-        : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias(std::move(alias_)) {}
+        : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {
+        if (alias_.empty()) {
+            alias = generate_alias(tab_name, col_name, SvAggregateType::NONE);
+        } else {
+            alias = std::move(alias_);
+        }
+    }
 
     Col(std::string tab_name_, std::string col_name_, std::string alias_, SvAggregateType aggregate_type_)
         : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), aggregate_type(aggregate_type_) {
@@ -288,8 +300,8 @@ struct ExplainStmt : public SelectStmt {
                 std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
                 std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
         : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_),
-                    std::vector<std::shared_ptr<GroupBy>>(), std::vector<std::shared_ptr<BinaryExpr>>(),
-                    std::move(orders_), std::move(limit_)) {}
+                     std::vector<std::shared_ptr<GroupBy>>(), std::vector<std::shared_ptr<BinaryExpr>>(),
+                     std::move(orders_), std::move(limit_)) {}
 };
 
 // set enable_nestloop
