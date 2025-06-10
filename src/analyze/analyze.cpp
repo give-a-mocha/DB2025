@@ -116,6 +116,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
 
+        assert(x->group.empty());
         // 处理group by子句
         for (auto &sv_group_col : x->group) {
             TabCol group_col = {"", sv_group_col->cols->col_name, sv_group_col->cols->tab_name};
