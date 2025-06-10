@@ -160,31 +160,31 @@ class AggregateExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
         TRACE_FUNCTION
-        // 检查是否所有聚合类型都是COUNT
-        bool is_count = true;
-        for (const auto& agg_type : agg_types_) {
-            if (agg_type != AggregateType::COUNT) {
-                is_count = false;
-                break;
-            }
-        }
+        // // 检查是否所有聚合类型都是COUNT
+        // bool is_count = true;
+        // for (const auto& agg_type : agg_types_) {
+        //     if (agg_type != AggregateType::COUNT) {
+        //         is_count = false;
+        //         break;
+        //     }
+        // }
 
-        // 如果没有记录且不是COUNT操作，返回空
-        if (records.empty() && !is_count) return nullptr;
-        // 如果没有记录但是COUNT操作，返回0
-        else if (records.empty() && is_count) {
-            auto count_value = Value();
-            count_value.set_int(0);  // COUNT结果为0
-            count_value.init_raw();
-            size_t size = agg_types_.size() * count_value.raw->size;
+        // // 如果没有记录且不是COUNT操作，返回空
+        // if (records.empty() && !is_count) return nullptr;
+        // // 如果没有记录但是COUNT操作，返回0
+        // else if (records.empty() && is_count) {
+        //     auto count_value = Value();
+        //     count_value.set_int(0);  // COUNT结果为0
+        //     count_value.init_raw();
+        //     size_t size = agg_types_.size() * count_value.raw->size;
 
-            auto result = std::make_unique<RmRecord>(size);
+        //     auto result = std::make_unique<RmRecord>(size);
 
-            for (size_t i = 0; i < agg_types_.size(); ++i) {
-                memcpy(result->data + i * count_value.raw->size, count_value.raw->data, count_value.raw->size);
-            }
-            return result;
-        }
+        //     for (size_t i = 0; i < agg_types_.size(); ++i) {
+        //         memcpy(result->data + i * count_value.raw->size, count_value.raw->data, count_value.raw->size);
+        //     }
+        //     return result;
+        // }
 
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
@@ -192,31 +192,28 @@ class AggregateExecutor : public AbstractExecutor {
         for (size_t i = 0; i < agg_types_.size(); ++i) {
             // 调用聚合函数计算结果
             Value res;
-            try {
+            if(!records.empty()) {
                 res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
-                res.init_raw();
-            } catch (InternalError& e) {
+            } else {
                 // 处理NULL值情况
                 switch (agg_types_[i]) {
                     case AggregateType::COUNT:
                         res.set_int(0);
                         break;
+                    case AggregateType::MIN:
+                    case AggregateType::MAX:
                     case AggregateType::SUM:
                         if (output_cols_[i].type == ColType::TYPE_INT) res.set_int(0);
-                            else res.set_float(0.0);
-                            break;
+                        else res.set_float(0.0);
+                        break;
                     case AggregateType::AVG:
                         res.set_float(0.0);
                         break;
-                    case AggregateType::MIN:
-                    case AggregateType::MAX:
-                        // MIN/MAX对空值返回NULL
-                        throw InternalError("NULL result in MIN/MAX");
                     default:
                         throw InternalError("Unknown aggregate type");
                 }
-                res.init_raw();
             }
+            res.init_raw();
             size += res.raw->size;
             values[i] = std::move(res);
         }
