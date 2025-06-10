@@ -214,6 +214,9 @@ class UpdateExecutor : public AbstractExecutor {
         // 第四阶段：更新所有记录数据
         for (size_t i = 0; i < rids_.size(); ++i) {
             fh_->update_record(rids_[i], new_records[i]->data, context_);
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_name_, rids_[i], *old_records[i])
+            );
         }
 
         return nullptr;

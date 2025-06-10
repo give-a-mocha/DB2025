@@ -87,6 +87,9 @@ class DeleteExecutor : public AbstractExecutor {
 
             // 从表中删除记录
             fh_->delete_record(rid, context_);
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_name_, rid, *rec)
+            );
         }
         return nullptr;
     }

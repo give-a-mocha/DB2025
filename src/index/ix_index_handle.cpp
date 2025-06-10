@@ -592,6 +592,7 @@ bool IxIndexHandle::adjust_root(IxNodeHandle *old_root_node) {
             file_hdr_->root_page_ = new_root_node->get_page_no();
             new_root_node->page_hdr->parent = INVALID_PAGE_ID;  // 更新新根结点的父亲结点为无效
             buffer_pool_manager_->unpin_page(new_root_node->get_page_id(), true);
+            delete new_root_node;  // 释放新根结点内存
             release_node_handle(*old_root_node);
             return true;
         }
@@ -701,6 +702,7 @@ bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, 
 Rid IxIndexHandle::get_rid(const Iid &iid) const {
     IxNodeHandle *node = fetch_node(iid.page_no);
     if (iid.slot_no >= node->get_size()) {
+        buffer_pool_manager_->unpin_page(node->get_page_id(), false);
         delete node;  // 异常情况也要释放内存
         throw IndexEntryNotFoundError();
     }

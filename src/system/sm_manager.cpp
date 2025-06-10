@@ -474,6 +474,7 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<std::s
     auto it = ihs_.find(index_name);
 
     if (it != ihs_.end()) {
+        // 如果已经打开从缓冲池中删掉，并关闭文件
         ix_manager_->drop_index(it->second.get());
         ihs_.erase(it);
     }

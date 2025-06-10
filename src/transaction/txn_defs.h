@@ -39,7 +39,7 @@ enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, S
 enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };
 
 /**
- * @brief 事务的写操作记录，用于事务的回滚
+ * 事务的写操作记录，用于事务的回滚
  * INSERT
  * --------------------------------
  * | wtype | tab_name | tuple_rid |
@@ -79,7 +79,6 @@ public:
     inline std::tuple<WType, const std::string &, const Rid &, const RmRecord &> GetAll() {
         return std::make_tuple(wtype_, tab_name_, rid_, record_);
     }
-
 };
 
 /* 多粒度锁，加锁对象的类型，包括记录和表 */

@@ -110,6 +110,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 
     // 清空事务相关的集合
     txn->clear();
+    //?对于write_set中的所有数据项刷新buffer_pool
 
     // 3. 资源清理
     // - 释放事务占用的内存
@@ -171,43 +172,46 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
 
     Transaction* txn = context->txn_;
 
-    std::shared_ptr<std::deque<WriteRecord*>> write_set = txn->get_write_set();
+    auto write_set = txn->get_write_set();
 
     for (auto iter = write_set->rbegin(); iter != write_set->rend(); iter++) {
-        const auto [write_type, table_name, rid, record] = (*iter)->GetAll();
+        const auto write_type = (*iter)->GetWriteType();
+        const auto table_name = (*iter)->GetTableName();
+        const auto rid = (*iter)->GetRid();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
 
         switch (write_type) {
             case WType::INSERT_TUPLE: {
-                auto log_record = std::make_unique<DeleteLogRecord>(txn->get_transaction_id(), record, rid, table_name);
+                auto record = handle->get_record(rid, context);
+                // Pass *record (RmRecord) instead of record (unique_ptr<RmRecord>)
+                auto log_record = std::make_unique<DeleteLogRecord>(txn->get_transaction_id(), *record, rid, table_name);
                 record_link_management(log_record.get(), log_manager, txn);
 
-                //  TODO: 删除索引
-                delete_index_record(sm_manager_->db_.get_table(table_name), handle->get_record(rid, context).get(), rid, context );
+                delete_index_record(sm_manager_->db_.get_table(table_name), record.get(), rid, context );
                 handle->delete_record(rid, context);
                 break;
             }
             case WType::UPDATE_TUPLE: {
-                auto old_record = handle->get_record(rid, context);
+                auto old_record = (*iter)->GetRecord();
+                auto new_record = handle->get_record(rid, context);
+                // Pass *new_record (RmRecord) instead of new_record (unique_ptr<RmRecord>)
                 auto log_record =
-                    std::make_unique<UpdateLogRecord>(txn->get_transaction_id(), *old_record, record, rid, table_name);
+                    std::make_unique<UpdateLogRecord>(txn->get_transaction_id(), old_record, *new_record, rid, table_name);
                 record_link_management(log_record.get(), log_manager, txn);
 
-                //  TODO: 删除索引
-                delete_index_record(sm_manager_->db_.get_table(table_name), old_record.get(), rid, context);
-                handle->update_record(rid, record.data, context);
-                //  TODO: 添加索引
-                insert_index_record(sm_manager_->db_.get_table(table_name), &record, rid, context);
+
+                delete_index_record(sm_manager_->db_.get_table(table_name), new_record.get(), rid, context);
+                handle->update_record(rid, old_record.data, context);
+                insert_index_record(sm_manager_->db_.get_table(table_name), &old_record, rid, context);
                 break;
             }
             case WType::DELETE_TUPLE: {
+                auto record = (*iter)->GetRecord();
                 auto log_record = std::make_unique<InsertLogRecord>(txn->get_transaction_id(), record, rid, table_name);
                 record_link_management(log_record.get(), log_manager, txn);
 
-                // TODO: 添加索引
                 insert_index_record(sm_manager_->db_.get_table(table_name), &record, rid, context);
                 handle->insert_record(rid, record.data);
-
                 break;
             }
             default:
@@ -290,7 +294,7 @@ void TransactionManager::delete_index_record(TabMeta tab_, RmRecord* rec, Rid ri
     }
 }
 
-void TransactionManager::insert_index_record(TabMeta tab_, const RmRecord* rec, Rid rid, Context *context){
+void TransactionManager::insert_index_record(TabMeta tab_, RmRecord* rec, Rid rid, Context *context){
     for(const auto& index : tab_.indexes) {
         auto ix_ = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(index.tab_name, index.cols)).get();
         auto key = std::make_unique<char[]>(index.col_tot_len);

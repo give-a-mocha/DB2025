@@ -85,14 +85,13 @@ class InsertExecutor : public AbstractExecutor {
 
         // 插入记录到文件
         rid_ = fh_->insert_record(rec.data, context_);
-
         // 更新索引
         if (!insert_index(rec)) {
             // 索引插入失败，回滚记录
             fh_->delete_record(rid_, context_);
             throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
         }
-
+        context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_name_, rid_));
         return nullptr;
     }
 
