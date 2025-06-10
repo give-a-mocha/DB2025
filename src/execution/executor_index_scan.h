@@ -199,10 +199,10 @@ class IndexScanExecutor : public AbstractExecutor {
                 if (cond.lhs_col.col_name == col.name && cond.is_rhs_val) {
                     switch (cond.op) {
                         case CompOp::OP_EQ: {
-                            if (compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
+                            if (Value::compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
                                 min_val = cond.rhs_val;
                             }
-                            if (compare(cond.rhs_val, max_val, CompOp::OP_LT)) {
+                            if (Value::compare(cond.rhs_val, max_val, CompOp::OP_LT)) {
                                 max_val = cond.rhs_val;
                             }
                             break;
@@ -210,7 +210,7 @@ class IndexScanExecutor : public AbstractExecutor {
 
                         case CompOp::OP_LT:
                         case CompOp::OP_LE: {
-                            if (compare(cond.rhs_val, max_val, CompOp::OP_LT)) {
+                            if (Value::compare(cond.rhs_val, max_val, CompOp::OP_LT)) {
                                 max_val = cond.rhs_val;
                             }
                             break;
@@ -218,7 +218,7 @@ class IndexScanExecutor : public AbstractExecutor {
 
                         case CompOp::OP_GT:
                         case CompOp::OP_GE: {
-                            if (compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
+                            if (Value::compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
                                 min_val = cond.rhs_val;
                             }
                             break;

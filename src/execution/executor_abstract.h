@@ -142,7 +142,6 @@ class AbstractExecutor {
         return pos;
     }
 
-    // 判断是否为数值类型
     /**
      * @brief 判断列类型是否为数值类型
      * @param type 要检查的列类型
@@ -150,64 +149,7 @@ class AbstractExecutor {
      */
     static bool is_numeric_type(ColType type) { return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT; }
 
-    /**
-     * @brief 从原始数据中提取值
-     *
-     * 根据列类型从内存中读取数据并转换为Value对象
-     * 支持INT和FLOAT类型，不支持直接获取STRING类型
-     *
-     * @param p 值的类型
-     * @param a 指向原始数据的指针
-     * @return 转换后的Value对象
-     * @throw InternalError 当尝试获取STRING类型时
-     */
-    Value get_value(ColType p, const char *a) {
-        Value res;
-        switch (p) {
-            case ColType::TYPE_INT: {
-                int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
-                res.set_int(ia);
-                break;
-            }
-
-            case ColType::TYPE_FLOAT: {
-                float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
-                res.set_float(fa);
-                break;
-            }
-
-            case ColType::TYPE_STRING: {
-                // 需要手动处理string类型的获取
-                throw InternalError("get_value::Unexpected string value type at " + getType());
-            }
-        }
-        return res;
-    }
-
-    /**
-     * @brief 在两个Value对象间进行类型转换
-     *
-     * 处理数值类型之间的转换：
-     * - 如果类型相同，不进行转换
-     * - INT转换为FLOAT时，将整数转换为对应的浮点数
-     *
-     * @param a 第一个Value对象(会被修改)
-     * @param b 第二个Value对象(会被修改)
-     */
-    static void convert(Value &a, Value &b) {
-        // 数值类型的转化(int, float)
-        // int -> float
-        if (a.type == b.type) return;
-        if (b.type == ColType::TYPE_INT) {
-            b.set_float(static_cast<float>(b.int_val));
-            return;
-        } else {
-            a.set_float(static_cast<float>(a.int_val));
-            return;
-        }
-    }
-
-    /**
+        /**
      * @brief 评估记录是否满足所有条件
      * @param rec_cols 记录的列元数据集合
      * @param conds 条件表达式列表
@@ -266,14 +208,14 @@ class AbstractExecutor {
 
         int cmp;
         if (is_numeric) {
-            Value lhs_val = get_value(lhs_col->type, lhs_data);
-            Value rhs_val = get_value(rhs_type, rhs_data);
+            Value lhs_val = Value::get_value(lhs_col->type, lhs_data);
+            Value rhs_val = Value::get_value(rhs_type, rhs_data);
             // 整数比较
             if (lhs_col->type == ColType::TYPE_INT && rhs_type == ColType::TYPE_INT) {
                 cmp = (lhs_val.int_val < rhs_val.int_val) ? -1 : (lhs_val.int_val > rhs_val.int_val) ? 1 : 0;
             } else {
                 // 先转化成浮点数
-                convert(lhs_val, rhs_val);
+                Value::convert(lhs_val, rhs_val);
                 // 浮点数比较
                 cmp = (lhs_val.float_val < rhs_val.float_val) ? -1 : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
             }
@@ -297,57 +239,6 @@ class AbstractExecutor {
                 return cmp >= 0;
             default:
                 throw InternalError("eval_cond::Unexpected op type at " + getType());
-        }
-    }
-
-    /**
-     * @brief 比较两个值的通用实现
-     * @param lhs 左操作数
-     * @param rhs 右操作数
-     * @param op 比较操作类型
-     * @return 比较结果
-     * @throw IncompatibleTypeError 类型不兼容时
-     * @note 优化考虑：
-     * - 常见类型快速路径
-     * - 大小写敏感性
-     * - 特殊值处理
-     */
-    static bool compare(Value lhs, Value rhs, CompOp op) {
-        TRACE_FUNCTION
-        bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
-        if (lhs.type != rhs.type && !is_numeric) {
-            throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
-        }
-        int cmp;
-        if (is_numeric) {
-            // 整数比较
-            if (lhs.type == ColType::TYPE_INT && rhs.type == ColType::TYPE_INT) {
-                cmp = (lhs.int_val < rhs.int_val) ? -1 : (lhs.int_val > rhs.int_val) ? 1 : 0;
-            } else {
-                // 先转化成浮点数
-                convert(lhs, rhs);
-                // 浮点数比较
-                cmp = (lhs.float_val < rhs.float_val) ? -1 : (lhs.float_val > rhs.float_val) ? 1 : 0;
-            }
-        } else if (lhs.type == ColType::TYPE_STRING) {
-            size_t len = std::max(lhs.str_val.size(), rhs.str_val.size());
-            cmp = strncmp(lhs.str_val.c_str(), rhs.str_val.c_str(), len);
-        }
-        switch (op) {
-            case CompOp::OP_EQ:
-                return cmp == 0;
-            case CompOp::OP_NE:
-                return cmp != 0;
-            case CompOp::OP_LT:
-                return cmp < 0;
-            case CompOp::OP_GT:
-                return cmp > 0;
-            case CompOp::OP_LE:
-                return cmp <= 0;
-            case CompOp::OP_GE:
-                return cmp >= 0;
-            default:
-                throw InternalError("compare::Unexpected op type at compare.");
         }
     }
 
@@ -447,7 +338,6 @@ class AbstractExecutor {
                 int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
                     return acc + *(int *)(record->data + col_meta.offset);
                 });
-                WARN("sum: {}", sum);
                 val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
             } else if (col_meta.type == ColType::TYPE_FLOAT) {
                 // 浮点数求和

@@ -32,21 +32,20 @@ class GroupExecutor : public AbstractExecutor {
      * @brief 用于存储分组后的记录。
      * 键是根据 group_cols_ 生成的字符串，值是属于该组的 RmRecord 列表。
      */
-    std::vector<std::pair<size_t, std::vector<std::unique_ptr<RmRecord>>>> grouped_records;
-    std::unique_ptr<RmRecord> current_tuple;  ///< 当前 Next() 方法将返回的元组（通常是每个组的代表元组）
+    std::unordered_map<std::list<std::string_view>, std::vector<std::unique_ptr<RmRecord>>, ListHash> grouped_records;
+    std::unordered_map<std::list<std::string_view>, std::vector<std::unique_ptr<RmRecord>>, ListHash>::iterator
+        now_iter;
 
     GroupExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
                   const std::vector<TabCol>& group_cols, std::vector<Condition> conds) {
         TRACE_FUNCTION
-        prev_ = std::move(prev);  // 移动上一个执行器的所有权
+        prev_ = std::move(prev);
 
         std::for_each(sel_cols.begin(), sel_cols.end(), [this](const auto& sel_col) {
-            // 特殊处理 COUNT(*)
             if (sel_col.col_name == "*" && sel_col.agg_type == AggregateType::COUNT) {
                 cols_.push_back(
                     ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0});
             } else {
-                // 从上一个执行器的列元数据中查找并添加选择的列
                 cols_.push_back(*get_col(prev_->cols(), sel_col));
             }
         });
@@ -54,8 +53,7 @@ class GroupExecutor : public AbstractExecutor {
         std::for_each(group_cols.begin(), group_cols.end(), [this](const auto& group_col) {
             this->group_cols_.push_back(*get_col(this->prev_->cols(), group_col));
         });
-        having_conds_ = std::move(conds);  // 移动 HAVING 条件的所有权
-        current_tuple = nullptr;           // 初始化当前元组为空
+        having_conds_ = std::move(conds);
     }
     /**
      * @brief 初始化分组执行过程。
@@ -63,51 +61,26 @@ class GroupExecutor : public AbstractExecutor {
      */
     void beginTuple() override {
         TRACE_FUNCTION
-        std::unordered_map<std::list<std::string_view>, std::pair<int, std::vector<std::unique_ptr<RmRecord>>>,
-                           ListHash>
-            umap_grouped_records;
-        prev_->beginTuple();           // 初始化上一个执行器
-        umap_grouped_records.clear();  // 清空上一次执行的分组记录
-        size_t index = 0;
-        // 从上一个执行器获取所有元组并进行分组
+        prev_->beginTuple();      // 初始化上一个执行器
+        grouped_records.clear();  // 清空上一次执行的分组记录
         while (!prev_->is_end()) {
             auto tuple = prev_->Next();
-            index++;
-            // 获取下一个元组
-            std::list<std::string_view> group_key = generateGroupKey(tuple);  // 生成分组键
-            std::string dbg_tmp;
-            for (auto i : group_key) dbg_tmp += i;
-            // 将元组添加到对应的分组中
-            auto& it = umap_grouped_records[group_key];
-            it.second.emplace_back(std::move(tuple));
-            if (it.second.size() == 1) it.first = index;
+            std::list<std::string_view> group_key = generateGroupKey(tuple);
+            grouped_records[group_key].emplace_back(std::move(tuple));
             prev_->nextTuple();  // 移动到上一个执行器的下一个元组
         }
 
         // 根据 HAVING 条件过滤分组
         if (!having_conds_.empty()) {
-            for (auto it = umap_grouped_records.begin(); it != umap_grouped_records.end();) {
-                if (!eval_aggr_conds(cols_, having_conds_, it->second.second)) {
-                    it = umap_grouped_records.erase(it);
+            for (auto it = grouped_records.begin(); it != grouped_records.end();) {
+                if (!eval_aggr_conds(cols_, having_conds_, it->second)) {
+                    it = grouped_records.erase(it);
                 } else {
                     ++it;
                 }
             }
         }
-        for (auto& [key, value] : umap_grouped_records) {
-            grouped_records.push_back(std::move(value));
-        }
-
-        std::sort(grouped_records.begin(), grouped_records.end());
-
-        if (grouped_records.empty()) {
-            current_tuple = nullptr;
-            return;
-        }
-        const auto& front = grouped_records.begin()->second.front();
-        // 创建一个新的 RmRecord 来存储代表元组的数据
-        auto temp_tuple = std::make_unique<RmRecord>(front->size, front->data);
-        current_tuple = std::move(temp_tuple);  // 移动所有权
+        now_iter = grouped_records.begin();
     }
 
     /**
@@ -116,24 +89,8 @@ class GroupExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         TRACE_FUNCTION
-        if (!grouped_records.empty()) {
-            grouped_records.erase(grouped_records.begin());
-
-            // 检查删除后是否还有记录
-            if (grouped_records.empty()) {
-                current_tuple = nullptr;
-                return;
-            }
-
-            // 安全地获取下一组的第一条记录
-            if (!grouped_records.begin()->second.empty()) {
-                const auto& front = grouped_records.begin()->second.front();
-                current_tuple = std::make_unique<RmRecord>(front->size, front->data);
-            } else {
-                current_tuple = nullptr;
-            }
-        } else {
-            current_tuple = nullptr;
+        if (now_iter != grouped_records.end()) {
+            now_iter++;
         }
     }
 
@@ -143,8 +100,8 @@ class GroupExecutor : public AbstractExecutor {
      * 注意：返回的元组所有权被转移。
      */
     std::unique_ptr<RmRecord> Next() override {
-        // 返回当前元组，并将 current_tuple 置空，表示所有权转移
-        return std::move(current_tuple);
+        const auto& front = now_iter->second.front();
+        return std::make_unique<RmRecord>(front->size, front->data);
     }
 
     /**
@@ -166,10 +123,7 @@ class GroupExecutor : public AbstractExecutor {
      * @brief 检查是否已处理完所有分组。
      * @return 如果已到达最后一个分组之后，则返回 true；否则返回 false。
      */
-    bool is_end() const override {
-        // 当 current_group 指向 group_iterators 的末尾时，表示处理完毕
-        return grouped_records.empty();
-    }
+    bool is_end() const override { return now_iter == grouped_records.end(); }
 
     /**
      * @brief 获取执行器的类型。
@@ -190,7 +144,7 @@ class GroupExecutor : public AbstractExecutor {
         for (const auto& group_col : group_cols_) {
             // 获取列数据在记录中的起始地址
             const char* col_data = record->data + group_col.offset;
-            group_key_list.push_back(std::string_view(col_data, group_col.len));
+            group_key_list.emplace_back(col_data, group_col.len);
         }
         return group_key_list;
     }
@@ -234,6 +188,6 @@ class GroupExecutor : public AbstractExecutor {
             rhs_val = get_aggr_value(rec_cols, rec, copy_cond.rhs_col, cond.rhs_col.agg_type);
         }
         // 比较左右两侧的值
-        return compare(lhs_val, rhs_val, cond.op);
+        return Value::compare(lhs_val, rhs_val, cond.op);
     }
 };

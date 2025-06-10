@@ -85,9 +85,6 @@ class AggregateExecutor : public AbstractExecutor {
             // 计算列的偏移量（基于前一列的偏移量和长度）
             if (i != 0) output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;
         }
-        // for (int i = 0; i < output_cols_.size(); i++) {
-        //     ERROR("output_cols_[i].offset: {}", output_cols_[i].offset);
-        // }
     }
 
     /**
@@ -170,32 +167,6 @@ class AggregateExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
         TRACE_FUNCTION
-        // // 检查是否所有聚合类型都是COUNT
-        // bool is_count = true;
-        // for (const auto& agg_type : agg_types_) {
-        //     if (agg_type != AggregateType::COUNT) {
-        //         is_count = false;
-        //         break;
-        //     }
-        // }
-
-        // // 如果没有记录且不是COUNT操作，返回空
-        // if (records.empty() && !is_count) return nullptr;
-        // // 如果没有记录但是COUNT操作，返回0
-        // else if (records.empty() && is_count) {
-        //     auto count_value = Value();
-        //     count_value.set_int(0);  // COUNT结果为0
-        //     count_value.init_raw();
-        //     size_t size = agg_types_.size() * count_value.raw->size;
-
-        //     auto result = std::make_unique<RmRecord>(size);
-
-        //     for (size_t i = 0; i < agg_types_.size(); ++i) {
-        //         memcpy(result->data + i * count_value.raw->size, count_value.raw->data, count_value.raw->size);
-        //     }
-        //     return result;
-        // }
-
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
         std::vector<Value> values(agg_types_.size());
@@ -224,7 +195,6 @@ class AggregateExecutor : public AbstractExecutor {
                 }
             }
             res.init_raw();
-            WARN("res data: {}", *(float*)(res.raw->data));
             size += res.raw->size;
             values[i] = std::move(res);
         }
@@ -232,7 +202,6 @@ class AggregateExecutor : public AbstractExecutor {
         size_t offset = 0;
         for (size_t i = 0; i < values.size(); ++i) {
             memcpy(result->data + offset, values[i].raw->data, values[i].raw->size);
-            WARN("values[i].raw->data: {}", *(float*)(values[i].raw->data));
             offset += values[i].raw->size;
         }
         return result;

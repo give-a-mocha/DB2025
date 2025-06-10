@@ -16,10 +16,34 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/TraceStack.hpp"
+#include "common/print.hpp"
 #include "defs.h"
 #include "parser/ast.h"
 #include "record/rm_defs.h"
-#include "common/print.hpp"
+
+/**
+ * @brief 比较操作符枚举，定义WHERE条件和JOIN条件中可用的比较操作
+ */
+enum class CompOp {
+    OP_EQ,  // 等于
+    OP_NE,  // 不等于
+    OP_LT,  // 小于
+    OP_GT,  // 大于
+    OP_LE,  // 小于等于
+    OP_GE   // 大于等于
+};
+
+/**
+ * @brief JOIN连接类型枚举，支持不同的SQL JOIN操作
+ */
+enum class JoinType {
+    INNER_JOIN,  // 内连接
+    LEFT_JOIN,   // 左外连接
+    RIGHT_JOIN,  // 右外连接
+    FULL_JOIN,   // 全外连接
+    SEMI_JOIN    // 半连接
+};
 
 /**
  * @brief 表列引用结构体，用于标识一个特定表中的列
@@ -201,7 +225,6 @@ struct Value {
         } else if (type == ColType::TYPE_FLOAT) {
             raw = std::make_shared<RmRecord>(sizeof(float));
             *(float *)(raw->data) = float_val;
-            WARN("in data: {}", float_val);
         } else if (type == ColType::TYPE_STRING) {
             raw = std::make_shared<RmRecord>(str_val.size());
             memcpy(raw->data, str_val.c_str(), str_val.size());
@@ -223,29 +246,124 @@ struct Value {
                 break;
         }
     }
-};
 
-/**
- * @brief 比较操作符枚举，定义WHERE条件和JOIN条件中可用的比较操作
- */
-enum class CompOp {
-    OP_EQ,  // 等于
-    OP_NE,  // 不等于
-    OP_LT,  // 小于
-    OP_GT,  // 大于
-    OP_LE,  // 小于等于
-    OP_GE   // 大于等于
-};
+    /**
+     * @brief 在两个Value对象间进行类型转换
+     *
+     * 处理数值类型之间的转换：
+     * - 如果类型相同，不进行转换
+     * - INT转换为FLOAT时，将整数转换为对应的浮点数
+     *
+     * @param a 第一个Value对象(会被修改)
+     * @param b 第二个Value对象(会被修改)
+     */
+    static void convert(Value &a, Value &b) {
+        // 数值类型的转化(int, float)
+        // int -> float
+        if (a.type == b.type) return;
+        if (b.type == ColType::TYPE_INT) {
+            b.set_float(static_cast<float>(b.int_val));
+            return;
+        } else {
+            a.set_float(static_cast<float>(a.int_val));
+            return;
+        }
+    }
 
-/**
- * @brief JOIN连接类型枚举，支持不同的SQL JOIN操作
- */
-enum class JoinType {
-    INNER_JOIN,  // 内连接
-    LEFT_JOIN,   // 左外连接
-    RIGHT_JOIN,  // 右外连接
-    FULL_JOIN,   // 全外连接
-    SEMI_JOIN    // 半连接
+    /**
+     * @brief 比较两个值的通用实现
+     * @param lhs 左操作数
+     * @param rhs 右操作数
+     * @param op 比较操作类型
+     * @return 比较结果
+     * @throw IncompatibleTypeError 类型不兼容时
+     * @note 优化考虑：
+     * - 常见类型快速路径
+     * - 大小写敏感性
+     * - 特殊值处理
+     */
+    static bool compare(Value lhs, Value rhs, CompOp op) {
+        TRACE_FUNCTION
+
+        /**
+         * @brief 判断列类型是否为数值类型
+         * @param type 要检查的列类型
+         * @return 如果是INT或FLOAT类型返回true，否则返回false
+         */
+        auto is_numeric_type = [](ColType type) -> bool {
+            return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT;
+        };
+
+        bool is_numeric = is_numeric_type(lhs.type) && is_numeric_type(rhs.type);
+        if (lhs.type != rhs.type && !is_numeric) {
+            throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
+        }
+        int cmp;
+        if (is_numeric) {
+            // 整数比较
+            if (lhs.type == ColType::TYPE_INT && rhs.type == ColType::TYPE_INT) {
+                cmp = (lhs.int_val < rhs.int_val) ? -1 : (lhs.int_val > rhs.int_val) ? 1 : 0;
+            } else {
+                // 先转化成浮点数
+                convert(lhs, rhs);
+                // 浮点数比较
+                cmp = (lhs.float_val < rhs.float_val) ? -1 : (lhs.float_val > rhs.float_val) ? 1 : 0;
+            }
+        } else if (lhs.type == ColType::TYPE_STRING) {
+            size_t len = std::max(lhs.str_val.size(), rhs.str_val.size());
+            cmp = strncmp(lhs.str_val.c_str(), rhs.str_val.c_str(), len);
+        }
+        switch (op) {
+            case CompOp::OP_EQ:
+                return cmp == 0;
+            case CompOp::OP_NE:
+                return cmp != 0;
+            case CompOp::OP_LT:
+                return cmp < 0;
+            case CompOp::OP_GT:
+                return cmp > 0;
+            case CompOp::OP_LE:
+                return cmp <= 0;
+            case CompOp::OP_GE:
+                return cmp >= 0;
+            default:
+                throw InternalError("compare::Unexpected op type at compare.");
+        }
+    }
+
+    /**
+     * @brief 从原始数据中提取值
+     *
+     * 根据列类型从内存中读取数据并转换为Value对象
+     * 支持INT和FLOAT类型，不支持直接获取STRING类型
+     *
+     * @param p 值的类型
+     * @param a 指向原始数据的指针
+     * @return 转换后的Value对象
+     * @throw InternalError 当尝试获取STRING类型时
+     */
+    static Value get_value(ColType p, const char *a) {
+        Value res;
+        switch (p) {
+            case ColType::TYPE_INT: {
+                int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
+                res.set_int(ia);
+                break;
+            }
+
+            case ColType::TYPE_FLOAT: {
+                float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
+                res.set_float(fa);
+                break;
+            }
+
+            case ColType::TYPE_STRING: {
+                // 需要手动处理string类型的获取
+                throw InternalError("get_value::Unexpected string value type.");
+            }
+        }
+        return res;
+    }
 };
 
 /**

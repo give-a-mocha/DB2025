@@ -112,7 +112,6 @@ class ProjectionExecutor : public AbstractExecutor {
             std::cerr << "Error: Previous record is null at " + getType() << std::endl;
             return nullptr;
         }
-        // ERROR("prev_rec: {}", *(float *)(prev_rec->data));
 
         // 创建投影结果记录
         auto proj_rec = std::make_unique<RmRecord>(len_);
