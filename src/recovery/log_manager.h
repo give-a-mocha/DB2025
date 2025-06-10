@@ -19,48 +19,33 @@ See the Mulan PSL v2 for more details. */
 #include "log_defs.h"
 #include "record/rm_defs.h"
 
-/**
- * 日志记录对应操作的类型枚举
- * UPDATE: 更新操作日志，用于记录数据更新
- * INSERT: 插入操作日志，记录数据插入
- * DELETE: 删除操作日志，记录数据删除
- * begin: 事务开始日志，标记事务的开始点
- * commit: 事务提交日志，标记事务的成功完成
- * ABORT: 事务中止日志，标记事务的回滚
- */
+/* 日志记录对应操作的类型 */
 enum LogType : int {
-    UPDATE = 0,  // 更新操作
-    INSERT,      // 插入操作
-    DELETE,      // 删除操作
-    begin,       // 事务开始
-    commit,      // 事务提交
-    ABORT        // 事务中止
+    UPDATE = 0,
+    INSERT,
+    DELETE,
+    begin,
+    commit,
+    ABORT
 };
 
-/**
- * 日志类型对应的字符串表示
- * 用于日志记录的可读性显示和调试输出
- */
 static std::string LogTypeStr[] = {
-    "UPDATE",  // 更新操作的字符串表示
-    "INSERT",  // 插入操作的字符串表示
-    "DELETE",  // 删除操作的字符串表示
-    "BEGIN",   // 事务开始的字符串表示
-    "COMMIT",  // 事务提交的字符串表示
-    "ABORT"    // 事务中止的字符串表示
+    "UPDATE",
+    "INSERT",
+    "DELETE",
+    "BEGIN",
+    "COMMIT",
+    "ABORT"
 };
 
-/**
- * 日志记录基类
- * 所有类型的日志记录都继承自此类，包含所有日志的基本信息
- */
+
 class LogRecord {
-   public:
-    LogType log_type_;     /* 日志对应操作的类型（如INSERT、UPDATE、DELETE、BEGIN等） */
-    lsn_t lsn_;            /* 当前日志的序列号(Log Sequence Number)，全局唯一标识一条日志 */
-    uint32_t log_tot_len_; /* 整个日志记录的总长度（字节数） */
-    txn_id_t log_tid_;     /* 创建当前日志的事务ID，标识哪个事务产生了此日志 */
-    lsn_t prev_lsn_;       /* 同一事务创建的前一条日志记录的lsn，用于构建事务的日志链，支持undo操作 */
+public:
+    LogType log_type_;         /* 日志对应操作的类型 */
+    lsn_t lsn_;                /* 当前日志的lsn */
+    uint32_t log_tot_len_;     /* 整个日志记录的长度 */
+    txn_id_t log_tid_;         /* 创建当前日志的事务ID */
+    lsn_t prev_lsn_;           /* 事务创建的前一条日志记录的lsn，用于undo */
 
     LogRecord() {
         lsn_ = INVALID_LSN;
@@ -71,10 +56,7 @@ class LogRecord {
     // !添加虚析构防止内存泄漏
     virtual ~LogRecord() = default;
 
-    /**
-     * 将日志记录序列化到指定内存区域
-     * @param dest 目标内存区域指针
-     */
+    // 把日志记录序列化到dest中
     virtual void serialize(char* dest) const {
         // 按照固定的偏移量依次写入各字段
         memcpy(dest + OFFSET_LOG_TYPE, &log_type_, sizeof(LogType));         // 写入日志类型
@@ -90,10 +72,7 @@ class LogRecord {
         offset += data_size;
     }
 
-    /**
-     * 从指定内存区域反序列化出一条日志记录
-     * @param src 源内存区域指针
-     */
+    // 从src中反序列化出一条日志记录
     virtual void deserialize(const char* src) {
         // 按照固定的偏移量依次读取各字段
         log_type_ = *reinterpret_cast<const LogType*>(src);                           // 读取日志类型
@@ -108,10 +87,7 @@ class LogRecord {
         INFO(fmt_str, std::forward<Args>(args)...);
     }
 
-    /**
-     * 格式化打印日志记录内容，用于调试
-     * 派生类可重写此方法以显示更多特定信息
-     */
+    // used for debug
     virtual void format_print() const {
         logINFO("log type in father_function: {}", LogTypeStr[log_type_]);
         logINFO("Print Log Record:");
@@ -123,10 +99,7 @@ class LogRecord {
     }
 };
 
-/**
- * 事务开始日志记录类，记录事务的开始操作
- * 继承自LogRecord基类
- */
+
 class BeginLogRecord : public LogRecord {
    public:
     BeginLogRecord() : LogRecord() { log_type_ = LogType::begin; }
@@ -134,7 +107,9 @@ class BeginLogRecord : public LogRecord {
         log_tid_ = txn_id;  // 设置事务ID
     }
     virtual ~BeginLogRecord() = default;
+    // 序列化Begin日志记录到dest中
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
+    // 从src中反序列化出一条Begin日志记录
     void deserialize(const char* src) override { LogRecord::deserialize(src); }
     virtual void format_print() const override {
         logINFO("log type in son_function: {}", LogTypeStr[log_type_]);
@@ -159,18 +134,8 @@ class CommitLogRecord : public LogRecord {
 };
 
 /**
- * @brief 事务中止日志记录类
- *
- * 用于记录事务的回滚操作，包含以下信息：
- * - 事务ID：标识被中止的事务
- * - LSN：日志序列号
- * - 前序LSN：同一事务的上一条日志记录
- *
- * 主要用于：
- * 1. 标记事务的中止点
- * 2. 在恢复时识别需要回滚的事务
- * 3. 维护事务的完整性
- */
+ * TODO: abort操作的日志记录
+*/
 class AbortLogRecord : public LogRecord {
    public:
     AbortLogRecord() : LogRecord() { log_type_ = LogType::ABORT; }
@@ -243,22 +208,8 @@ class InsertLogRecord : public LogRecord {
 };
 
 /**
- * @brief 删除操作日志记录类
- *
- * 记录删除操作的详细信息，包含：
- * 1. 基本信息
- *    - 事务ID
- *    - LSN和前序LSN
- * 2. 删除数据
- *    - 被删除的记录内容
- *    - 记录的位置(Rid)
- *    - 表名
- *
- * 用于：
- * 1. 支持事务回滚
- * 2. 崩溃恢复时的undo操作
- * 3. 保证数据一致性
- */
+ * TODO: delete操作的日志记录
+*/
 class DeleteLogRecord : public LogRecord {
    public:
     DeleteLogRecord() : LogRecord() {
@@ -318,23 +269,8 @@ class DeleteLogRecord : public LogRecord {
 };
 
 /**
- * @brief 更新操作日志记录类
- *
- * 记录更新操作的完整信息，包含：
- * 1. 基本信息
- *    - 事务ID
- *    - LSN和前序LSN
- * 2. 更新数据
- *    - 更新前的记录内容
- *    - 更新后的记录内容
- *    - 记录的位置(Rid)
- *    - 表名
- *
- * 用于：
- * 1. 支持事务回滚
- * 2. 崩溃恢复时的redo/undo操作
- * 3. 保证数据一致性
- */
+ * TODO: update操作的日志记录
+*/
 class UpdateLogRecord : public LogRecord {
    public:
     UpdateLogRecord() : LogRecord() {
@@ -403,18 +339,7 @@ class UpdateLogRecord : public LogRecord {
     size_t table_name_size_;  // 表名称的大小
 };
 
-/**
- * @brief 日志缓冲区类
- *
- * 实现了一个简单的日志缓冲区，用于临时存储日志记录。特点：
- * 1. 使用单一固定大小的缓冲区
- * 2. 采用顺序写入策略
- * 3. 当缓冲区满时需要进行刷盘操作
- * 4. 使用互斥锁保护并发访问
- *
- * 注意：由于只有一个缓冲区，写入操作需要阻塞进行
- */
-
+/* 日志缓冲区，只有一个buffer，因此需要阻塞地去把日志写入缓冲区中 */
 class LogBuffer {
    public:
     LogBuffer() {
@@ -428,53 +353,21 @@ class LogBuffer {
     int offset_;  // 写入log的offset
 };
 
-/**
- * @brief 日志管理器类
- *
- * 负责管理数据库的日志子系统，主要功能包括：
- * 1. 日志记录的生成和管理
- *    - 为新日志分配LSN
- *    - 管理日志的写入和缓存
- * 2. 缓冲区管理
- *    - 控制日志写入缓冲区
- *    - 维护缓冲区的空间使用
- * 3. 持久化处理
- *    - 将缓冲区内容写入磁盘
- *    - 维护检查点机制
- * 4. 并发控制
- *    - 保护共享资源的并发访问
- *    - 协调多事务的日志写入
- */
+/* 日志管理器，负责把日志写入日志缓冲区，以及把日志缓冲区中的内容写入磁盘中 */
 class LogManager {
-   public:
-    /**
-     * @brief 构造函数
-     * @param disk_manager 磁盘管理器指针，用于实际的文件IO操作
-     */
+private:
+    std::atomic<lsn_t> global_lsn_{0};  // 全局lsn，递增，用于为每条记录分发lsn
+    std::mutex latch_;                  // 用于对log_buffer_的互斥访问
+    LogBuffer log_buffer_;              // 日志缓冲区
+    lsn_t persist_lsn_;                 // 记录已经持久化到磁盘中的最后一条日志的日志号
+    DiskManager* disk_manager_;
+public:
     LogManager(DiskManager* disk_manager) { disk_manager_ = disk_manager; }
 
-    /**
-     * @brief 将日志记录添加到缓冲区
-     * @param log_record 要添加的日志记录
-     * @return 分配给该日志记录的LSN
-     */
     lsn_t add_log_to_buffer(LogRecord* log_record);
 
-    /**
-     * @brief 将缓冲区中的日志刷新到磁盘
-     */
     void flush_log_to_disk();
 
-    /**
-     * @brief 获取日志缓冲区指针
-     * @return 日志缓冲区指针
-     */
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
-   private:
-    std::atomic<lsn_t> global_lsn_{0};  // 全局日志序列号生成器
-    std::mutex latch_;                  // 保护日志缓冲区的互斥锁
-    LogBuffer log_buffer_;              // 日志缓冲区实例
-    lsn_t persist_lsn_;                 // 最后一条持久化日志的LSN
-    DiskManager* disk_manager_;         // 底层磁盘管理器
 };

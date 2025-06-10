@@ -19,34 +19,13 @@ See the Mulan PSL v2 for more details. */
 static const std::string GroupLockModeStr[10] = {"NON_LOCK", "IS", "IX", "S", "X", "SIX"};
 
 class LockManager {
-    /**
-     * @brief 锁的类型枚举
-     *
-     * 支持五种锁模式：
-     * - SHARED：共享锁，允许并发读
-     * - EXLUCSIVE：排他锁，禁止任何并发操作
-     * - INTENTION_SHARED：意向共享锁，表示意图在更细粒度上加共享锁
-     * - INTENTION_EXCLUSIVE：意向排他锁，表示意图在更细粒度上加排他锁
-     * - S_IX：意向排他锁和共享锁的组合
-     */
+    /* 加锁类型，包括共享锁、排他锁、意向共享锁、意向排他锁、SIX（意向排他锁+共享锁） */
     enum class LockMode { SHARED, EXLUCSIVE, INTENTION_SHARED, INTENTION_EXCLUSIVE, S_IX };
 
-    /**
-     * @brief 锁组的模式枚举
-     *
-     * 用于表示一个加锁队列中最高级别的锁类型：
-     * - NON_LOCK：无锁状态
-     * - IS：意向共享锁是最强的锁
-     * - IX：意向排他锁是最强的锁
-     * - S：共享锁是最强的锁
-     * - X：排他锁是最强的锁
-     * - SIX：同时具有S和IX特性的锁
-     */
+    /* 用于标识加锁队列中排他性最强的锁类型，例如加锁队列中有SHARED和EXLUSIVE两个加锁操作，则该队列的锁模式为X */
     enum class GroupLockMode { NON_LOCK, IS, IX, S, X, SIX };
 
-    /**
-     * @brief 锁请求类，表示事务的一次加锁申请
-     */
+    /* 事务的加锁申请 */
     class LockRequest {
     public:
        txn_id_t txn_id_;     // 申请加锁的事务ID
@@ -56,28 +35,21 @@ class LockManager {
        LockRequest(txn_id_t txn_id, LockMode lock_mode) : txn_id_(txn_id), lock_mode_(lock_mode), granted_(false) {}
     };
 
-    /**
-     * @brief 锁请求队列类，维护对同一数据项的所有锁请求
-     *
-     * 该类负责：
-     * 1. 维护所有等待获取某个数据项锁的请求
-     * 2. 管理锁请求的等待和唤醒
-     * 3. 跟踪当前队列的整体锁模式
-     */
+    /* 数据项上的加锁队列 */
     class LockRequestQueue {
     public:
-        // 等待队列，包含已授予和等待中的锁请求
+        // 加锁队列
         std::list<LockRequest> request_queue_;
-        // 条件变量，用于实现锁等待
+        // 条件变量，用于唤醒正在等待加锁的申请，在no-wait策略下无需使用
         std::condition_variable cv_;
-        // 当前队列的最高锁级别
+        // 加锁队列的锁模式
         GroupLockMode group_lock_mode_ = GroupLockMode::NON_LOCK;
     };
     
 private:
-    // 保护锁表的互斥锁
+    // 用于锁表的并发
     std::mutex latch_;
-    // 全局锁表，维护所有数据项的锁请求队列
+    // 全局锁表
     std::unordered_map<LockDataId, LockRequestQueue> lock_table_;
 public:
     LockManager() {}
