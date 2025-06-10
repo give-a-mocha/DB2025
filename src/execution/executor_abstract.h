@@ -419,13 +419,7 @@ class AbstractExecutor {
                 }
                 val.set_float(max);
             } else if (col_meta.type == ColType::TYPE_STRING) {
-                // 字符串最大值计算（按字典序）
-                std::string_view max = "";  // 初始化为空字符串（字典序最小）
-                for (const auto &record : rec) {
-                    std::string_view str(record->data + col_meta.offset, col_meta.len);
-                    max = std::max(max, str);  // 字典序比较
-                }
-                val.set_str(std::string(max));
+                throw AggregateError("Aggregate function MAX is not supported for string type column.");
             }
         } else if (agg_type == AggregateType::MIN) {
             // MIN 聚合：找出指定列的最小值
@@ -444,13 +438,7 @@ class AbstractExecutor {
                 }
                 val.set_float(min);
             } else if (col_meta.type == ColType::TYPE_STRING) {
-                std::string_view min(rec.front()->data + col_meta.offset, col_meta.len);
-                for (size_t i = 1; i < rec.size(); i++) {
-                    const auto &record = rec[i];
-                    std::string_view str(record->data + col_meta.offset, col_meta.len);
-                    min = std::min(min, str);
-                }
-                val.set_str(std::string(min));
+                throw AggregateError("Aggregate function MIN is not supported for string type column.");
             }
         } else if (agg_type == AggregateType::AVG) {
             // SUM 聚合：计算指定列所有值的总和

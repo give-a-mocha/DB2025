@@ -31,8 +31,13 @@ bool is_column_in_group(const TabCol &col, const std::vector<TabCol> &group_cols
 /**
  * @brief 辅助函数：验证聚合函数类型是否与列类型兼容
  *
- * @param agg_type 聚合函数类型(COUNT, SUM, AVG等)
- * @param col_type 列的数据类型(INT, FLOAT, STRING等)
+ * 验证不同聚合函数支持的列类型：
+ * - COUNT：支持所有类型
+ * - SUM/AVG：仅支持数值类型(INT, FLOAT)
+ * - MIN/MAX：仅支持数值类型(INT, FLOAT)
+ *
+ * @param agg_type 聚合函数类型(COUNT, SUM, AVG, MIN, MAX)
+ * @param col_type 列的数据类型(INT, FLOAT, STRING)
  * @throws InternalError 当聚合函数类型与列类型不兼容时抛出异常
  */
 void validate_aggregate_type(AggregateType agg_type, ColType col_type) {
@@ -44,14 +49,16 @@ void validate_aggregate_type(AggregateType agg_type, ColType col_type) {
 
         case AggregateType::SUM:
         case AggregateType::AVG:
-            if (col_type == ColType::TYPE_STRING) {
-                throw InternalError("Cannot apply SUM/AVG to string column");
-            }
-            break;
-
         case AggregateType::MIN:
         case AggregateType::MAX:
-            break;  // MIN/MAX支持所有类型
+            if (col_type != ColType::TYPE_INT && col_type != ColType::TYPE_FLOAT) {
+                std::string agg_name =
+                    agg_type == AggregateType::SUM ? "SUM" :
+                    agg_type == AggregateType::AVG ? "AVG" :
+                    agg_type == AggregateType::MIN ? "MIN" : "MAX";
+                throw InternalError("Cannot apply " + agg_name + " to non-numeric column");
+            }
+            break;
 
         default:
             throw InternalError("Unknown aggregate type");
@@ -528,8 +535,6 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         cond.lhs_col = check_column(all_cols, cond.lhs_col);
 
         // 如果右侧是列引用(而非常量值)，也需要推断和验证表名
-
-        // 如果右侧是列引用(而非常量值)，也需要推断和验证表名
         if (!cond.is_rhs_val) {
             cond.rhs_col = check_column(all_cols, cond.rhs_col);
         }
@@ -638,15 +643,6 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
 /**
  * @brief 将语法树中的值对象转换为系统内部的Value对象
  *
- * 根据语法树中值的类型(整数、浮点数或字符串)，创建并返回相应的Value对象。
- * 如果无法识别值的类型，则抛出内部错误。
- *
- * @param sv_val 语法树中的值对象
- * @return Value 转换后的系统内部值对象
- */
-/**
- * @brief 将语法树中的值对象转换为系统内部的Value对象
- *
  * 该函数负责将语法分析阶段识别的不同类型的值(整数、浮点数、字符串)
  * 转换为系统内部统一的Value表示形式。
  *
@@ -673,15 +669,6 @@ Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
     return val;
 }
 
-/**
- * @brief 将语法树中的比较操作符转换为系统内部的CompOp枚举值
- *
- * 将语法分析阶段识别的比较操作符(如等于、不等于、大于、小于等)
- * 转换为系统内部使用的CompOp枚举类型，方便后续处理。
- *
- * @param op 语法树中的比较操作符
- * @return CompOp 转换后的系统内部比较操作符
- */
 /**
  * @brief 将语法树中的比较操作符转换为系统内部的CompOp枚举值
  *
@@ -713,15 +700,6 @@ CompOp Analyze::convert_sv_comp_op(ast::SvCompOp op) {
     }
 }
 
-/**
- * @brief 将语法树中的JOIN类型转换为系统内部的JoinType枚举值
- *
- * 将SQL语句中指定的JOIN类型(如INNER JOIN、LEFT JOIN等)
- * 转换为系统内部使用的JoinType枚举类型，用于后续的JOIN操作处理。
- *
- * @param type 语法树中的JOIN类型
- * @return JoinType 转换后的系统内部JOIN类型
- */
 /**
  * @brief 将语法树中的JOIN类型转换为系统内部的JoinType枚举值
  *
