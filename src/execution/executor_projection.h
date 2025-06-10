@@ -35,25 +35,52 @@ class ProjectionExecutor : public AbstractExecutor {
      * @param sel_cols 需要投影的列
      */
     ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol> &sel_cols) {
+        // 转移前序执行器的所有权到当前执行器
         prev_ = std::move(prev);
 
+        // 检查前序执行器是否为聚合执行器
+        // 如果是聚合执行器，需要特殊处理列的映射关系
         if (prev_->getType() == "AggregateExecutor") {
             prev_is_aggr_ = true;
         }
 
+        // 初始化当前偏移量，用于计算投影后每列在记录中的位置
         size_t curr_offset = 0;
+
+        // 获取前序执行器的列元数据，作为投影操作的输入源
         auto &prev_cols = prev_->cols();
+
+        // 遍历需要投影的每一列
         for (auto &sel_col : sel_cols) {
+            // 在前序执行器的列中查找当前要投影的列
             auto pos = get_col(prev_cols, sel_col);
+
+            // 记录该列在前序执行器结果中的索引位置
+            // 用于后续从前序记录中提取对应列的数据
             sel_idxs_.push_back(pos - prev_cols.begin());
+
+            // 复制列的元数据信息
             auto col = *pos;
+
+            // 重新设置列在投影结果中的偏移量
+            // 投影后的列会重新排列，偏移量需要重新计算
             col.offset = curr_offset;
+
+            // 累加偏移量，为下一列的位置做准备
             curr_offset += col.len;
+
+            // 将处理好的列元数据添加到投影执行器的列集合中
             cols_.push_back(col);
         }
+
+        // 设置投影后记录的总长度
         len_ = curr_offset;
 
-        if (prev_is_aggr_) cols_ = prev_cols;
+        // 特殊处理：如果前序是聚合执行器
+        // 直接使用前序执行器的列元数据，因为聚合结果的列结构可能已经发生变化
+        if (prev_is_aggr_) {
+            cols_ = prev_cols;
+        }
     }
 
     /**
@@ -85,6 +112,7 @@ class ProjectionExecutor : public AbstractExecutor {
             std::cerr << "Error: Previous record is null at " + getType() << std::endl;
             return nullptr;
         }
+        // ERROR("prev_rec: {}", *(float *)(prev_rec->data));
 
         // 创建投影结果记录
         auto proj_rec = std::make_unique<RmRecord>(len_);

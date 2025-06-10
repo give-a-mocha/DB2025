@@ -41,16 +41,18 @@ class AggregateExecutor : public AbstractExecutor {
             output_cols_.push_back(cols_.back());
         }
 
+        size_t beginIndex = 0;
         // 设置第一列的偏移量为0
         output_cols_.front().offset = 0;
         // 如果第一个聚合类型是COUNT，设置其类型为整数
         if (agg_types.front() == AggregateType::COUNT) {
             output_cols_.front().type = ColType::TYPE_INT;
             output_cols_.front().len = sizeof(int);
+            beginIndex = 1;
         }
 
         // 设置其他列的类型和偏移量
-        for (size_t i = 1; i < output_cols_.size(); ++i) {
+        for (size_t i = beginIndex; i < output_cols_.size(); ++i) {
             // 根据聚合类型设置输出类型
             switch (agg_types[i]) {
                 case AggregateType::NONE:
@@ -81,8 +83,11 @@ class AggregateExecutor : public AbstractExecutor {
                     throw InternalError("Unknown aggregate type");
             }
             // 计算列的偏移量（基于前一列的偏移量和长度）
-            output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;
+            if (i != 0) output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;
         }
+        // for (int i = 0; i < output_cols_.size(); i++) {
+        //     ERROR("output_cols_[i].offset: {}", output_cols_[i].offset);
+        // }
     }
 
     /**
@@ -197,7 +202,7 @@ class AggregateExecutor : public AbstractExecutor {
         for (size_t i = 0; i < agg_types_.size(); ++i) {
             // 调用聚合函数计算结果
             Value res;
-            if(!records.empty()) {
+            if (!records.empty()) {
                 res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
             } else {
                 // 处理NULL值情况
@@ -219,6 +224,7 @@ class AggregateExecutor : public AbstractExecutor {
                 }
             }
             res.init_raw();
+            WARN("res data: {}", *(float*)(res.raw->data));
             size += res.raw->size;
             values[i] = std::move(res);
         }
@@ -226,6 +232,7 @@ class AggregateExecutor : public AbstractExecutor {
         size_t offset = 0;
         for (size_t i = 0; i < values.size(); ++i) {
             memcpy(result->data + offset, values[i].raw->data, values[i].raw->size);
+            WARN("values[i].raw->data: {}", *(float*)(values[i].raw->data));
             offset += values[i].raw->size;
         }
         return result;

@@ -19,6 +19,7 @@ See the Mulan PSL v2 for more details. */
 #include "defs.h"
 #include "parser/ast.h"
 #include "record/rm_defs.h"
+#include "common/print.hpp"
 
 /**
  * @brief 表列引用结构体，用于标识一个特定表中的列
@@ -200,6 +201,7 @@ struct Value {
         } else if (type == ColType::TYPE_FLOAT) {
             raw = std::make_shared<RmRecord>(sizeof(float));
             *(float *)(raw->data) = float_val;
+            WARN("in data: {}", float_val);
         } else if (type == ColType::TYPE_STRING) {
             raw = std::make_shared<RmRecord>(str_val.size());
             memcpy(raw->data, str_val.c_str(), str_val.size());

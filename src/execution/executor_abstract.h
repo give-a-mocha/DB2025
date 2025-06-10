@@ -447,6 +447,7 @@ class AbstractExecutor {
                 int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
                     return acc + *(int *)(record->data + col_meta.offset);
                 });
+                WARN("sum: {}", sum);
                 val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
             } else if (col_meta.type == ColType::TYPE_FLOAT) {
                 // 浮点数求和
