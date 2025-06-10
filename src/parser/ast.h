@@ -35,11 +35,16 @@ inline std::string SvAggregateType2Str(SvAggregateType agg_type) {
 }
 
 inline std::string generate_alias(std::string tab_name, std::string col_name, SvAggregateType agg_type) {
+    if (agg_type == SvAggregateType::NONE) {
+        return "";
+    }
     if (!tab_name.empty()) {
         tab_name += ".";
         tab_name += col_name;
+        return util::format("{}({})", SvAggregateType2Str(agg_type), tab_name);
+    } else {
+        return util::format("{}({})", SvAggregateType2Str(agg_type), col_name);
     }
-    return util::format("{}({})", SvAggregateType2Str(agg_type), tab_name);
 }
 
 // Base class for tree nodes
