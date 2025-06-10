@@ -1,9 +1,16 @@
 create table grade (course char(20),id int,score float);
+create table v (course char(20),id int,score float);
+create table t (course char(20),id int,score float);
 insert into grade values('DataStructure',1,95);
 insert into grade values('DataStructure',2,93.5);
 insert into grade values('DataStructure',3,94.5);
 insert into grade values('ComputerNetworks',1,99);
 insert into grade values('ComputerNetworks',2,88.5);
 insert into grade values('ComputerNetworks',3,92.5);
+insert into v values('DataStructure',1,95);
+insert into v values('DataStructure',2,93.5);
+insert into t values('ComputerNetworks',1,99);
+insert into t values('ComputerNetworks',2,88.5);
+select t.id, v.id, count(*), max(v.score), min(t.score) from t,v where t.id = v.id group by t.id, v.id;
 select id , score from grade group by course;
 select id, MAX(score) as max_score from grade where MAX(score) > 90 group by id;
