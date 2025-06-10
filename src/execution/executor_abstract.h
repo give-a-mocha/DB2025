@@ -29,16 +29,11 @@ class AbstractExecutor {
    public:
     /**
      * @brief 当前处理的记录ID
-     * @note 用于定位和访问具体记录
      */
     Rid _abstract_rid;
 
     /**
      * @brief 执行上下文
-     * @note 包含：
-     * - 事务信息
-     * - 系统配置
-     * - 执行状态
      */
     Context *context_;
 
@@ -67,39 +62,27 @@ class AbstractExecutor {
 
     /**
      * @brief 初始化元组遍历
-     * @note 子类实现必须：
-     * 1. 重置内部状态
-     * 2. 初始化扫描位置
-     * 3. 准备第一个元组
+
      */
     virtual void beginTuple() {};
 
     /**
      * @brief 移动到下一个元组
-     * @note 子类实现必须：
-     * 1. 更新当前位置
-     * 2. 维护内部状态
-     * 3. 处理边界情况
+
      */
     virtual void nextTuple() {};
 
     /**
      * @brief 检查遍历是否结束
      * @return true表示遍历结束，false表示还有元组
-     * @note 子类实现必须：
-     * 1. 正确判断边界
-     * 2. 考虑过滤条件
-     * 3. 处理异常情况
+
      */
     virtual bool is_end() const { return true; };
 
     /**
      * @brief 获取当前元组的记录ID
      * @return 当前记录的RID引用
-     * @note 子类实现必须：
-     * 1. 维护有效的RID
-     * 2. 支持随机访问
-     * 3. 在遍历过程中更新
+
      */
     virtual Rid &rid() = 0;
 
@@ -107,12 +90,6 @@ class AbstractExecutor {
      * @brief 获取下一个元组
      * @return 下一条记录
      * @throw ExecutionError 当获取失败时
-     *
-     * @note 火山模型的核心接口，子类实现必须：
-     * 1. 返回一个有效记录
-     * 2. 正确处理终止条件
-     * 3. 维护内部迭代状态
-     * 4. 处理所有错误情况
      */
     virtual std::unique_ptr<RmRecord> Next() = 0;
 
@@ -149,7 +126,7 @@ class AbstractExecutor {
      */
     static bool is_numeric_type(ColType type) { return type == ColType::TYPE_INT || type == ColType::TYPE_FLOAT; }
 
-        /**
+    /**
      * @brief 评估记录是否满足所有条件
      * @param rec_cols 记录的列元数据集合
      * @param conds 条件表达式列表
@@ -174,12 +151,6 @@ class AbstractExecutor {
      * @return true表示满足条件
      * @throw IncompatibleTypeError 当类型不兼容时
      * @throw InternalError 当遇到非法操作符时
-     *
-     * @details 评估过程：
-     * @note 支持的优化：
-     * - 数值比较的快速路径
-     * - 字符串比较的长度优化
-     * - 类型转换的缓存机制
      */
     bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
         TRACE_FUNCTION

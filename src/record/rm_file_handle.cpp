@@ -222,13 +222,6 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
 /**
  * @description: 获取指定页面的句柄
  *
- * 该函数执行以下操作：
- * 1. 检查页面号的有效性
- * 2. 从缓冲池获取页面
- * 3. 创建并返回页面句柄
- *
- * 注意：获取的页面会被pin在缓冲池中，使用完后需要unpin
- *
  * @param {int} page_no 目标页面号
  * @return {RmPageHandle} 页面句柄对象
  * @throw PageNotExistError 如果页面不存在或无法访问
@@ -247,12 +240,6 @@ RmPageHandle RmFileHandle::fetch_page_handle(int page_no) const {
 
 /**
  * @description: 创建新的页面句柄
- *
- * 该函数执行以下操作：
- * 1. 通过缓冲池管理器分配新页面
- * 2. 初始化页面头部信息
- * 3. 初始化页面的位图
- * 4. 更新文件头信息（页面数、空闲页面链表）
  *
  * @return {RmPageHandle} 新创建的页面句柄
  * @throw PageNotExistError 如果无法创建新页面

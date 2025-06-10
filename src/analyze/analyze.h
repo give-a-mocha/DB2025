@@ -122,24 +122,6 @@ class ColCheck {
 
 /**
  * @brief 查询对象类，表示经过语义分析的SQL语句
- *
- * Query对象存储了一个SQL语句的完整语义信息：
- * 1. 查询结构
- *    - parse: 原始语法树，保留完整的语法结构
- *    - jointree: JOIN操作的层次结构
- *    - cols: 需要返回的列
- *    - tables: 涉及的表
- *
- * 2. 查询条件
- *    - conds: WHERE子句的条件表达式
- *    - 支持：比较操作、逻辑运算、IN子句等
- *
- * 3. 数据修改
- *    - set_clauses: UPDATE的SET子句
- *    - values: INSERT的VALUES值列表
- *
- * @note 该类设计支持SELECT、INSERT、UPDATE、DELETE等
- * 不同类型的SQL语句，相应字段根据语句类型使用
  */
 class Query {
    public:
@@ -172,24 +154,7 @@ class Query {
 
 /**
  * @brief 语义分析器类，处理SQL语句的验证和转换
- *
- * 负责功能：
- * 1. 语法树分析
- *    - 遍历和解析语法树节点
- *    - 提取查询组件(表、列、条件等)
- *    - 构建规范化的查询结构
- *
- * 2. 语义检查
- *    - 验证表和列的存在性
- *    - 检查类型兼容性
- *    - 解决命名冲突
- *    - 验证约束条件
- *
- * 3. 错误处理
- *    - 抛出语义错误异常
- *    - 提供详细的错误信息
- *    - 支持事务回滚
- *
+
  * @note 分析器依赖系统管理器(SmManager)获取
  * 数据库的元数据信息，如表结构、列类型等
  */
@@ -215,13 +180,6 @@ class Analyze {
      * @param root 语法分析产生的语法树根节点
      * @return 包含完整查询信息的Query对象
      * @throw SemanticError 当存在语义错误时
-     *
-     * @details 分析过程：
-     * 1. 验证语法树的基本结构
-     * 2. 根据SQL类型选择相应的处理流程
-     * 3. 收集和验证所有查询组件
-     * 4. 构建规范化的查询对象
-     *
      * @note 该方法是语义分析的入口点，会触发
      * 完整的语义检查流程
      */
@@ -235,13 +193,6 @@ class Analyze {
      * @return 验证后的列引用(可能包含推断出的表名)
      * @throw ColumnNotFoundError 当列不存在时
      * @throw AmbiguousColumnError 当列名有歧义时
-     *
-     * @details 检查过程：
-     * 1. 验证列是否存在
-     * 2. 处理未限定的列名(无表名前缀)
-     * 3. 解决可能的列名歧义
-     * 4. 验证数据类型是否合法
-     *
      * @note 该方法是列验证的核心，确保查询中的列引用有效
      */
     TabCol check_column(const std::vector<ColMeta> &all_cols, TabCol target);
@@ -252,21 +203,6 @@ class Analyze {
      * @param target 要处理的表列引用(会被修改)
      * @param tab_refs 查询中的所有表引用信息
      * @throw TableAliasError 当别名无效或有歧义时
-     *
-     * @details 转换过程：
-     * 1. 别名处理
-     *    - 检查别名是否在tab_refs中定义
-     *    - 验证别名的唯一性
-     *    - 将别名替换为实际表名
-     *
-     * 2. 表名验证
-     *    - 确保表名在数据库中存在
-     *    - 处理大小写敏感性
-     *
-     * 3. 模式限定
-     *    - 处理模式名前缀(如果有)
-     *    - 验证模式的存在性
-     *
      * @note target参数会被直接修改，包含转换后的表名
      */
     void convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs);
@@ -283,22 +219,6 @@ class Analyze {
      * @param sv_conds 语法树中的条件表达式集合
      * @param conds 输出参数，存储转换结果
      * @throw SemanticError 当条件表达式存在语法或语义错误
-     *
-     * @details 转换过程：
-     * 1. 表达式处理
-     *    - 解析比较运算符
-     *    - 处理常量表达式
-     *    - 转换数据类型
-     *
-     * 2. 条件组合
-     *    - 处理AND/OR逻辑关系
-     *    - 合并相关条件
-     *    - 优化条件顺序
-     *
-     * 3. 类型检查
-     *    - 验证操作数类型匹配
-     *    - 处理隐式类型转换
-     *
      * @note 该方法不处理表别名，需要配合get_clause_alias使用
      */
     void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
@@ -341,22 +261,6 @@ class Analyze {
      * @param op SQL语法树中的原始操作符
      * @return 系统内部的CompOp枚举值
      * @throw InvalidCompOpError 当操作符无效时
-     *
-     * @details 支持的操作符：
-     * 1. 关系运算
-     *    - 等于(=)
-     *    - 不等于(<>, !=)
-     *    - 大于(>)
-     *    - 大于等于(>=)
-     *    - 小于(<)
-     *    - 小于等于(<=)
-     *
-     * 2. 特殊操作
-     *    - IS NULL
-     *    - IS NOT NULL
-     *    - IN / NOT IN
-     *    - EXISTS
-     *
      * @note 操作符转换会考虑类型兼容性
      */
     CompOp convert_sv_comp_op(ast::SvCompOp op);
@@ -366,18 +270,6 @@ class Analyze {
      * @param type SQL语法树中的JOIN类型
      * @return 系统内部的JoinType枚举值
      * @throw InvalidJoinTypeError 当JOIN类型无效时
-     *
-     * @details 支持的JOIN类型：
-     * 1. 基本连接
-     *    - INNER JOIN（内连接）
-     *    - LEFT JOIN（左外连接）
-     *    - RIGHT JOIN（右外连接）
-     *    - FULL JOIN（全外连接）
-     *
-     * 2. 特殊连接
-     *    - CROSS JOIN（交叉连接）
-     *    - NATURAL JOIN（自然连接）
-     *
      * @note
      * 1. 不同JOIN类型会影响连接条件的处理
      * 2. 外连接需要特殊处理NULL值
@@ -389,12 +281,6 @@ class Analyze {
      * @brief 检查WHERE条件中是否包含聚合函数
      * @param conds WHERE子句的条件表达式集合
      * @throw SemanticError 当条件中包含聚合函数时
-     *
-     * @details 检查过程：
-     * 1. 遍历所有条件表达式
-     * 2. 检测是否有聚合函数调用
-     * 3. 如果存在，抛出语义错误异常
-     *
      * @note 聚合函数通常只能在HAVING子句中使用
      */
     void check_where_with_aggregate(const std::vector<Condition> &conds);
@@ -404,11 +290,6 @@ class Analyze {
      * @param conds HAVING子句的条件表达式集合
      * @param group_cols GROUP BY子句的列列表
      * @throw SemanticError 当HAVING条件不合法时
-     *
-     * @details 检查过程：
-     * 1. 确保HAVING条件中只包含聚合函数或GROUP BY列
-     * 2. 验证聚合函数的使用是否符合SQL标准
-     * 3. 抛出错误如果条件不满足要求
      */
     void check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols);
 

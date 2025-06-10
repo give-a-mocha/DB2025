@@ -44,9 +44,6 @@ class IxScan : public RecScan {
      * @param lower 扫描起始位置
      * @param upper 扫描终止位置
      * @param bpm 缓冲池管理器
-     * @note
-     * - lower和upper定义了扫描范围[lower, upper)
-     * - 扫描范围是左闭右开区间
      */
     IxScan(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
         : ih_(ih), iid_(lower), end_(upper), bpm_(bpm) {}

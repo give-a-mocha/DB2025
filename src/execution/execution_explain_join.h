@@ -24,11 +24,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 连接执行计划的解释器
- *
- * @details 用于解释和展示连接操作的执行计划，主要展示:
- * 1. 参与连接的表
- * 2. 连接条件
- * 3. 计划的缩进层次
  */
 class ExplainJoinExecutor : public AbstractExecutor {
    private:
@@ -68,14 +63,6 @@ class ExplainJoinExecutor : public AbstractExecutor {
     /**
      * @brief 生成当前节点的执行计划说明
      * @return nullptr,因为解释器不实际生成记录
-     *
-     * @details 输出格式:
-     * Join(tables=[table1,table2,...],condition=[cond1,cond2,...])
-     * 其中:
-     * 1. 输出开始按offset_进行缩进
-     * 2. tables部分列出所有参与连接的表
-     * 3. condition部分列出所有连接条件
-     * 4. 递归解释左右子树的执行计划
      */
     std::unique_ptr<RmRecord> Next() override {
         // 按指定缩进生成输出

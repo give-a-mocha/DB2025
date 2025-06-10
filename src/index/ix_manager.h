@@ -226,12 +226,6 @@ class IxManager {
      * @param filename 表名
      * @param index_cols 索引列元数据
      * @return 索引句柄的智能指针
-     *
-     * @note 索引句柄的作用：
-     * 1. 提供B+树的操作接口
-     * 2. 维护文件的打开状态
-     * 3. 管理内存中的索引页面
-     *
      * @warning 使用完索引后必须调用close_index关闭
      */
     std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
@@ -249,13 +243,6 @@ class IxManager {
     /**
      * @brief 关闭索引文件
      * @param ih 要关闭的索引句柄
-     *
-     * @details 关闭过程：
-     * 1. 将文件头信息序列化到磁盘
-     * 2. 刷新所有脏页
-     * 3. 关闭文件描述符
-     * 4. 清理内存资源
-     *
      * @warning 关闭后不能再使用该索引句柄
      */
     void close_index(const IxIndexHandle *ih) {
@@ -271,11 +258,6 @@ class IxManager {
     /**
      * @brief 删除索引
      * @param ih 要删除的索引句柄
-     *
-     * @details 删除过程：
-     * 1. 从缓冲池中移除所有相关页面
-     * 2. 关闭文件描述符
-     *
      * @note 这是一个底层操作，通常通过destroy_index调用
      * @warning 确保没有其他事务正在使用该索引
      */

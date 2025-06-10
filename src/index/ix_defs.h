@@ -7,37 +7,6 @@
  *
  * @copyright Copyright (c) 2023 Renmin University of China
  * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
- *
- * 主要内容：
- * 1. 文件存储结构
- *    - 文件头页面：存储整个索引的元数据信息
- *    - 页面头部：每个节点的控制信息
- *    - 叶子节点链表：支持高效的范围查询
- *
- * 2. 内存数据组织
- *    - 提供序列化/反序列化功能
- *    - 实现页面内紧凑数据存储
- *    - 支持变长字段的处理
- *
- * 3. B+树关键参数
- *    - 根据页面大小动态计算树的阶数
- *    - 实现页面空间使用的限制
- *    - 控制索引键值的大小范围
- *
- * 核心组件：
- * 1. IxFileHdr：文件头结构
- *    - 维护整个索引文件的元数据
- *    - 记录B+树的关键参数
- *    - 管理空闲页面链表
- *
- * 2. IxPageHdr：节点页面头
- *    - 存储节点的类型和状态
- *    - 维护节点间的父子关系
- *    - 管理叶子节点双向链表
- *
- * 3. Iid：索引项标识符
- *    - 唯一标识索引中的位置
- *    - 支持范围查询的定位
  */
 
 #pragma once
@@ -67,26 +36,6 @@ constexpr int IX_MAX_COL_LEN = 512;
 
 /**
  * @brief 索引文件头，存储B+树的元数据信息
- *
- * 文件头包含以下信息：
- * 1. 空间管理
- *    - first_free_page_no_: 空闲页面链表头
- *    - num_pages_: 总页面数
- *
- * 2. 树结构信息
- *    - root_page_: 根节点页号
- *    - first_leaf_: 首叶节点页号
- *    - last_leaf_: 尾叶节点页号
- *
- * 3. 索引键信息
- *    - col_num_: 包含的列数
- *    - col_types_: 每列的类型
- *    - col_lens_: 每列的长度
- *    - col_tot_len_: 键值的总长度
- *
- * 4. B+树参数
- *    - btree_order_: 树的阶数(最大子节点数-1)
- *    - keys_size_: 每个节点键值区域的大小
  */
 class IxFileHdr {
    public:
@@ -117,11 +66,6 @@ class IxFileHdr {
      * @param first_leaf 首叶节点页号
      * @param last_leaf 尾叶节点页号
      *
-     * @note 初始化过程：
-     * 1. 初始化所有基本字段
-     * 2. 计算结构体总长度
-     * 3. 预分配向量空间，避免动态扩容
-     *
      * @warning col_num必须大于0且不超过限制
      */
     IxFileHdr(page_id_t first_free_page_no, int num_pages, page_id_t root_page, int col_num, int col_tot_len,
@@ -142,33 +86,6 @@ class IxFileHdr {
     /**
      * @brief 将文件头信息序列化到目标缓冲区
      * @param dest 目标缓冲区指针
-     *
-     * @details 序列化的内存布局：
-     * +------------+----------------+---------------+----------------+
-     * | 总长度(4B) | 基本字段(可变) | 列信息(可变)  | 其他参数(可变)  |
-     * +------------+----------------+---------------+----------------+
-     *
-     * 1. 基本字段：
-     *    - first_free_page_no (page_id_t)
-     *    - num_pages (int)
-     *    - root_page (page_id_t)
-     *    - col_num (int)
-     *
-     * 2. 列信息：
-     *    - 所有列的类型 (col_num * sizeof(ColType))
-     *    - 所有列的长度 (col_num * sizeof(int))
-     *
-     * 3. 其他参数：
-     *    - col_tot_len (int)
-     *    - btree_order (int)
-     *    - keys_size (int)
-     *    - first_leaf (page_id_t)
-     *    - last_leaf (page_id_t)
-     *
-     * @warning
-     * - dest必须有足够的空间(至少tot_len_字节)
-     * - 所有数值使用本地字节序
-     * - 必须确保内存对齐
      */
     void serialize(char *dest) {
         int offset = 0;
@@ -218,25 +135,6 @@ class IxFileHdr {
     /**
      * @brief 从源数据反序列化文件头信息
      * @param src 源数据缓冲区指针
-     *
-     * @details 反序列化过程：
-     * 1. 读取总长度并校验
-     * 2. 按序列化时的相同顺序读取数据：
-     *    - 基本字段
-     *    - 列信息
-     *    - 其他参数
-     * 3. 动态分配向量空间
-     * 4. 验证数据完整性
-     *
-     * @note 性能优化：
-     * 1. 使用reinterpret_cast避免多余的复制
-     * 2. 提前计算向量大小避免重分配
-     * 3. 保持内存对齐以提高访问效率
-     *
-     * @warning
-     * 1. src必须指向有效的序列化数据
-     * 2. 必须按照严格的顺序读取
-     * 3. 注意类型转换的安全性
      */
     void deserialize(char *src) {
         int offset = 0;
@@ -297,25 +195,6 @@ class IxFileHdr {
 
 /**
  * @brief B+树节点的页面头部结构
- *
- * 每个B+树节点页面的头部包含：
- * 1. 节点类型信息
- *    - is_leaf: 是否是叶节点
- *    - num_key: 当前键值对数量
- *
- * 2. 树结构信息
- *    - parent: 父节点页号
- *    - next_free_page_no: 保留字段
- *
- * 3. 叶节点链表信息(仅叶节点有效)
- *    - prev_leaf: 前一个叶节点页号
- *    - next_leaf: 后一个叶节点页号
- *
- * 页面布局：
- * +-------------+----------------+-------------+
- * | 页面头部    | 键值存储区域   | 指针存储区域 |
- * | IxPageHdr   |    keys       |    rids     |
- * +-------------+----------------+-------------+
  */
 class IxPageHdr {
    public:
@@ -329,17 +208,6 @@ class IxPageHdr {
 
 /**
  * @brief 索引项标识符，用于定位具体的键值对
- *
- * Iid (Index ID) 由两部分组成：
- * 1. page_no: 页面号，定位到具体的B+树节点
- * 2. slot_no: 槽位号，定位到节点内的具体位置
- *
- * 主要用途：
- * 1. 范围扫描的游标
- * 2. 定位插入位置
- * 3. 标识删除位置
- *
- * @note slot_no的范围是[0, num_key)
  */
 class Iid {
    public:

@@ -7,22 +7,6 @@
  *
  * @copyright Copyright (c) 2023 Renmin University of China
  * @license Mulan PSL v2 (http://license.coscl.org.cn/MulanPSL2)
- *
- * 查询优化器的主要功能：
- * 1. 查询计划生成
- *    - 解析查询语句的类型
- *    - 生成对应的执行计划
- *    - 处理各类DDL和DML语句
- *
- * 2. 特殊语句处理
- *    - 系统命令(HELP, SHOW等)
- *    - 事务控制语句
- *    - 元数据操作语句
- *
- * 3. 错误处理
- *    - 语句类型检查
- *    - 参数验证
- *    - 异常处理机制
  */
 
 #pragma once
@@ -42,23 +26,6 @@
 
 /**
  * @brief 查询优化器类
- *
- * 负责功能：
- * 1. 语句分类处理
- *    - DDL语句(CREATE, DROP等)
- *    - DML语句(SELECT, INSERT等)
- *    - 系统命令(SHOW, DESC等)
- *    - 事务控制语句
- *
- * 2. 计划生成
- *    - 根据语句类型选择合适的计划
- *    - 调用Planner生成具体执行计划
- *    - 处理元数据相关操作
- *
- * 3. 系统管理
- *    - 与系统管理器交互
- *    - 处理事务相关命令
- *    - 维护系统状态
  */
 class Optimizer {
    private:
@@ -66,12 +33,6 @@ class Optimizer {
     Planner *planner_;       // 计划生成器指针
 
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     * @param planner 计划生成器指针
-     * @throw InvalidPointerError 如果任一指针为空
-     */
     /**
      * @brief 构造函数
      * @param sm_manager 系统管理器指针
@@ -91,28 +52,6 @@ class Optimizer {
      * @param context 执行上下文
      * @return 生成的执行计划
      * @throw PlanError 当计划生成失败时
-     *
-     * @details 处理流程：
-     * 1. 系统命令处理
-     *    - HELP: 显示帮助信息
-     *    - SHOW TABLES: 显示所有表
-     *    - SHOW INDEX: 显示指定表的索引
-     *    - DESC: 显示表结构
-     *
-     * 2. 事务控制语句
-     *    - BEGIN: 开始事务
-     *    - COMMIT: 提交事务
-     *    - ABORT/ROLLBACK: 回滚事务
-     *
-     * 3. 系统设置
-     *    - SET: 设置系统参数
-     *
-     * 4. 常规SQL语句
-     *    - 委托给Planner处理
-     *    - 包括SELECT, INSERT, UPDATE, DELETE等
-     *
-     * @note 每种语句类型会生成对应的Plan对象，
-     * 具体执行逻辑由执行器实现
      */
     std::shared_ptr<Plan> plan_query(std::shared_ptr<Query> query, Context *context) {
         TRACE_FUNCTION

@@ -26,12 +26,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 表扫描操作执行计划的解释器
- *
- * @details 负责解释和展示表扫描操作,包括:
- * 1. 被扫描的表名
- * 2. 计划的缩进层次
- *
- * 这是执行计划树的叶子节点,代表从表中读取数据的基本操作
  */
 class ExplainScanExecutor : public AbstractExecutor {
    private:
@@ -43,10 +37,6 @@ class ExplainScanExecutor : public AbstractExecutor {
      * @brief 构造函数
      * @param tab_name 要扫描的表名
      * @param offset 输出的缩进偏移量
-     *
-     * @details 初始化扫描操作的解释器:
-     * 1. 记录要扫描的表名
-     * 2. 保存输出的缩进量
      */
     ExplainScanExecutor(std::string tab_name, int offset) {
         tab_name_ = std::move(tab_name);
@@ -56,14 +46,6 @@ class ExplainScanExecutor : public AbstractExecutor {
     /**
      * @brief 生成当前节点的执行计划说明
      * @return nullptr,因为解释器不实际生成记录
-     *
-     * @details 输出格式:
-     * Scan(table=table_name)
-     * 其中:
-     * 1. 输出开始按offset_进行缩进
-     * 2. 显示被扫描的表名
-     *
-     * 作为叶子节点,不需要递归处理子节点
      */
     std::unique_ptr<RmRecord> Next() override {
         // 按指定缩进生成输出

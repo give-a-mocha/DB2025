@@ -19,9 +19,6 @@ See the Mulan PSL v2 for more details. */
  * @return key_idx 键值对数组的下标
  *         - 范围：[0,num_key)
  *         - 如果返回num_key，表示target大于节点中的所有key
- * @note
- * - 返回的key_idx同时也是rid_index，作为slot no使用
- * - 采用二分查找以提高查找效率
  */
 int IxNodeHandle::lower_bound(const char *target) const {
     // Todo:
@@ -48,9 +45,6 @@ int IxNodeHandle::lower_bound(const char *target) const {
  * @return key_idx 键值对数组的下标
  *         - 范围：[1,num_key)
  *         - 如果返回num_key，表示target大于等于节点中所有key
- * @note
- * - 与lower_bound不同，这里范围从1开始
- * - 适用于内部节点的查找，确保不会返回第一个位置
  */
 int IxNodeHandle::upper_bound(const char *target) const {
     // Todo:
@@ -78,10 +72,6 @@ int IxNodeHandle::upper_bound(const char *target) const {
  * @return bool
  *         - true：成功找到目标键值对
  *         - false：未找到目标键值对
- * @note
- * - 该函数只用于叶子节点
- * - value作为传出参数，存储目标key对应的记录ID
- * - 使用lower_bound进行高效查找
  */
 bool IxNodeHandle::leaf_lookup(const char *key, Rid **value) {
     // Todo:
@@ -102,10 +92,6 @@ bool IxNodeHandle::leaf_lookup(const char *key, Rid **value) {
  * @details 通过比较键值确定目标key应当插入到哪个子树中
  * @param key 目标键值
  * @return page_id_t 包含目标key的子节点页面编号
- * @note
- * - 仅用于内部节点（非叶子节点）
- * - 利用upper_bound确保返回正确的子节点
- * - 返回的页面号对应目标key所在的子树根节点
  */
 page_id_t IxNodeHandle::internal_lookup(const char *key) {
     // Todo:
@@ -186,10 +172,6 @@ int IxNodeHandle::insert(const char *key, const Rid &value) {
  * @brief 删除节点中指定位置的键值对
  * @details 通过内存移动实现高效的键值对删除
  * @param pos 要删除的键值对位置
- * @note
- * - 通过移动内存来填补被删除的位置
- * - 同时维护keys和rids数组
- * - 更新节点的键值对数量
  * @warning
  * - pos必须在有效范围内[0,num_key)
  * - 删除后要保证节点结构的完整性
@@ -295,10 +277,6 @@ std::pair<IxNodeHandle *, bool> IxIndexHandle::find_leaf_page(const char *key, O
  * @return bool
  *         - true：成功找到目标键值对
  *         - false：未找到目标键值对
- * @note
- * - 使用find_leaf_page定位叶子节点
- * - 使用互斥锁保护并发访问
- * - 需要正确处理内存资源的释放
  */
 bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transaction *transaction) {
     // Todo:
@@ -326,12 +304,6 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
  * @details 将一个满节点分裂成两个节点，键值对平均分配
  * @param node 需要分裂的节点
  * @return IxNodeHandle* 新创建的右侧节点
- * @note
- * - 会创建一个新的右侧兄弟节点
- * - 原节点保留前半部分键值对
- * - 新节点包含后半部分键值对
- * - 如果是叶子节点，需要维护叶子节点链表
- * - 如果是内部节点，需要更新子节点的父指针
  * @warning
  * - 调用者必须在使用完毕后unpin两个节点
  * - 分裂可能触发父节点的递归分裂
@@ -380,13 +352,6 @@ IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
  * @param key 要插入到父节点的键值
  * @param new_node 分裂产生的新右兄弟节点
  * @param transaction 事务指针
- * @note 处理流程：
- * 1. 如果old_node是根节点：
- *    - 创建新的根节点
- *    - 设置old_node和new_node为其子节点
- * 2. 如果old_node不是根节点：
- *    - 在父节点中插入new_node的首个键值对
- *    - 如果父节点已满，则递归执行分裂
  * @warning
  * - 必须正确维护节点间的父子关系
  * - 分裂可能一直递归到根节点
@@ -445,11 +410,6 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
  * @return page_id_t
  *         - 插入位置所在叶节点的页面号
  *         - INVALID_PAGE_ID 表示插入失败
- * @note 插入过程：
- * 1. 找到目标叶子节点
- * 2. 检查是否存在重复键值
- * 3. 执行插入操作
- * 4. 必要时分裂节点并更新父节点
  * @warning
  * - 需要正确处理并发控制
  * - 必须维护最右叶子节点信息
@@ -495,10 +455,6 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
  * @return bool
  *         - true：成功删除目标键值对
  *         - false：未找到目标键值对
- * @note 删除过程：
- * 1. 定位目标叶子节点
- * 2. 执行删除操作
- * 3. 如果节点键值对过少，进行合并或重分配
  * @warning
  * - 删除可能触发节点合并
  * - 需要正确处理并发访问
@@ -532,9 +488,6 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
  * @param transaction 事务指针
  * @param root_is_latched 传出参数：根节点是否上锁，用于并发操作
  * @return 是否需要删除结点
- * @note User needs to first find the sibling of input page.
- * If sibling's size + input page's size >= 2 * page's minsize, then redistribute.
- * Otherwise, merge(Coalesce).
  */
 bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction, bool *root_is_latched) {
     // Todo:
@@ -655,10 +608,6 @@ bool IxIndexHandle::adjust_root(IxNodeHandle *old_root_node) {
  * @param node input from method coalesceOrRedistribute()
  * @param parent the parent of "node" and "neighbor_node"
  * @param index node在parent中的rid_idx
- * @note node是之前刚被删除过一个key的结点
- * index=0，则neighbor是node后继结点，表示：node(left)      neighbor(right)
- * index>0，则neighbor是node前驱结点，表示：neighbor(left)  node(right)
- * 注意更新parent结点的相关kv对
  */
 void IxIndexHandle::redistribute(IxNodeHandle *neighbor_node, IxNodeHandle *node, IxNodeHandle *parent, int index) {
     // Todo:
@@ -743,11 +692,6 @@ bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, 
  * @details 根据索引项ID中的页号和槽号找到对应的记录ID
  * @param iid 索引项ID，包含页号和槽号
  * @return Rid 对应的记录ID
- * @note 实现说明：
- * - iid.slot_no作为node的rid_idx(key_idx)
- * - 每个iid对应的索引槽存储(key,rid)对
- * - key指向要建立索引的属性首地址
- * - rid指向实际记录的存储位置
  * @warning
  * - iid和rid存储不同含义：
  *   - iid是索引内部的位置标识
@@ -797,11 +741,6 @@ Iid IxIndexHandle::lower_bound(const char *key) {
  * @details 结合查找叶子节点和节点内查找两个操作
  * @param key 目标键值
  * @return Iid 找到的索引项ID
- * @note 实现细节：
- * - 先定位到叶子节点
- * - 然后在节点内查找目标位置
- * - 如果未找到返回leaf_end()
- * @warning 必须及时释放节点资源
  */
 Iid IxIndexHandle::upper_bound(const char *key) {
     //! DO
@@ -854,10 +793,6 @@ Iid IxIndexHandle::leaf_begin() const {
  * @details 从缓冲池中获取或加载指定页面
  * @param page_no 目标页面号
  * @return IxNodeHandle* 索引节点句柄
- * @note 重要说明：
- * - 会将页面固定在缓冲池中
- * - 返回的节点必须由调用者解除固定
- * - 使用完毕后必须删除节点句柄
  * @warning
  * - 必须在外部调用unpin_page
  * - 必须释放返回的节点内存
@@ -875,16 +810,6 @@ IxNodeHandle *IxIndexHandle::fetch_node(int page_no) const {
  * @brief 创建一个新的索引节点
  * @details 分配新页面并初始化为索引节点
  * @return IxNodeHandle* 新创建的节点句柄
- * @note 页面管理策略：
- * - 删除的页面被标记为free_page
- * - first_free_page指向最新删除的页面
- * - 初始插入时创建新节点，first_page_no保持为IX_NO_PAGE
- * - 与Record管理的区别：
- *   - Index：只有删除的页面才是free_page
- *   - Record：未满的记录页也视为free_page
- * @warning
- * - 调用者必须unpin返回的页面
- * - 必须释放节点内存
  */
 IxNodeHandle *IxIndexHandle::create_node() {
     IxNodeHandle *node;
@@ -901,10 +826,6 @@ IxNodeHandle *IxIndexHandle::create_node() {
  * @brief 更新节点到根节点路径上的键值
  * @details 递归更新父节点的首个键值直到根节点
  * @param node 起始节点
- * @note 更新过程：
- * 1. 获取父节点
- * 2. 更新父节点中对应子节点的键值
- * 3. 如果有变化则继续向上更新
  * @warning
  * - 必须正确处理资源释放
  * - 需要正确维护内存中的数据
@@ -934,9 +855,6 @@ void IxIndexHandle::maintain_parent(IxNodeHandle *node) {
  * @brief 删除叶子节点前更新双向链表
  * @details 维护叶子节点双向链表的完整性
  * @param leaf 待删除的叶子节点
- * @note 更新步骤：
- * 1. 更新前驱节点的next指针
- * 2. 更新后继节点的prev指针
  * @warning
  * - 必须在实际删除叶子节点前调用
  * - 需要正确处理资源释放
@@ -959,9 +877,6 @@ void IxIndexHandle::erase_leaf(IxNodeHandle *leaf) {
  * @brief 删除节点时更新文件头信息
  * @details 更新索引文件的页面数量统计
  * @param node 要删除的节点
- * @note 实现说明：
- * - 减少文件头中的页面计数
- * - 用于维护索引文件的元数据
  */
 void IxIndexHandle::release_node_handle(IxNodeHandle &node) { file_hdr_->num_pages_--; }
 
@@ -970,9 +885,6 @@ void IxIndexHandle::release_node_handle(IxNodeHandle &node) { file_hdr_->num_pag
  * @details 设置子节点的父节点指针
  * @param node 父节点
  * @param child_idx 子节点在父节点中的索引
- * @note 实现说明：
- * - 仅对非叶子节点操作
- * - 更新子节点的parent指针
  * @warning 必须正确处理资源释放
  */
 void IxIndexHandle::maintain_child(IxNodeHandle *node, int child_idx) {

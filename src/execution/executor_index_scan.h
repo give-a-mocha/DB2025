@@ -18,32 +18,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 索引扫描执行器，负责实现基于索引的高效记录访问
- *
- * @details 主要功能和特点：
- * 1. 索引处理：
- *    - 构建扫描范围
- *    - 优化查询条件
- *    - 高效遍历策略
- *
- * 2. 性能优化：
- *    - B+树访问优化
- *    - 记录批量预读
- *    - 条件提前过滤
- *
- * 3. 事务支持：
- *    - 索引并发控制
- *    - MVCC支持
- *    - 死锁预防
- *
- * 4. 资源管理：
- *    - 内存使用优化
- *    - 缓存命中率提升
- *    - I/O最小化
- *
- * @note 使用场景：
- * - 高选择度查询
- * - 范围扫描操作
- * - 有序结果需求
  */
 class IndexScanExecutor : public AbstractExecutor {
    private:
@@ -137,32 +111,7 @@ class IndexScanExecutor : public AbstractExecutor {
     /**
      * @brief 初始化索引扫描并定位第一条记录
      * @throw InternalError 当索引访问失败时
-     *
-     * @details 初始化过程：
-     * 1. 扫描范围构建
-     *    - 按索引列提取条件
-     *    - 计算上下边界值
-     *    - 构建边界记录
-     *
-     * 2. B+树操作
-     *    - 查找下界位置
-     *    - 确定上界范围
-     *    - 初始化扫描器
-     *
-     * 3. 性能优化
-     *    - 预读取页面
-     *    - 缓存热点节点
-     *    - 条件过滤下推
-     *
-     * 4. 边界处理
-     *    - 类型范围检查
-     *    - NULL值处理
-     *    - 特殊值优化
-     *
-     * @note 优化策略：
-     * - 最小化I/O操作
-     * - 利用索引特性
-     * - 充分使用缓存
+
      */
     void beginTuple() override {
         // 构建索引查询范围
@@ -258,21 +207,6 @@ class IndexScanExecutor : public AbstractExecutor {
     /**
      * @brief 移动到下一条满足条件的记录
      * @throw InternalError 当扫描器未初始化时
-     *
-     * @details 执行步骤：
-     * 1. 状态检查：
-     *    - 验证扫描器状态
-     *    - 检查是否到达结尾
-     *
-     * 2. 记录查找：
-     *    - 移动索引位置
-     *    - 读取记录数据
-     *    - 应用过滤条件
-     *
-     * 3. 性能优化：
-     *    - 批量预读取
-     *    - 缓存结果集
-     *    - 减少I/O操作
      */
     void nextTuple() override {
         if (scan_ == nullptr) {
@@ -295,22 +229,6 @@ class IndexScanExecutor : public AbstractExecutor {
     /**
      * @brief 检查索引扫描是否结束
      * @return true表示扫描完成，false表示还有记录
-     *
-     * @details 检查条件：
-     * 1. 正常结束
-     *    - 到达索引上界
-     *    - 遍历完指定范围
-     *    - 满足终止条件
-     *
-     * 2. 异常结束
-     *    - 扫描器未初始化
-     *    - B+树访问错误
-     *    - 事务中止
-     *
-     * 3. 并发考虑
-     *    - 检查索引一致性
-     *    - 处理并发修改
-     *    - 维护扫描状态
      */
     bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
 
@@ -318,55 +236,18 @@ class IndexScanExecutor : public AbstractExecutor {
      * @brief 获取当前扫描位置的记录
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
-     *
-     * @details 访问流程：
-     * 1. 记录获取
-     *    - 通过RID定位
-     *    - 从缓冲池读取
-     *    - 验证记录有效性
-     *
-     * 2. 并发控制
-     *    - 获取记录锁
-     *    - 检查事务可见性
-     *    - 处理死锁情况
-     *
-     * 3. 性能优化
-     *    - 使用记录缓存
-     *    - 批量预读取
-     *    - 延迟加载策略
      */
     std::unique_ptr<RmRecord> Next() override { return fh_->get_record(rid_, context_); }
 
     /**
      * @brief 获取记录的物理长度
      * @return 记录的总字节数
-     *
-     * @details 长度计算：
-     * 1. 数据部分
-     *    - 固定长度字段
-     *    - 变长字段实际长度
-     *    - 对齐填充
-     *
-     * 2. 控制信息
-     *    - 记录头信息
-     *    - NULL值位图
-     *    - 版本信息
-     *
-     * @note 用于：
-     * - 内存分配
-     * - 缓冲区管理
-     * - 页面布局
      */
     size_t tupleLen() const override { return len_; }
 
     /**
      * @brief 获取扫描涉及的所有列元数据
      * @return 列元数据向量的常量引用
-     *
-     * @details 包含数据：
-     * - 列名和类型信息
-     * - 偏移量和长度
-     * - 约束条件
      */
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
@@ -383,11 +264,6 @@ class IndexScanExecutor : public AbstractExecutor {
     /**
      * @brief 获取当前记录的RID
      * @return 当前记录的RID引用
-     *
-     * @note 用于：
-     * - 记录定位
-     * - 锁管理
-     * - 并发控制
      */
     Rid &rid() override { return rid_; }
 

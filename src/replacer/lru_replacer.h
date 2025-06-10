@@ -20,20 +20,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief LRU(最近最少使用)页面替换策略的实现
- *
- * @details 实现原理：
- * 1. 使用双向链表(LRUlist_)记录页面访问顺序
- *    - 最近使用的页面在链表头部
- *    - 最久未使用的页面在链表尾部
- *
- * 2. 使用哈希表(LRUhash_)实现O(1)的页面查找
- *    - 存储frame_id到链表节点的映射
- *    - 支持快速的页面状态更新
- *
- * @note 特性：
- * 1. 线程安全：使用互斥锁保护并发访问
- * 2. 空间效率：额外空间复杂度O(n)
- * 3. 时间效率：所有操作时间复杂度O(1)
  */
 class LRUReplacer : public Replacer {
    public:

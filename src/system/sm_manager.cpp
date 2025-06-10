@@ -40,15 +40,6 @@
  * @param db_name 数据库文件名称
  * @return true 如果是一个有效的文件夹
  * @return false 如果不是文件夹或路径不存在
- *
- * @details 实现说明：
- * 1. 使用stat系统调用获取文件信息
- * 2. 检查文件类型标志是否为目录
- *
- * @note 用于：
- * 1. 创建数据库前的检查
- * 2. 打开数据库前的验证
- * 3. 防止重复创建数据库
  */
 bool SmManager::is_dir(const std::string& db_name) {
     struct stat st;
@@ -61,18 +52,6 @@ bool SmManager::is_dir(const std::string& db_name) {
  * @param db_name 数据库名称
  * @throw DatabaseExistsError 如果数据库已存在
  * @throw UnixError 如果文件系统操作失败
- *
- * @details 创建步骤：
- * 1. 检查数据库是否已存在
- * 2. 创建数据库目录
- * 3. 初始化数据库元数据
- * 4. 创建日志文件
- * 5. 写入元数据文件
- *
- * @note 实现说明：
- * 1. 所有数据库文件存放在同名目录下
- * 2. 使用系统调用创建目录
- * 3. 确保创建过程的原子性
  */
 void SmManager::create_db(const std::string& db_name) {
     if (is_dir(db_name)) {
@@ -113,13 +92,6 @@ void SmManager::create_db(const std::string& db_name) {
  * @param db_name 数据库名称
  * @throw DatabaseNotFoundError 如果数据库不存在
  * @throw UnixError 如果文件系统操作失败
- *
- * @details 删除步骤：
- * 1. 验证数据库是否存在
- * 2. 递归删除数据库目录及其内容
- * 3. 清理相关系统资源
- *
- * @warning 该操作不可恢复，会删除所有数据
  */
 void SmManager::drop_db(const std::string& db_name) {
     if (!is_dir(db_name)) {
@@ -185,13 +157,6 @@ void SmManager::flush_meta() {
 
 /**
  * @description: 关闭当前打开的数据库
- *
- * 该函数完成以下操作：
- * 1. 检查数据库是否存在
- * 2. 将元数据刷新到磁盘
- * 3. 清理所有内存中的数据结构（表、索引等）
- * 4. 返回上级目录
- *
  * @throw DatabaseNotFoundError 如果数据库不存在
  * @throw UnixError 如果文件系统操作失败
  */
@@ -229,13 +194,6 @@ void SmManager::close_db() {
 
 /**
  * @description: 显示数据库中的所有表
- *
- * 该函数将：
- * 1. 打开输出文件 output.txt
- * 2. 按照规定格式输出表头
- * 3. 遍历并展示所有表的名称
- * 4. 同时在控制台和文件中显示结果
- *
  * @param {Context*} context 执行上下文
  */
 void SmManager::show_tables(Context* context) {
@@ -333,17 +291,6 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
 
 /**
  * @description: 创建新表
- *
- * 该函数完成以下操作：
- * 1. 检查表是否已存在
- * 2. 创建表的元数据结构，包括：
- *    - 设置表名
- *    - 计算每个字段的偏移量
- *    - 构建列的元数据
- * 3. 创建表的数据文件
- * 4. 更新数据库的元数据
- * 5. 打开表文件的句柄
- *
  * @param {string&} tab_name 表的名称
  * @param {vector<ColDef>&} col_defs 表的字段定义
  * @param {Context*} context 执行上下文
@@ -392,16 +339,6 @@ void SmManager::create_table(const std::string& tab_name, const std::vector<ColD
 
 /**
  * @description: 删除指定的表
- *
- * 该函数完成以下操作：
- * 1. 验证表是否存在
- * 2. 获取表的排他锁（如果在事务中）
- * 3. 删除表的所有索引
- * 4. 关闭并清理表的文件句柄
- * 5. 删除表的数据文件
- * 6. 从数据库元数据中移除表的信息
- * 7. 更新元数据到磁盘
- *
  * @param {string&} tab_name 表的名称
  * @param {Context*} context 执行上下文
  * @throw TableNotFoundError 如果表不存在
@@ -446,16 +383,6 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
 
 /**
  * @description: 在指定表上创建索引
- *
- * 该函数完成以下操作：
- * 1. 获取表的元数据
- * 2. 检查索引是否已经存在
- * 3. 获取所有需要建立索引的列的元数据
- * 4. 创建索引文件
- * 5. 扫描表中所有记录，将对应的键值对插入B+树
- * 6. 更新表的元数据，添加索引信息
- * 7. 持久化元数据变更
- *
  * @param {string&} tab_name 表的名称
  * @param {vector<string>&} col_names 索引包含的字段名称
  * @param {Context*} context 执行上下文
@@ -532,15 +459,6 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
 
 /**
  * @description: 删除指定表上的索引
- *
- * 该函数完成以下操作：
- * 1. 验证索引是否存在
- * 2. 关闭并删除索引文件
- * 3. 从内存中移除索引句柄
- * 4. 删除索引的物理文件
- * 5. 从表的元数据中移除索引信息
- * 6. 更新元数据到磁盘
- *
  * @param {string&} tab_name 表名称
  * @param {vector<string>&} col_names 索引包含的字段名称
  * @param {Context*} context 执行上下文

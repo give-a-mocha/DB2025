@@ -59,16 +59,6 @@ class SortExecutor : public AbstractExecutor {
 
     /**
      * @brief 初始化排序过程并找到第一个元组
-     *
-     * @details 处理步骤:
-     * 1. 扫描所有输入元组
-     * 2. 找出第一个极值(最大或最小)
-     * 3. 记录选中元组的位置
-     *
-     * 排序策略:
-     * - 实现类似选择排序的过程
-     * - 每次选择未处理元组中的最值
-     * - 通过used_tuple记录已选择的位置
      */
     void beginTuple() override {
         // 清空缓存
@@ -127,14 +117,6 @@ class SortExecutor : public AbstractExecutor {
      * @param a 第一个元组
      * @param b 第二个元组
      * @return true表示a应该在b之前
-     *
-     * @details 比较策略:
-     * 1. 处理空值情况
-     * 2. 根据列类型选择比较方法:
-     *    - 整数: 直接比较
-     *    - 浮点数: 考虑精度的比较
-     *    - 字符串: 使用strncmp比较
-     * 3. 根据排序方向(升序/降序)返回结果
      */
     bool cmp(const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) const {
         // 处理空值情况

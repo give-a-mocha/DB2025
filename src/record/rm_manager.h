@@ -35,21 +35,6 @@
 
 /**
  * @brief 记录管理器类
- *
- * 记录管理器负责管理表的数据文件，维护数据在磁盘上的组织方式，主要功能：
- * 1. 文件操作
- *    - 创建新的数据文件并初始化文件头
- *    - 删除已存在的数据文件
- *    - 打开和关闭数据文件
- * 2. 空间管理
- *    - 使用位图管理记录的空闲空间
- *    - 计算每页可存储的记录数
- * 3. 页面管理
- *    - 维护空闲页面链表
- *    - 自动扩展文件大小
- * 4. 缓冲管理
- *    - 协调文件数据在内存和磁盘间的交换
- *    - 确保数据的持久化
  */
 class RmManager {
    private:
@@ -118,10 +103,6 @@ class RmManager {
      *
      * @param filename 要打开的文件名称
      * @return unique_ptr<RmFileHandle> 文件句柄的智能指针
-     * @note 文件句柄封装了对文件的所有操作：
-     * 1. 记录的插入、删除和更新
-     * 2. 页面的分配和回收
-     * 3. 文件头信息的维护
      */
     std::unique_ptr<RmFileHandle> open_file(const std::string &filename) {
         int fd = disk_manager_->open_file(filename);
@@ -131,10 +112,6 @@ class RmManager {
      * @brief 关闭表的数据文件
      *
      * @param file_handle 要关闭文件的句柄
-     * @note 关闭文件时的操作顺序：
-     * 1. 将文件头信息写回磁盘
-     * 2. 将所有脏页刷新到磁盘
-     * 3. 关闭文件描述符
      */
     void close_file(const RmFileHandle *file_handle) {
         disk_manager_->write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
@@ -148,11 +125,6 @@ class RmManager {
      * @brief 关闭数据文件并清理缓冲池
      *
      * @param file_handle 要关闭文件的句柄
-     * @note 相比普通关闭，该方法还会：
-     * 1. 删除缓冲池中该文件的所有页面
-     * 2. 释放相关的内存资源
-     * 3. 强制持久化所有修改
-     * @warning 该操作会导致缓冲池中的页面失效，可能影响性能
      */
     void close_file_and_clear_buffer(const RmFileHandle *file_handle) {
         disk_manager_->write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,

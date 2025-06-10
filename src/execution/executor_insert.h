@@ -20,22 +20,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 插入执行器，负责实现INSERT语句的功能
- *
- * @details 主要功能和特点：
- * 1. 数据插入：
- *    - 校验插入值的数量和类型
- *    - 处理数据类型的自动转换
- *    - 分配和填充记录空间
- *
- * 2. 索引维护：
- *    - 同步更新表的所有索引
- *    - 处理唯一性约束冲突
- *    - 支持插入失败时的回滚
- *
- * 3. 事务支持：
- *    - 保证操作的原子性
- *    - 处理并发插入冲突
- *    - 维护ACID特性
  */
 class InsertExecutor : public AbstractExecutor {
    private:
@@ -54,12 +38,6 @@ class InsertExecutor : public AbstractExecutor {
      * @param values 要插入的值列表
      * @param context 执行上下文
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
-     *
-     * @details 初始化过程：
-     * 1. 保存系统管理器和表名
-     * 2. 获取表的元数据和文件句柄
-     * 3. 检查值的数量是否匹配
-     * 4. 设置执行上下文
      */
     InsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context) {
         sm_manager_ = sm_manager;
@@ -79,20 +57,6 @@ class InsertExecutor : public AbstractExecutor {
      * @return nullptr，因为INSERT不产生结果集
      * @throw IncompatibleTypeError 当值的类型与列类型不兼容时
      * @throw RMDBError 当索引更新失败需要回滚时
-     *
-     * @details 执行步骤：
-     * 1. 创建记录
-     *    - 分配记录缓冲区
-     *    - 处理数据类型转换
-     *    - 填充记录数据
-     *
-     * 2. 插入记录
-     *    - 写入表文件
-     *    - 获取记录RID
-     *
-     * 3. 更新索引
-     *    - 插入所有索引项
-     *    - 失败时回滚记录
      */
     std::unique_ptr<RmRecord> Next() override {
         // 创建记录缓冲区
@@ -136,22 +100,6 @@ class InsertExecutor : public AbstractExecutor {
      * @brief 为新记录创建索引项
      * @param rec 要创建索引的记录引用
      * @return 是否成功创建所有索引
-     *
-     * @details 执行步骤：
-     * 1. 遍历表的所有索引
-     *    - 获取索引句柄
-     *    - 构造索引键值
-     *    - 插入索引项
-     *
-     * 2. 处理插入失败
-     *    - 记录成功的键值
-     *    - 发生失败时回滚
-     *    - 维护事务一致性
-     *
-     * 3. 性能优化
-     *    - 预分配键值空间
-     *    - 减少内存分配
-     *    - 批量处理提升效率
      */
     bool insert_index(RmRecord &rec) {
         std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值

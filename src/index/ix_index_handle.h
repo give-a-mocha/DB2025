@@ -37,21 +37,6 @@
 
 /**
  * @brief 索引操作的类型枚举
- *
- * 该枚举用于指定对B+树的操作类型，影响：
- * 1. 并发控制策略
- *    - FIND: 使用共享锁，允许并发读
- *    - INSERT: 使用排他锁，防止并发修改
- *    - DELETE: 使用排他锁，可能触发节点合并
- *
- * 2. 加锁顺序
- *    - FIND: 自顶向下加锁，访问后立即释放
- *    - INSERT: 自顶向下加锁，直到操作完成
- *    - DELETE: 自顶向下加锁，可能需要向上回溯
- *
- * 3. 缓冲区管理
- *    - FIND: 页面访问后立即解固定
- *    - INSERT/DELETE: 需要保持页面固定直到操作完成
  */
 enum class Operation {
     FIND = 0,  // 查找操作：只读访问，使用共享锁
@@ -477,12 +462,6 @@ class IxIndexHandle {
      * @brief 获取指定页面的节点句柄
      * @param page_no 页面号
      * @return 节点句柄指针
-     *
-     * @details 获取过程：
-     * 1. 从缓冲池获取或加载页面
-     * 2. 构造节点句柄包装页面
-     * 3. 设置页面的固定计数
-     *
      * @warning
      * 1. 返回的节点必须通过release_node_handle释放
      * 2. 可能触发缓冲池页面替换
@@ -492,13 +471,6 @@ class IxIndexHandle {
     /**
      * @brief 创建新的B+树节点
      * @return 新节点的句柄
-     *
-     * @details 创建过程：
-     * 1. 分配新页面
-     * 2. 初始化页面头部
-     * 3. 设置节点属性（如是否为叶节点）
-     * 4. 更新文件头中的页面计数
-     *
      * @warning 必须正确初始化node_hdr和指针关系
      */
     IxNodeHandle *create_node();
@@ -508,12 +480,6 @@ class IxIndexHandle {
     /**
      * @brief 维护节点的父指针
      * @param node 要维护的节点
-     *
-     * @details 维护过程：
-     * 1. 遍历所有子节点
-     * 2. 更新每个子节点的父指针
-     * 3. 确保双向连接的一致性
-     *
      * @note 在节点分裂、合并后调用
      */
     void maintain_parent(IxNodeHandle *node);
@@ -521,12 +487,6 @@ class IxIndexHandle {
     /**
      * @brief 从叶节点链表中删除节点
      * @param leaf 要删除的叶节点
-     *
-     * @details 删除过程：
-     * 1. 更新前驱节点的next指针
-     * 2. 更新后继节点的prev指针
-     * 3. 维护叶节点链表的完整性
-     *
      * @warning 必须正确维护双向链表结构
      */
     void erase_leaf(IxNodeHandle *leaf);
@@ -534,12 +494,6 @@ class IxIndexHandle {
     /**
      * @brief 释放节点句柄
      * @param node 要释放的节点句柄
-     *
-     * @details 释放过程：
-     * 1. 减少页面的引用计数
-     * 2. 如果页面变脏，标记需要写回
-     * 3. 清理节点句柄的资源
-     *
      * @note 所有通过fetch_node获取的节点都必须释放
      */
     void release_node_handle(IxNodeHandle &node);
@@ -548,12 +502,6 @@ class IxIndexHandle {
      * @brief 维护父子节点关系
      * @param node 父节点
      * @param child_idx 子节点在父节点中的索引
-     *
-     * @details 维护过程：
-     * 1. 验证父子关系的有效性
-     * 2. 更新子节点的父指针
-     * 3. 确保索引项正确
-     *
      * @warning 在节点移动、分裂后调用
      */
     void maintain_child(IxNodeHandle *node, int child_idx);

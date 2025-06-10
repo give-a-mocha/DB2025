@@ -20,26 +20,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 更新执行器，负责实现UPDATE语句的功能
- *
- * @details 主要功能和特点：
- * 1. 数据更新：
- *    - 支持条件更新
- *    - 处理类型转换
- *    - 批量更新记录
- *
- * 2. 索引维护：
- *    - 原子性更新索引
- *    - 处理唯一性约束
- *    - 支持回滚操作
- *
- * 3. 事务管理：
- *    - 四阶段更新：
- *      1) 准备新记录
- *      2) 删除旧索引
- *      3) 插入新索引
- *      4) 更新记录数据
- *    - 完整的回滚机制
- *    - 并发控制支持
  */
 class UpdateExecutor : public AbstractExecutor {
    private:
@@ -60,12 +40,6 @@ class UpdateExecutor : public AbstractExecutor {
      * @param conds 更新条件列表
      * @param rids 待更新记录的RID列表
      * @param context 执行上下文
-     *
-     * @details 初始化过程：
-     * 1. 保存系统管理器和表相关信息
-     * 2. 记录SET子句和更新条件
-     * 3. 获取表的元数据和文件句柄
-     * 4. 设置执行上下文
      */
     UpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
                    std::vector<Condition> conds, std::vector<Rid> rids, Context *context) {
@@ -83,16 +57,6 @@ class UpdateExecutor : public AbstractExecutor {
      * @brief 从所有索引中删除记录的索引项
      * @param rec 要删除索引的记录指针
      * @param rid_ 记录的RID
-     *
-     * @details 执行步骤：
-     * 1. 遍历所有索引
-     *    - 获取索引句柄
-     *    - 构造对应的键值
-     *    - 删除索引条目
-     *
-     * 2. 事务保证：
-     *    - 在事务中执行
-     *    - 处理异常情况
      */
     void delete_index(RmRecord *rec, Rid rid_) {
         // 遍历所有索引
@@ -118,16 +82,6 @@ class UpdateExecutor : public AbstractExecutor {
      * @param rec 要恢复索引的记录指针
      * @param rid_ 记录的RID
      * @throw RMDBError 当索引重插入失败时
-     *
-     * @details 执行步骤：
-     * 1. 遍历所有索引
-     *    - 获取索引句柄
-     *    - 构造键值
-     *    - 插入索引条目
-     *
-     * 2. 错误处理：
-     *    - 检查插入结果
-     *    - 失败时抛出异常
      */
     void reinsert_index(RmRecord *rec, Rid rid_) {
         // 重新插入索引（用于回滚）
@@ -152,21 +106,6 @@ class UpdateExecutor : public AbstractExecutor {
      * @param rec 要创建索引的记录指针
      * @param rid_ 记录的RID
      * @return true表示所有索引创建成功，false表示失败
-     *
-     * @details 执行步骤：
-     * 1. 准备工作：
-     *    - 预分配键值存储空间
-     *    - 初始化状态变量
-     *
-     * 2. 索引插入：
-     *    - 遍历所有索引
-     *    - 构造索引键值
-     *    - 执行插入操作
-     *
-     * 3. 错误处理：
-     *    - 记录已插入的键值
-     *    - 失败时回滚已插入的索引
-     *    - 保证操作原子性
      */
     bool insert_index(RmRecord *rec, Rid rid_) {
         std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
@@ -210,26 +149,6 @@ class UpdateExecutor : public AbstractExecutor {
      * @return nullptr，因为UPDATE不产生结果集
      * @throw IncompatibleTypeError 当值的类型与列类型不兼容时
      * @throw RMDBError 当索引更新失败需要回滚时
-     *
-     * @details 四阶段更新过程：
-     * 1. 准备阶段
-     *    - 获取旧记录
-     *    - 创建新记录
-     *    - 设置更新值
-     *    - 处理类型转换
-     *
-     * 2. 删除旧索引
-     *    - 遍历所有记录
-     *    - 删除相关索引项
-     *
-     * 3. 插入新索引
-     *    - 创建新索引项
-     *    - 失败时完全回滚
-     *    - 维护事务一致性
-     *
-     * 4. 更新记录
-     *    - 写入新记录内容
-     *    - 完成事务提交
      */
     std::unique_ptr<RmRecord> Next() override {
         std::vector<std::unique_ptr<RmRecord>> old_records;  // 保存旧记录用于回滚

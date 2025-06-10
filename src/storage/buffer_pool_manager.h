@@ -25,13 +25,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 缓冲池管理器类
- *
- * 该类负责管理内存中的页面缓存，主要功能包括：
- * 1. 页面的调入与调出
- * 2. 脏页的刷新
- * 3. 新页面的分配
- * 4. 缓冲池的空间管理
- * 5. 页面替换策略的实现
  */
 class BufferPoolManager {
    private:

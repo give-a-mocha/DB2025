@@ -71,12 +71,6 @@ constexpr int help_info_len = strlen(help_info);
  * @param plan DDL语句的执行计划，包含创建/删除表和索引的具体信息
  * @param context 执行上下文，包含事务信息和结果缓冲区
  * @throw InternalError 当遇到未预期的计划类型时抛出
- *
- * @note 该函数处理以下DDL操作：
- * - CREATE TABLE: 创建新表
- * - DROP TABLE: 删除已有表
- * - CREATE INDEX: 在指定列上创建索引
- * - DROP INDEX: 删除指定的索引
  */
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
@@ -111,16 +105,6 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
  * @param txn_id 事务ID指针，用于事务控制命令
  * @param context 执行上下文，包含事务和输出信息
  * @throw InternalError 当遇到未预期的命令类型时抛出
- *
- * @note 该函数处理以下命令：
- * - help: 显示SQL语法帮助信息
- * - show tables: 显示数据库中所有表
- * - show index: 显示指定表的索引
- * - desc table: 显示表结构
- * - begin: 开启显式事务
- * - commit: 提交当前事务
- * - rollback/abort: 回滚当前事务
- * - set knob: 设置优化器参数
  */
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
     if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
@@ -275,11 +259,6 @@ void QlManager::run_dml(std::unique_ptr<AbstractExecutor> exec) { exec->Next(); 
  * @param executorTreeRoot 执行器树的根节点，包含完整的执行计划
  * @param sel_cols 查询涉及的列信息
  * @param context 执行上下文，用于存储和输出执行计划
- *
- * @note 该函数用于分析和展示查询的执行计划：
- * 1. 显示执行器树的结构
- * 2. 展示各个执行节点的执行顺序
- * 3. 帮助分析查询性能和优化查询
  */
 void QlManager::run_explain(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
                             Context *context) {

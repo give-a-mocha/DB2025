@@ -26,11 +26,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 投影操作执行计划的解释器
- *
- * @details 负责解释和展示SELECT语句的投影操作,包括:
- * 1. 投影列的列表
- * 2. 是否为SELECT *
- * 3. 计划的缩进层次
  */
 class ExplainProjectExecutor : public AbstractExecutor {
    private:
@@ -46,11 +41,6 @@ class ExplainProjectExecutor : public AbstractExecutor {
      * @param sel_cols 需要投影的列
      * @param offset 输出的缩进偏移量
      * @param isStar 是否为SELECT *查询
-     *
-     * @details 初始化投影操作的解释器:
-     * 1. 保存前序执行器
-     * 2. 记录投影列
-     * 3. 对列按表名和列名排序,确保输出的一致性
      */
     ExplainProjectExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> sel_cols, int offset,
                            bool isStar = false) {
@@ -68,14 +58,6 @@ class ExplainProjectExecutor : public AbstractExecutor {
     /**
      * @brief 生成当前节点的执行计划说明
      * @return nullptr,因为解释器不实际生成记录
-     *
-     * @details 输出格式:
-     * Project(columns=[col1,col2,...]) 或 Project(columns=[*])
-     * 其中:
-     * 1. 输出开始按offset_进行缩进
-     * 2. 如果是SELECT *则输出*
-     * 3. 否则列出所有投影列
-     * 4. 递归解释前序节点的执行计划
      */
     std::unique_ptr<RmRecord> Next() override {
         // 按指定缩进生成输出

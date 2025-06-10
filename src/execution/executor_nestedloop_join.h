@@ -17,27 +17,6 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 嵌套循环连接执行器，负责实现两个表的连接操作
- *
- * @details 主要功能和特点：
- * 1. 连接实现：
- *    - 双重循环遍历
- *    - 条件动态评估
- *    - 支持多种连接类型
- *
- * 2. 性能优化：
- *    - 内存缓冲管理
- *    - 批量数据处理
- *    - 提前终止优化
- *
- * 3. 资源控制：
- *    - 动态内存管理
- *    - 循环深度控制
- *    - 中间结果缓存
- *
- * 4. 错误处理：
- *    - 空值处理
- *    - 类型检查
- *    - 异常恢复
  */
 class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
@@ -167,22 +146,6 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     /**
      * @brief 查找下一对满足连接条件的记录
-     *
-     * @details 执行步骤：
-     * 1. 循环控制：
-     *    - 检查结束条件
-     *    - 重置内表扫描
-     *    - 处理边界情况
-     *
-     * 2. 记录处理：
-     *    - 获取两表记录
-     *    - 构造连接结果
-     *    - 评估连接条件
-     *
-     * 3. 性能优化：
-     *    - 提前终止检查
-     *    - 缓存中间结果
-     *    - 避免重复计算
      */
     void find_record() {
         while (!is_end()) {

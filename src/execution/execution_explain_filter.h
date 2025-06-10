@@ -43,11 +43,6 @@ class ExplainFilterExecutor : public AbstractExecutor {
      * @param prev 前序执行器
      * @param conds 过滤条件列表
      * @param offset 输出的缩进偏移量
-     *
-     * @details 初始化过滤条件的解释器:
-     * 1. 保存前序执行器
-     * 2. 记录过滤条件
-     * 3. 对条件按字典序排序,确保输出的一致性
      */
     ExplainFilterExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<Condition> conds, int offset) {
         prev_ = std::move(prev);
@@ -61,13 +56,6 @@ class ExplainFilterExecutor : public AbstractExecutor {
     /**
      * @brief 生成当前节点的执行计划说明
      * @return nullptr,因为解释器不实际生成记录
-     *
-     * @details 输出格式:
-     * Filter(condition=[cond1,cond2,...])
-     * 其中:
-     * 1. 输出开始按offset_进行缩进
-     * 2. condition部分列出所有过滤条件
-     * 3. 递归解释前序节点的执行计划
      */
     std::unique_ptr<RmRecord> Next() override {
         // 按指定缩进生成输出

@@ -35,16 +35,6 @@ RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
 
 /**
  * @brief 移动到下一个有效记录的位置
- *
- * 该函数执行以下操作：
- * 1. 在当前页面中查找下一个被占用的槽位
- * 2. 如果当前页面搜索完毕，转到下一页继续查找
- * 3. 使用位图来判断槽位是否被占用
- * 4. 更新rid_指向找到的记录位置
- *
- * 注意：
- * - 每次获取页面后都要正确unpin
- * - 如果找不到有效记录，会将page_no设置为RM_NO_PAGE表示结束
  */
 void RmScan::next() {
     // 查找下一条记录的步骤：
