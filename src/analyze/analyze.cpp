@@ -13,6 +13,41 @@ See the Mulan PSL v2 for more details. */
 #include "common/TraceStack.hpp"
 #include "common/print.hpp"
 
+namespace {
+// 辅助函数：检查列是否在GROUP BY中
+bool is_column_in_group(const TabCol& col, const std::vector<TabCol>& group_cols) {
+    return std::any_of(group_cols.begin(), group_cols.end(),
+        [&](const TabCol& group_col) {
+            return col.col_name == group_col.col_name &&
+                   col.tab_name == group_col.tab_name;
+        });
+}
+
+// 辅助函数：验证聚合函数类型是否与列类型兼容
+void validate_aggregate_type(AggregateType agg_type, ColType col_type) {
+    if (agg_type == AggregateType::NONE) return;
+    
+    switch (agg_type) {
+        case AggregateType::COUNT:
+            break;  // COUNT支持所有类型
+            
+        case AggregateType::SUM:
+        case AggregateType::AVG:
+            if (col_type == ColType::TYPE_STRING) {
+                throw InternalError("Cannot apply SUM/AVG to string column");
+            }
+            break;
+            
+        case AggregateType::MIN:
+        case AggregateType::MAX:
+            break;  // MIN/MAX支持所有类型
+            
+        default:
+            throw InternalError("Unknown aggregate type");
+    }
+}
+}  // namespace
+
 /**
  * @brief 将表的别名转换为真实表名，并处理相关表名和列名歧义
  *
@@ -687,23 +722,13 @@ void Analyze::check_having_conds(const std::vector<Condition> &conds, const std:
     TRACE_FUNCTION
     for (auto &cond : conds) {
         if (cond.lhs_col.agg_type == AggregateType::NONE) {
-            bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
-                if (cond.lhs_col.col_name == group_col.col_name && cond.lhs_col.tab_name == group_col.tab_name) {
-                    return true;
-                }
-                return false;
-            });
+            bool found = is_column_in_group(cond.lhs_col, group_cols);
             if (!found) {
                 throw InternalError("having_cond: Non aggregate column not in group by");
             }
         }
         if (!cond.is_rhs_val && cond.rhs_col.agg_type == AggregateType::NONE) {
-            bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
-                if (cond.rhs_col.col_name == group_col.col_name && cond.rhs_col.tab_name == group_col.tab_name) {
-                    return true;
-                }
-                return false;
-            });
+            bool found = is_column_in_group(cond.rhs_col, group_cols);
             if (!found) {
                 throw InternalError("having_cond: Non aggregate column not in group by");
             }
@@ -726,12 +751,7 @@ void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std:
             if (col.agg_type != AggregateType::NONE) {
                 continue;
             }
-            bool found = std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
-                if (col.col_name == group_col.col_name) {
-                    return true;
-                }
-                return false;
-            });
+            bool found = is_column_in_group(col, group_cols);
             if (!found) {
                 throw InternalError("SELECT column not in GROUP BY: " + col.col_name);
             }
