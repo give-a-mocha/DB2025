@@ -106,6 +106,8 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "MIN" { return MIN; }
 "MAX" { return MAX; }
 "AS" { return AS; }
+"LIMIT" { return LIMIT; }
+"OFFSET" { return OFFSET; }
 "EXPLAIN" { return EXPLAIN; }
 "ENABLE_NESTLOOP" { return ENABLE_NESTLOOP; }
 "ENABLE_SORTMERGE" { return ENABLE_SORTMERGE; }

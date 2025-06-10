@@ -203,6 +203,14 @@ struct GroupBy : public TreeNode {
     GroupBy(std::shared_ptr<Col> cols_) : cols(std::move(cols_)) {}
 };
 
+struct Limit : public TreeNode {
+    std::shared_ptr<Value> offset;
+    std::shared_ptr<Value> count;
+
+    Limit(std::shared_ptr<Value> offset_, std::shared_ptr<Value> count_)
+        : offset(std::move(offset_)), count(std::move(count_)) {}
+};
+
 struct InsertStmt : public TreeNode {
     std::string tab_name;
     std::vector<std::shared_ptr<Value>> vals;
@@ -257,28 +265,20 @@ struct SelectStmt : public TreeNode {
     std::vector<std::shared_ptr<GroupBy>> group;            // 添加group by支持
     std::vector<std::shared_ptr<BinaryExpr>> having_conds;  // 添加having支持
     std::vector<std::shared_ptr<OrderBy>> orders;
+    std::shared_ptr<Limit> limit;
 
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
                std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-               std::vector<std::shared_ptr<OrderBy>> orders_ = std::vector<std::shared_ptr<OrderBy>>())
-        : cols(std::move(cols_)),
-          tabs(std::move(tabs_)),
-          conds(std::move(conds_)),
-          jointree(std::move(jointree_)),
-          orders(std::move(orders_)) {
-        has_sort = !orders.empty();
-    }
-    SelectStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
-               std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::vector<std::shared_ptr<GroupBy>> group_, std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
-               std::vector<std::shared_ptr<OrderBy>> orders_ = std::vector<std::shared_ptr<OrderBy>>())
+               std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
         : cols(std::move(cols_)),
           tabs(std::move(tabs_)),
           conds(std::move(conds_)),
           jointree(std::move(jointree_)),
           group(std::move(group_)),
           having_conds(std::move(having_conds_)),
-          orders(std::move(orders_)) {
+          orders(std::move(orders_)),
+          limit(std::move(limit_)) {
         has_sort = !orders.empty();
     }
 };
@@ -286,8 +286,10 @@ struct SelectStmt : public TreeNode {
 struct ExplainStmt : public SelectStmt {
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
                 std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-                std::vector<std::shared_ptr<OrderBy>> orders_)
-        : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_), std::move(orders_)) {}
+                std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
+        : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_),
+                    std::vector<std::shared_ptr<GroupBy>>(), std::vector<std::shared_ptr<BinaryExpr>>(),
+                    std::move(orders_), std::move(limit_)) {}
 };
 
 // set enable_nestloop
@@ -346,6 +348,8 @@ struct SemValue {
     JoinType sv_join_type;
 
     SetKnobType sv_setKnobType;
+
+    std::shared_ptr<Limit> sv_limit;
 };
 
 extern std::shared_ptr<ast::TreeNode> parse_tree;

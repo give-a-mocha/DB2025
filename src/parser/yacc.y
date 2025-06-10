@@ -27,6 +27,7 @@ using namespace ast;
 // SQL关键字 - 这些是保留字，在词法分析阶段识别
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER GROUP BY HAVING COUNT SUM AVG MIN MAX
 %token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ENABLE_NESTLOOP ENABLE_SORTMERGE
+%token LIMIT OFFSET
 %token EXPLAIN AS
 %token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON SEMI
 
@@ -42,6 +43,7 @@ using namespace ast;
 
 // 语句类型 - 所有返回TreeNode的语法规则
 %type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
+%type <sv_limit> opt_limit_clause
 
 // 表结构相关
 %type <sv_field> field                      // 单个字段定义
@@ -206,13 +208,28 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_group_clause opt_having_conds opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_group_clause opt_having_conds opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8, $9);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8, $9, $10);
     }
-    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8);
+        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8, $9);
+    };
+
+/* LIMIT子句 */
+opt_limit_clause:
+        /* epsilon */
+    {
+        $$ = nullptr;
+    }
+    |   LIMIT value
+    {
+        $$ = std::make_shared<Limit>(nullptr, $2);
+    }
+    |   LIMIT value OFFSET value
+    {
+        $$ = std::make_shared<Limit>($4, $2);
     };
 
 /* 字段列表 - 用于CREATE TABLE */

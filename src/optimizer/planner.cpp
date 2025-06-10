@@ -30,6 +30,7 @@
 #include "execution/executor_update.h"
 #include "index/ix.h"
 #include "record_printer.h"
+#include <climits>
 
 // 实现最左匹配原则的索引匹配规则
 /**
@@ -211,7 +212,7 @@ int push_conds(Condition *cond, std::shared_ptr<Plan> plan) {
  */
 std::shared_ptr<Plan> pop_scan(std::vector<int> &scantbl, std::string table, std::vector<std::string> &joined_tables,
                                std::vector<std::shared_ptr<Plan>> plans) {
-                                TRACE_FUNCTION
+    TRACE_FUNCTION
     for (size_t i = 0; i < plans.size(); i++) {
         auto x = std::dynamic_pointer_cast<ScanPlan>(plans[i]);
         if (x->tab_name_.compare(table) == 0) {
@@ -289,6 +290,20 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     plan = generate_aggregate_plan(query, std::move(plan));
     // 处理orderby
     plan = generate_sort_plan(query, std::move(plan));
+
+    // 处理limit
+    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
+    if (x->limit) {
+        int offset = 0;
+        int count = INT_MAX;
+        if (auto offset_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->offset)) {
+            offset = offset_val->val;
+        }
+        if (auto count_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->count)) {
+            count = count_val->val;
+        }
+        plan = std::make_shared<LimitPlan>(std::move(plan), offset, count);
+    }
 
     return plan;
 }
@@ -465,13 +480,13 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
     }
     std::vector<TabCol> sel_cols;
     std::vector<bool> is_desc_list;
-    
+
     // 处理所有排序列
     for (const auto &orderby_info : query->order_bys) {
         sel_cols.push_back(orderby_info.col);
         is_desc_list.push_back(orderby_info.dir == ast::OrderByDir::OrderBy_DESC);
     }
-    
+
     return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), sel_cols, is_desc_list);
 }
 
@@ -1110,11 +1125,18 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
         return x;
     } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
         // 添加所有排序列到需要的列中
-        for (const auto& sort_col : x->sel_cols_) {
+        for (const auto &sort_col : x->sel_cols_) {
             if (std::find(need_cols.begin(), need_cols.end(), sort_col) == need_cols.end()) {
                 need_cols.emplace_back(sort_col);
             }
         }
+        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
+        while (need_cols.size() > siz) {
+            need_cols.pop_back();
+        }
+        return x;
+    } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
+        // 处理Limit节点，类似Sort节点的处理
         x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         while (need_cols.size() > siz) {
             need_cols.pop_back();

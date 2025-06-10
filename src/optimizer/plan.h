@@ -23,6 +23,7 @@ enum class PlanTag {
     T_Invalid = 1,
     T_Help,
     T_ShowTable,
+    T_Limit,
     T_ShowIndex,
     T_DescTable,
     T_CreateTable,
@@ -289,6 +290,28 @@ class OtherPlan : public Plan {
      * @param tab_name 目标表名
      */
     OtherPlan(PlanTag tag, std::string tab_name) : Plan(tag), tab_name_(std::move(tab_name)) {}
+};
+
+/**
+ * @brief Limit操作计划节点类
+ * 实现limit和offset功能
+ */
+class LimitPlan : public Plan {
+public:
+    std::shared_ptr<Plan> subplan_;    ///< 子计划
+    int offset_;                        ///< 跳过的记录数
+    int count_;                         ///< 返回的记录数
+
+    ~LimitPlan() = default;
+
+    /**
+     * @brief 构造Limit计划节点
+     * @param subplan 子计划
+     * @param offset 跳过的记录数
+     * @param count 返回的记录数
+     */
+    LimitPlan(std::shared_ptr<Plan> subplan, int offset, int count)
+        : Plan(PlanTag::T_Limit), subplan_(std::move(subplan)), offset_(offset), count_(count) {}
 };
 
 /**

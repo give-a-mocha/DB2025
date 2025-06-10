@@ -27,6 +27,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
 #include "execution/executor_insert.h"
+#include "execution/executor_limit.h"
 #include "execution/executor_nestedloop_join.h"
 #include "execution/executor_nestedloop_semi_join.h"
 #include "execution/executor_projection.h"
@@ -205,6 +206,9 @@ class Portal {
             INFO("GroupPlan");
             return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
                                                    x->group_cols_, x->having_conds_);
+        } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
+            INFO("LimitPlan");
+            return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context), x->offset_, x->count_);
         }
         return nullptr;
     }
@@ -268,6 +272,9 @@ class Portal {
                                                              std::move(x->conds_), offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
+            return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
+        } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
+            // 直接处理子计划，不需要为LIMIT创建特殊的explain executor
             return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
         }
         return nullptr;
