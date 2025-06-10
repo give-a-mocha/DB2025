@@ -202,9 +202,11 @@ class AggregateExecutor : public AbstractExecutor {
                         res.set_int(0);
                         break;
                     case AggregateType::SUM:
-                    case AggregateType::AVG:
                         if (output_cols_[i].type == ColType::TYPE_INT) res.set_int(0);
-                        else res.set_float(0.0);
+                            else res.set_float(0.0);
+                            break;
+                    case AggregateType::AVG:
+                        res.set_float(0.0);
                         break;
                     case AggregateType::MIN:
                     case AggregateType::MAX:
