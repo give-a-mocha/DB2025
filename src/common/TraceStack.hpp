@@ -55,11 +55,9 @@ class TraceStackPrint {
         indentLevel = 0;
     }
 };
-
-// 静态成员初始化
-std::vector<std::string> TraceStackPrint::callStack;
-int TraceStackPrint::indentLevel = 0;
-
+#ifndef ENABLE_TRACE
+#define ENABLE_TRACE
+#endif
 #ifdef ENABLE_TRACE
 #define TRACE_FUNCTION TraceStackPrint tracer(__FUNCTION__, __FILE__, __LINE__);
 #define TRACE_NAMED(name) TraceStackPrint tracer(name, __FILE__, __LINE__);

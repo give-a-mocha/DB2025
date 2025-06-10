@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include "analyze/analyze.h"
+#include "common/TraceStack.hpp"
 #include "common/print.hpp"
 #include "errors.h"
 #include "optimizer/optimizer.h"
@@ -67,6 +68,7 @@ static jmp_buf jmpbuf;
  * @note 当接收到SIGINT信号时，将日志刷新到磁盘并优雅地退出服务器
  */
 void sigint_handler(int signo) {
+    TRACE_FUNCTION
     should_exit = true;
     log_manager->flush_log_to_disk();
     std::cout << "The Server receive Crtl+C, will been closed\n";
@@ -81,6 +83,7 @@ void sigint_handler(int signo) {
  *       如果当前没有活跃事务或事务已结束，则创建新的事务
  */
 void SetTransaction(txn_id_t *txn_id, Context *context) {
+    TRACE_FUNCTION
     // 获取事务对象
     context->txn_ = txn_manager->get_transaction(*txn_id);
     // 如果事务对象为空 或者已提交 或者已中止， 则创建新事务
@@ -119,6 +122,7 @@ void SetTransaction(txn_id_t *txn_id, Context *context) {
  *       6. 返回结果给客户端
  */
 void *client_handler(void *sock_fd) {
+    TRACE_FUNCTION
     int fd = *((int *)sock_fd);
     pthread_mutex_unlock(sockfd_mutex);
 
@@ -262,6 +266,7 @@ void *client_handler(void *sock_fd) {
  *       4. 处理服务器关闭时的清理工作
  */
 void start_server() {
+    TRACE_FUNCTION
     // init mutex
     buffer_mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
     sockfd_mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
@@ -345,6 +350,7 @@ void start_server() {
  *       3. 启动服务器接受客户端连接
  */
 int main(int argc, char **argv) {
+    TRACE_FUNCTION
     if (argc != 2) {
         // 需要指定数据库名称
         std::cerr << "Usage: " << argv[0] << " <database>" << std::endl;

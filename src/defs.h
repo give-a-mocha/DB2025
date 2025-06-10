@@ -10,6 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <cassert>
 #include <iostream>
 #include <map>
 
@@ -39,17 +40,12 @@ struct Rid {
 
 enum class ColType { TYPE_INT, TYPE_FLOAT, TYPE_STRING };
 
+enum class AggregateType { NONE, COUNT, SUM, AVG, MAX, MIN };
+
 inline std::string coltype2str(ColType type) {
-    switch (type) {
-        case ColType::TYPE_INT:
-            return "INT";
-        case ColType::TYPE_FLOAT:
-            return "FLOAT";
-        case ColType::TYPE_STRING:
-            return "STRING";
-        default:
-            throw std::runtime_error("Unknown column type");
-    }
+    static std::string strs[] = {"INT", "FLOAT", "STRING"};
+    assert(type >= ColType::TYPE_INT && type <= ColType::TYPE_STRING);
+    return strs[static_cast<int>(type)];
 }
 
 class RecScan {

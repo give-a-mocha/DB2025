@@ -25,8 +25,9 @@ using namespace ast;
 
 
 // SQL关键字 - 这些是保留字，在词法分析阶段识别
-%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
-%token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY ENABLE_NESTLOOP ENABLE_SORTMERGE
+%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER GROUP BY HAVING COUNT SUM AVG MIN MAX
+%token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ENABLE_NESTLOOP ENABLE_SORTMERGE
+%token LIMIT OFFSET
 %token EXPLAIN AS
 %token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON SEMI
 
@@ -42,6 +43,7 @@ using namespace ast;
 
 // 语句类型 - 所有返回TreeNode的语法规则
 %type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
+%type <sv_limit> opt_limit_clause
 
 // 表结构相关
 %type <sv_field> field                      // 单个字段定义
@@ -76,13 +78,19 @@ using namespace ast;
 %type <sv_conds> whereClause optWhereClause // WHERE子句
 
 // ORDER BY相关
-%type <sv_orderby> order_clause opt_order_clause  // ORDER BY子句
+%type <sv_orderby> order_clause 
+%type <sv_orderbys> opt_order_clause  // ORDER BY子句
 %type <sv_orderby_dir> opt_asc_desc               // 排序方向
 
 // JOIN相关
 %type <sv_join_type> joinType               // JOIN类型
 %type <sv_join_expr> joinExpr               // JOIN表达式
 %type <sv_join_exprs> joinExprs optJoinExprs // JOIN表达式列表
+
+// group相关
+%type <sv_groupby> group_clause
+%type <sv_groupbys> group_clauses opt_group_clause
+%type <sv_having_conds> having_conds opt_having_conds
 
 // 配置相关
 %type <sv_setKnobType> set_knob_type        // 配置选项类型
@@ -200,13 +208,28 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   SELECT selector FROM tableList optJoinExprs optWhereClause opt_group_clause opt_having_conds opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8, $9, $10);
     }
-    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8);
+        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8, $9);
+    };
+
+/* LIMIT子句 */
+opt_limit_clause:
+        /* epsilon */
+    {
+        $$ = nullptr;
+    }
+    |   LIMIT value
+    {
+        $$ = std::make_shared<Limit>(nullptr, $2);
+    }
+    |   LIMIT value OFFSET value
+    {
+        $$ = std::make_shared<Limit>($4, $2);
     };
 
 /* 字段列表 - 用于CREATE TABLE */
@@ -347,6 +370,50 @@ col:
     {
         $$ = std::make_shared<Col>("", $1, $2); // 表名为空字符串
     }
+    |   COUNT '(' '*' ')' optAlias        // COUNT(*) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", "*", $5, SvAggregateType::COUNT); // 特殊处理COUNT(*)
+    }
+    |   COUNT '(' colName ')' optAlias  // COUNT(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::COUNT);
+    }
+    |   COUNT '(' tbName '.' colName ')' optAlias  // COUNT(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::COUNT);
+    }
+    |   SUM '(' colName ')' optAlias       // SUM(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::SUM);
+    }
+    |   SUM '(' tbName '.' colName ')' optAlias  // SUM(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::SUM);
+    }
+    |   AVG '(' colName ')' optAlias       // AVG(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::AVG);
+    }
+    |   AVG '(' tbName '.' colName ')' optAlias  // AVG(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::AVG);
+    }
+    |   MIN '(' colName ')' optAlias       // MIN(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::MIN);
+    }
+    |   MIN '(' tbName '.' colName ')' optAlias  // MIN(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::MIN);
+    }
+    |   MAX '(' colName ')' optAlias       // MAX(列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>("", $3, $5, SvAggregateType::MAX);
+    }
+    |   MAX '(' tbName '.' colName ')' optAlias  // MAX(表名.列名) [AS 别名]
+    {
+        $$ = std::make_shared<Col>($3, $5, $7, SvAggregateType::MAX);
+    }
     ;
 
 /* 列列表 - 用于SELECT等 */
@@ -456,7 +523,11 @@ tableList:
 opt_order_clause:
     ORDER BY order_clause                   // 有ORDER BY子句
     { 
-        $$ = $3; 
+        $$ = std::vector<std::shared_ptr<OrderBy>>{$3};
+    }
+    |   opt_order_clause ',' order_clause
+    { 
+        $1.push_back($3);
     }
     |   /* epsilon */                       // 没有ORDER BY子句
     { 
@@ -486,7 +557,48 @@ opt_asc_desc:
     { 
         $$ = OrderBy_DEFAULT; 
     }
-    ;    
+    ;
+
+opt_group_clause:
+    GROUP BY group_clauses
+    {
+        $$ = $3;
+    }
+    |   /* epsilon */ { /* ignore*/ }
+    ;
+group_clause:
+      col
+    {
+        $$ = std::make_shared<GroupBy>($1);
+    }
+group_clauses:
+      group_clause
+    {
+        $$ = std::vector<std::shared_ptr<GroupBy>>{$1};
+    }
+    |	group_clauses ',' group_clause
+    {
+        $$.push_back($3);
+    }
+    ;
+opt_having_conds:
+       /* epsilon */ { /* ignore*/ }
+    |   HAVING having_conds
+    {
+        $$ = $2;
+    }
+    ;
+having_conds:
+        condition 
+    {
+        $$ = std::vector<std::shared_ptr<BinaryExpr>>{$1};
+    }
+    |   having_conds AND condition
+    {
+        $$.push_back($3);
+    }
+    ;
+
 
 /* 可选的JOIN表达式列表 */
 optJoinExprs:

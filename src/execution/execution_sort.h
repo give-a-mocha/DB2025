@@ -23,66 +23,40 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief 排序执行器，负责实现ORDER BY的排序功能
- *
- * @details 主要功能和特点：
- * 1. 排序功能:
- *    - 支持按指定列排序
- *    - 支持升序(ASC)和降序(DESC)
- *    - 处理多种数据类型(INT,FLOAT,STRING)
- *
- * 2. 实现策略:
- *    - 采用选择排序算法
- *    - 使用索引记录已处理的元组
- *    - 支持按需获取下一个元组
- *
- * 3. 资源管理:
- *    - 动态分配排序空间
- *    - 避免重复处理数据
- *    - 优化内存使用效率
  */
+
 class SortExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
-    ColMeta col_;                             // 排序列的元数据
-    size_t tuple_num;                         // 已处理的元组数量
-    bool is_desc_;                            // 是否为降序排序
-    std::vector<size_t> used_tuple;           // 已选择元组的索引表
-    std::unique_ptr<RmRecord> current_tuple;  // 当前处理的元组
+    struct SortColumn {
+        ColMeta col;   // 列元数据
+        bool is_desc;  // 是否降序
+
+        SortColumn(const ColMeta& c, bool desc) : col(c), is_desc(desc) {}
+    };
+
+    std::unique_ptr<AbstractExecutor> prev_;                // 前序执行器
+    std::vector<SortColumn> sort_cols_;                     // 排序列信息
+    std::vector<std::unique_ptr<RmRecord>> sorted_tuples_;  // 排序后的元组缓存
+    size_t current_index_;                                  // 当前访问的元组索引
 
    public:
     /**
      * @brief 构造函数
      * @param prev 前序执行器
-     * @param sel_col 用于排序的列
-     * @param is_desc 是否为降序排序
-     */
-    /**
-     * @brief 构造函数
-     * @param prev 前序执行器
      * @param sel_col 排序列的表列引用
      * @param is_desc 是否降序排序
-     *
-     * @details 初始化排序执行器:
-     * 1. 设置前序执行器
-     * 2. 获取排序列的元数据
-     * 3. 初始化排序状态
      */
-    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const TabCol& sel_col, bool is_desc) {
+    SortExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
+                 const std::vector<bool>& is_desc) {
         prev_ = std::move(prev);
-        // 查找排序列的元数据
-        auto pos = get_col(prev_->cols(), sel_col);
-        col_ = *pos;
-        is_desc_ = is_desc;
-        tuple_num = 0;
-        used_tuple.clear();
-        current_tuple = nullptr;
+        // 获取所有排序列的元数据
+        for (size_t i = 0; i < sel_cols.size(); i++) {
+            auto col_meta = get_col(prev_->cols(), sel_cols[i]);
+            sort_cols_.emplace_back(*col_meta, is_desc[i]);
+        }
+        current_index_ = 0;
     }
 
-    /**
-     * @brief 开始处理元组序列
-     *
-     * 初始化排序过程，选择第一个最小（或最大）元素
-     */
     /**
      * @brief 初始化排序过程并找到第一个元组
      *
@@ -97,66 +71,44 @@ class SortExecutor : public AbstractExecutor {
      * - 通过used_tuple记录已选择的位置
      */
     void beginTuple() override {
+        // 清空缓存
+        sorted_tuples_.clear();
+        current_index_ = 0;
+
+        // 读取所有元组
         prev_->beginTuple();
-        int cnt = 0;
-        int now = -1;
-        current_tuple = nullptr;
-        // 扫描找出第一个最值
         while (!prev_->is_end()) {
-            if (cmp(prev_->Next(), current_tuple)) {
-                current_tuple = prev_->Next();
-                now = cnt;
-            }
+            sorted_tuples_.push_back(prev_->Next());
             prev_->nextTuple();
-            cnt++;
         }
-        tuple_num++;
-        used_tuple.push_back(now);
+
+        // 使用std::sort排序
+        std::sort(
+            sorted_tuples_.begin(), sorted_tuples_.end(),
+            [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) { return this->cmp(a, b); });
     }
 
     /**
-     * @brief 获取下一个元组
-     *
-     * 在未处理的元组中选择下一个最小（或最大）元素
-     */
-    /**
      * @brief 获取下一个排序后的元组
-     *
-     * @details 实现步骤:
-     * 1. 重新扫描所有输入元组
-     * 2. 排除已经选择过的元组
-     * 3. 在剩余元组中找出极值
-     * 4. 更新排序状态
-     *
-     * 注意事项:
-     * - 每次都需要完整扫描剩余元组
-     * - 通过used_tuple跳过已处理的元组
-     * - 正确维护排序状态和计数
      */
     void nextTuple() override {
-        prev_->beginTuple();
-        int cnt = 0;
-        int now = -1;
-        current_tuple = nullptr;
-        while (!prev_->is_end()) {
-            // 跳过已经选择过的元组
-            if (std::find(used_tuple.begin(), used_tuple.end(), cnt) == used_tuple.end() &&
-                cmp(prev_->Next(), current_tuple)) {
-                current_tuple = prev_->Next();
-                now = cnt;
-            }
-            prev_->nextTuple();
-            cnt++;
+        if (!is_end()) {
+            current_index_++;
         }
-        tuple_num++;
-        used_tuple.push_back(now);
     }
 
     /**
      * @brief 返回当前排序位置的元组
      * @return 当前元组的智能指针
      */
-    std::unique_ptr<RmRecord> Next() override { return std::move(current_tuple); }
+    std::unique_ptr<RmRecord> Next() override {
+        if (is_end()) {
+            return nullptr;
+        }
+        return std::make_unique<RmRecord>(*sorted_tuples_[current_index_]);
+    }
+
+    bool is_end() const override { return current_index_ >= sorted_tuples_.size(); }
 
     /**
      * @brief 获取输出列的元数据
@@ -171,12 +123,6 @@ class SortExecutor : public AbstractExecutor {
     Rid& rid() override { return _abstract_rid; }
 
     /**
-     * @brief 比较两个元组在排序字段上的值
-     * @param a 第一个元组
-     * @param b 第二个元组
-     * @return 根据排序规则(升序/降序)返回比较结果
-     */
-    /**
      * @brief 比较两个元组在排序列上的大小
      * @param a 第一个元组
      * @param b 第二个元组
@@ -190,36 +136,45 @@ class SortExecutor : public AbstractExecutor {
      *    - 字符串: 使用strncmp比较
      * 3. 根据排序方向(升序/降序)返回结果
      */
-    bool cmp(std::unique_ptr<RmRecord> a, std::unique_ptr<RmRecord>& b) {
+    bool cmp(const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) const {
         // 处理空值情况
-        if (b == nullptr) {
-            return true;
+        if (!a || !b) {
+            if (!a && !b) return false;  // 两个都是null，认为相等
+            return !a;                   // null值始终排在最后
         }
 
-        // 获取要比较的字段值
-        char* rec_buf_a = a->data + col_.offset;
-        char* rec_buf_b = b->data + col_.offset;
+        // 逐列比较
+        for (const auto& sort_col : sort_cols_) {
+            const char* rec_buf_a = a->data + sort_col.col.offset;
+            const char* rec_buf_b = b->data + sort_col.col.offset;
 
-        // 根据字段类型进行比较
-        if (col_.type == ColType::TYPE_INT) {
-            int value_a = *reinterpret_cast<int*>(rec_buf_a);
-            int value_b = *reinterpret_cast<int*>(rec_buf_b);
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
-        } else if (col_.type == ColType::TYPE_FLOAT) {
-            double value_a = *reinterpret_cast<double*>(rec_buf_a);
-            double value_b = *reinterpret_cast<double*>(rec_buf_b);
-            if (is_desc_) return value_a > value_b;
-            else return value_a < value_b;
-        } else if (col_.type == ColType::TYPE_STRING) {
-            int comparison_result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(col_.len));
-            if (is_desc_) {
-                return comparison_result > 0;
-            } else {
-                return comparison_result < 0;
+            int result = 0;
+            switch (sort_col.col.type) {
+                case ColType::TYPE_INT: {
+                    int value_a = *reinterpret_cast<const int*>(rec_buf_a);
+                    int value_b = *reinterpret_cast<const int*>(rec_buf_b);
+                    result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
+                    break;
+                }
+                case ColType::TYPE_FLOAT: {
+                    float value_a = *reinterpret_cast<const float*>(rec_buf_a);
+                    float value_b = *reinterpret_cast<const float*>(rec_buf_b);
+                    result = (value_a < value_b) ? -1 : (value_a > value_b ? 1 : 0);
+                    break;
+                }
+                case ColType::TYPE_STRING: {
+                    result = strncmp(rec_buf_a, rec_buf_b, static_cast<size_t>(sort_col.col.len));
+                    break;
+                }
+                default:
+                    continue;  // 跳过不支持的类型
+            }
+
+            if (result != 0) {
+                return sort_col.is_desc ? (result > 0) : (result < 0);
             }
         }
-        return false;
+        return false;  // 所有列都相等
     }
 
     /**
