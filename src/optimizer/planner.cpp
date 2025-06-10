@@ -39,20 +39,6 @@
  * @param curr_conds 当前的查询条件
  * @param index_col_names 输出参数，存储选中的索引列名
  * @return 是否找到可用索引
- *
- * @details 索引选择策略：
- * 1. 支持的条件类型
- *    - 等值条件(=)
- *    - 范围条件(>, >=, <, <=)
- *
- * 2. 最左前缀匹配原则
- *    - 按索引定义顺序匹配列
- *    - 连续匹配直到不满足条件
- *    - 选择匹配列数最多的索引
- *
- * 3. 选择标准
- *    - 优先选择匹配列数最多的索引
- *    - 对于相同匹配数的索引，选择第一个
  */
 bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds,
                              std::vector<std::string> &index_col_names) {
@@ -146,22 +132,6 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
  * @param cond 要下推的条件指针
  * @param plan 当前计划节点
  * @return 条件处理状态码
- *
- * @details 返回值说明：
- * - 0: 条件与当前节点无关
- * - 1: 条件左侧列匹配
- * - 2: 条件右侧列匹配
- * - 3: 条件已完全处理
- *
- * @details 下推策略：
- * 1. 扫描节点(ScanPlan)
- *    - 检查条件列是否属于扫描表
- *    - 确定匹配状态
- *
- * 2. 连接节点(JoinPlan)
- *    - 递归下推到左右子树
- *    - 处理跨表的连接条件
- *    - 必要时交换条件的左右操作数
  */
 int push_conds(Condition *cond, std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
@@ -449,21 +419,6 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
  * @param query 待排序的查询
  * @param plan 原始执行计划
  * @return 添加排序操作后的执行计划
- *
- * @details 排序处理流程：
- * 1. 检查排序需求
- *    - 验证是否包含ORDER BY子句
- *    - 如果没有排序要求直接返回原计划
- *
- * 2. 排序列处理
- *    - 收集所有表的列信息
- *    - 确定排序列的表和列名
- *    - 处理列的歧义性
- *
- * 3. 创建排序计划
- *    - 构造SortPlan节点
- *    - 设置排序方向(ASC/DESC)
- *    - 连接原有计划
  */
 std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
@@ -567,26 +522,6 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
  * @param query 查询对象
  * @param context 执行上下文
  * @return 生成的执行计划
- *
- * @details 支持的操作类型：
- * 1. DDL语句
- *    - CREATE TABLE: 创建新表
- *    - DROP TABLE: 删除表
- *    - CREATE INDEX: 创建索引
- *    - DROP INDEX: 删除索引
- *
- * 2. DML语句
- *    - INSERT: 插入数据
- *    - DELETE: 删除数据
- *    - UPDATE: 更新数据
- *    - SELECT: 查询数据
- *    - EXPLAIN: 解释执行计划
- *
- * @details 处理流程：
- * 1. 根据语句类型分派处理
- * 2. 收集必要的元数据
- * 3. 生成相应的执行计划
- * 4. 处理错误情况
  */
 std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context *context) {
     TRACE_FUNCTION
@@ -750,21 +685,6 @@ std::vector<Condition> pop_conds_optimized(std::list<Condition> &conds, const st
  * @brief 使用贪心算法优化的查询计划生成
  * @param query 查询对象
  * @return 优化后的查询执行计划
- *
- * @details 优化策略：
- * 1. 单表查询处理
- *    - 直接生成扫描计划
- *    - 选择合适的访问方法
- *
- * 2. 多表查询处理
- *    - 收集连接条件
- *    - 对每个表生成基础扫描计划
- *    - 计算表的基数(大小)
- *
- * 3. 贪心选择连接顺序
- *    - 按表大小排序
- *    - 优先选择小表
- *    - 构建左深连接树
  */
 std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> query) {
     TRACE_FUNCTION
@@ -1044,23 +964,6 @@ std::shared_ptr<Plan> Planner::join_tables(std::shared_ptr<Plan> result, const s
  * @param need_cols 需要投影的列
  * @param all_cols 所有涉及的列
  * @return 优化后的执行计划
- *
- * @details 投影优化策略：
- * 1. ProjectionPlan节点处理
- *    - 收集需要的投影列
- *    - 递归处理子计划
- *    - 维护投影列大小
- *
- * 2. JoinPlan节点处理
- *    - 添加连接条件涉及的列
- *    - 分别处理左右子树
- *    - 合并左右子树的列
- *    - 去重和排序
- *
- * 3. ScanPlan节点处理
- *    - 添加条件中涉及的列
- *    - 检查表的列覆盖情况
- *    - 必要时创建新的投影计划
  */
 std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols,
                                                      std::vector<TabCol> &all_cols) {
