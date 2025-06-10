@@ -171,7 +171,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 std::string right_tab_name = join_expr->right->tab_name;
                 TabRef right_table(right_tab_name, join_expr->right->alias);
                 bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
-                const int siz = all_cols.size();
+                const size_t siz = all_cols.size();
                 // 获取SEMI JOIN表的列
                 if (isSemiJoin) {
                     query->tables.push_back(right_tab_name);
