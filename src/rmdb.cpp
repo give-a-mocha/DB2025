@@ -15,15 +15,15 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  */
 
+#include <atomic>
+#include <cstdio>
+
 #include <netinet/in.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>
-
-#include <atomic>
-#include <cstdio>
 
 #include "analyze/analyze.h"
 #include "common/TraceStack.hpp"
