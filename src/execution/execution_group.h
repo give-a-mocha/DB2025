@@ -32,8 +32,7 @@ class GroupExecutor : public AbstractExecutor {
      * @brief 用于存储分组后的记录。
      * 键是根据 group_cols_ 生成的字符串，值是属于该组的 RmRecord 列表。
      */
-    std::unordered_map<std::list<std::string_view>, std::vector<std::unique_ptr<RmRecord>>, ListHash> grouped_records;
-
+    std::vector<std::pair<size_t, std::vector<std::unique_ptr<RmRecord>>>> grouped_records;
     std::unique_ptr<RmRecord> current_tuple;  ///< 当前 Next() 方法将返回的元组（通常是每个组的代表元组）
 
     GroupExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
@@ -53,7 +52,6 @@ class GroupExecutor : public AbstractExecutor {
         });
         // 处理 GROUP BY 列元数据
         std::for_each(group_cols.begin(), group_cols.end(), [this](const auto& group_col) {
-            // WARN("group_cols_: {}", *get_col(this->prev_->cols(), group_col));
             this->group_cols_.push_back(*get_col(this->prev_->cols(), group_col));
         });
         having_conds_ = std::move(conds);  // 移动 HAVING 条件的所有权
@@ -65,33 +63,43 @@ class GroupExecutor : public AbstractExecutor {
      */
     void beginTuple() override {
         TRACE_FUNCTION
-        prev_->beginTuple();      // 初始化上一个执行器
-        grouped_records.clear();  // 清空上一次执行的分组记录
-
+        std::unordered_map<std::list<std::string_view>, std::pair<int, std::vector<std::unique_ptr<RmRecord>>>,
+                           ListHash>
+            umap_grouped_records;
+        prev_->beginTuple();           // 初始化上一个执行器
+        umap_grouped_records.clear();  // 清空上一次执行的分组记录
+        size_t index = 0;
         // 从上一个执行器获取所有元组并进行分组
         while (!prev_->is_end()) {
             auto tuple = prev_->Next();
-
+            index++;
             // 获取下一个元组
             std::list<std::string_view> group_key = generateGroupKey(tuple);  // 生成分组键
             std::string dbg_tmp;
             for (auto i : group_key) dbg_tmp += i;
-            // INFO("group_key: {}", dbg_tmp);
             // 将元组添加到对应的分组中
-            grouped_records[group_key].emplace_back(std::move(tuple));
+            auto& it = umap_grouped_records[group_key];
+            it.second.emplace_back(std::move(tuple));
+            if (it.second.size() == 1) it.first = index;
             prev_->nextTuple();  // 移动到上一个执行器的下一个元组
         }
 
         // 根据 HAVING 条件过滤分组
         if (!having_conds_.empty()) {
-            for (auto it = grouped_records.begin(); it != grouped_records.end();) {
-                if (!eval_aggr_conds(cols_, having_conds_, it->second)) {
-                    it = grouped_records.erase(it);
+            for (auto it = umap_grouped_records.begin(); it != umap_grouped_records.end();) {
+                if (!eval_aggr_conds(cols_, having_conds_, it->second.second)) {
+                    it = umap_grouped_records.erase(it);
                 } else {
                     ++it;
                 }
             }
         }
+        for (auto& [key, value] : umap_grouped_records) {
+            grouped_records.push_back(std::move(value));
+        }
+
+        std::sort(grouped_records.begin(), grouped_records.end());
+
         if (grouped_records.empty()) {
             current_tuple = nullptr;
             return;
