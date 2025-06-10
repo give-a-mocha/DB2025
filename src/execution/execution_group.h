@@ -119,10 +119,20 @@ class GroupExecutor : public AbstractExecutor {
         TRACE_FUNCTION
         if (!grouped_records.empty()) {
             grouped_records.erase(grouped_records.begin());
-            auto& front = grouped_records.begin()->second.front();
-            // 创建一个新的 RmRecord 来存储代表元组的数据
-            auto temp_tuple = std::make_unique<RmRecord>(front->size, front->data);
-            current_tuple = std::move(temp_tuple);  // 移动所有权
+
+            // 检查删除后是否还有记录
+            if (grouped_records.empty()) {
+                current_tuple = nullptr;
+                return;
+            }
+
+            // 安全地获取下一组的第一条记录
+            if (!grouped_records.begin()->second.empty()) {
+                const auto& front = grouped_records.begin()->second.front();
+                current_tuple = std::make_unique<RmRecord>(front->size, front->data);
+            } else {
+                current_tuple = nullptr;
+            }
         } else {
             current_tuple = nullptr;
         }
