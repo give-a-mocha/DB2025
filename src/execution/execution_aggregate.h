@@ -11,13 +11,12 @@
  */
 class AggregateExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;                                                    // 前一个执行器
-    std::vector<ColMeta> cols_;                                                                 // 输入列的元数据
-    std::vector<ColMeta> output_cols_;                                                          // 输出列的元数据
-    std::vector<AggregateType> agg_types_;                                                      // 聚合类型列表
-    std::unordered_map<std::string, std::vector<std::unique_ptr<RmRecord>>>* grouped_records_;  // 分组记录（暂未使用）
-    std::vector<std::unique_ptr<RmRecord>> aggregated_records_;                                 // 聚合后的记录
-    std::vector<std::unique_ptr<RmRecord>>::iterator current_record_;                           // 当前记录迭代器
+    std::unique_ptr<AbstractExecutor> prev_;                                    // 前一个执行器
+    std::vector<ColMeta> cols_;                                                // 输入列的元数据
+    std::vector<ColMeta> output_cols_;                                         // 输出列的元数据
+    std::vector<AggregateType> agg_types_;                                     // 聚合类型列表
+    std::vector<std::unique_ptr<RmRecord>> aggregated_records_;                // 聚合后的记录
+    std::vector<std::unique_ptr<RmRecord>>::iterator current_record_;          // 当前记录迭代器
 
    public:
     /**
@@ -56,10 +55,29 @@ class AggregateExecutor : public AbstractExecutor {
 
         // 设置其他列的类型和偏移量
         for (size_t i = 1; i < output_cols_.size(); ++i) {
-            // COUNT操作的结果类型为整数
-            if (agg_types[i] == AggregateType::COUNT) {
-                output_cols_[i].type = ColType::TYPE_INT;
-                output_cols_[i].len = sizeof(int);
+            // 根据聚合类型设置输出类型
+            switch (agg_types[i]) {
+                case AggregateType::COUNT:
+                    output_cols_[i].type = ColType::TYPE_INT;
+                    output_cols_[i].len = sizeof(int);
+                    break;
+                case AggregateType::AVG:
+                    // AVG结果总是FLOAT类型
+                    output_cols_[i].type = ColType::TYPE_FLOAT;
+                    output_cols_[i].len = sizeof(float);
+                    break;
+                case AggregateType::SUM:
+                    // 如果原始类型是FLOAT，结果也是FLOAT
+                    if (output_cols_[i].type == ColType::TYPE_FLOAT) {
+                        output_cols_[i].len = sizeof(float);
+                    }
+                    break;
+                // MIN和MAX保持原始类型
+                case AggregateType::MIN:
+                case AggregateType::MAX:
+                    break;
+                default:
+                    throw InternalError("Unknown aggregate type");
             }
             // 计算列的偏移量（基于前一列的偏移量和长度）
             output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;

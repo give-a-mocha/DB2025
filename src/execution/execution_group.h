@@ -228,9 +228,8 @@ class GroupExecutor : public AbstractExecutor {
         if (cond.is_rhs_val) {
             rhs_val = cond.rhs_val;
         } else {
-            if (copy_cond.rhs_col.col_name == "") {
-                // 如果右侧列名为空，可能表示使用第一个列（需要确认逻辑）
-                copy_cond.rhs_col.col_name = rec_cols.front().name;
+            if (copy_cond.rhs_col.col_name.empty()) {
+                throw InternalError("Column name cannot be empty in HAVING clause");
             }
             // 计算条件的右侧聚合值
             rhs_val = get_aggr_value(rec_cols, rec, copy_cond.rhs_col, cond.rhs_col.agg_type);
