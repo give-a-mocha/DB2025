@@ -770,94 +770,42 @@ void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
     }
 }
 
-/**
- * @brief 检查HAVING条件的合法性
- *
- * HAVING子句中的列必须是聚合函数的结果或出现在GROUP BY子句中。
- * 该函数检查HAVING条件中的每一列，确保它们满足以上要求。
- *
- * @param conds HAVING条件列表
- * @param group_cols GROUP BY列表
- * @throws InternalError 如果发现不合法的列引用
- */
 void Analyze::check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols) {
     TRACE_FUNCTION
-    for (const auto &cond : conds) {
-        // 检查左侧列
+    for (auto &cond : conds) {
         if (cond.lhs_col.agg_type == AggregateType::NONE) {
-            // 非聚合列必须在GROUP BY中
-            if (!is_column_in_group(cond.lhs_col, group_cols)) {
-                throw InternalError("HAVING: Column '" + cond.lhs_col.col_name +
-                                    "' must be either an aggregate function or appear in GROUP BY clause");
+            bool found = is_column_in_group(cond.lhs_col, group_cols);
+            if (!found) {
+                throw InternalError("having_cond: Non aggregate column not in group by");
             }
-        } else {
-            // 检查聚合函数类型是否适用于该列
-            TabMeta &tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
-            auto col_meta = tab.get_col(cond.lhs_col.col_name);
-            validate_aggregate_type(cond.lhs_col.agg_type, col_meta->type);
         }
-
-        // 检查右侧列（如果不是常量值）
-        if (!cond.is_rhs_val) {
-            if (cond.rhs_col.agg_type == AggregateType::NONE) {
-                if (!is_column_in_group(cond.rhs_col, group_cols)) {
-                    throw InternalError("HAVING: Column '" + cond.rhs_col.col_name +
-                                        "' must be either an aggregate function or appear in GROUP BY clause");
-                }
-            } else {
-                TabMeta &tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
-                auto col_meta = tab.get_col(cond.rhs_col.col_name);
-                validate_aggregate_type(cond.rhs_col.agg_type, col_meta->type);
+        if (!cond.is_rhs_val && cond.rhs_col.agg_type == AggregateType::NONE) {
+            bool found = is_column_in_group(cond.rhs_col, group_cols);
+            if (!found) {
+                throw InternalError("having_cond: Non aggregate column not in group by");
             }
         }
     }
 }
 
-/**
- * @brief 检查SELECT和GROUP BY子句的列引用合法性
- *
- * 根据SQL标准，在有GROUP BY子句时，SELECT列表中的非聚合列必须出现在GROUP BY子句中。
- * 没有GROUP BY时，如果SELECT中包含聚合函数，则不能包含非聚合列。
- *
- * @param cols SELECT子句中的列
- * @param group_cols GROUP BY子句中的列
- * @throws InternalError 如果发现不合法的列引用
- */
 void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols) {
     TRACE_FUNCTION
     if (group_cols.empty()) {
-        // 没有GROUP BY时的检查
-        bool has_aggr = false;
-        bool has_non_aggr = false;
-
-        for (const auto &col : cols) {
-            if (col.agg_type != AggregateType::NONE) {
-                has_aggr = true;
-                // 检查聚合函数是否适用于该列
-                TabMeta &tab = sm_manager_->db_.get_table(col.tab_name);
-                auto col_meta = tab.get_col(col.col_name);
-                validate_aggregate_type(col.agg_type, col_meta->type);
-            } else {
-                has_non_aggr = true;
-            }
-            if (has_aggr && has_non_aggr) {
-                throw InternalError(
-                    "SELECT: Cannot mix aggregate functions with non-aggregate columns without GROUP BY");
-            }
+        bool has_aggr = std::any_of(cols.begin(), cols.end(),
+                                    [](const TabCol &col) { return col.agg_type != AggregateType::NONE; });
+        bool has_non_aggr = std::any_of(cols.begin(), cols.end(),
+                                        [](const TabCol &col) { return col.agg_type == AggregateType::NONE; });
+        if (has_aggr && has_non_aggr) {
+            throw InternalError("SELECT must not contain both aggregate and non-aggregate columns without GROUP BY");
         }
     } else {
         for (auto &col : cols) {
             if (col.agg_type != AggregateType::NONE) {
-                // 检查聚合函数是否适用于该列
-                TabMeta &tab = sm_manager_->db_.get_table(col.tab_name);
-                auto col_meta = tab.get_col(col.col_name);
-                validate_aggregate_type(col.agg_type, col_meta->type);
                 continue;
             }
-
-            // 检查非聚合列是否在GROUP BY中
-            if (!is_column_in_group(col, group_cols)) {
-                throw InternalError("SELECT: Column '" + col.col_name + "' must appear in GROUP BY clause");
+            bool found = is_column_in_group(col, group_cols);
+            if (!found) {
+                throw InternalError("SELECT column not in GROUP BY: " + col.col_name);
             }
         }
     }
