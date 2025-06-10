@@ -10,6 +10,23 @@ See the Mulan PSL v2 for more details. */
 
 #include "transaction/watermark.h"
 
-auto Watermark::AddTxn(timestamp_t read_ts) -> void {}
+void Watermark::AddTxn(timestamp_t read_ts){
+	current_reads_[read_ts]++;
+}
 
-auto Watermark::RemoveTxn(timestamp_t read_ts) -> void {}
+void Watermark::RemoveTxn(timestamp_t read_ts){
+	auto it = current_reads_.find(read_ts);
+	if (it != current_reads_.end()) {
+		it->second--;
+		if (it->second <= 0) {
+			current_reads_.erase(it);
+		}
+	}
+}
+
+void Watermark::UpdateCommitTs(timestamp_t commit_ts){
+	commit_ts_ = commit_ts;
+	if (watermark_ < commit_ts) {
+		watermark_ = commit_ts;
+	}
+}

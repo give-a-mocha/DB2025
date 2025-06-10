@@ -164,7 +164,7 @@ class RmFileHandle {
      * @throw OutOfSpaceError 如果没有足够的空间
      * @note 系统自动分配插入位置，返回的RID用于后续访问
      */
-    Rid insert_record(char *buf, Context *context);
+     Rid insert_record(char *buf, Context *context);
 
     /**
      * @brief 在指定位置插入记录
@@ -181,7 +181,7 @@ class RmFileHandle {
     void delete_record(const Rid &rid, Context *context);
 
     /**
-     * @brief 更新记录
+     * @brief 更新记录 
      * @param rid 要更新的记录ID
      * @param buf 新的记录数据
      * @param context 事务上下文

@@ -58,6 +58,7 @@ struct UndoLog {
  * @details 管理事务的状态、隔离级别、写集合、锁集合以及撤销日志等。
  */
 class Transaction {
+friend class TransactionManager; // 允许 TransactionManager 访问私有成员
 private:
     // 事务模式标志：true 表示显式事务，false 表示隐式事务（单条 SQL 语句）
     bool txn_mode_;

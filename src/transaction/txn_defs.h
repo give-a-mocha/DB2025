@@ -33,7 +33,7 @@ enum class TransactionState { DEFAULT, GROWING, SHRINKING, COMMITTED, ABORTED };
  * READ_COMMITTED: 读已提交，只允许读取已提交的数据，防止脏读但可能出现不可重复读和幻读
  * SERIALIZABLE: 可串行化，最高隔离级别，确保事务执行的结果与串行执行的结果相同，防止所有并发问题
  */
-enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE };
+enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE, Snapshot_Isolation };
 
 /* 事务写操作类型，包括插入、删除、更新三种操作 */
 enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };

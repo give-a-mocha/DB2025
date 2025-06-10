@@ -9,6 +9,8 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "rm_file_handle.h"
+#include "transaction/transaction.h"
+#include "transaction/transaction_manager.h"
 
 /**
  * @description: 获取当前表中指定记录号的记录
@@ -29,20 +31,25 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
     // !1. 获取指定记录所在的page handle
     // !2. 初始化一个指向RmRecord的指针（赋值其内部的data和size）
 
-    if (context != nullptr) {
-        context->lock_mgr_->lock_shared_on_record(context->txn_, rid, fd_);
+    if(context != nullptr && context->txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+        
+
+        
+    } else {
+        if (context != nullptr) {
+            context->lock_mgr_->lock_shared_on_record(context->txn_, rid, fd_);
+        }
+        // 获取页面句柄
+        RmPageHandle page_handle = fetch_page_handle(rid.page_no);
+
+        // 创建RmRecord并复制数据
+        char* slot = page_handle.get_slot(rid.slot_no);
+        auto record = std::make_unique<RmRecord>(file_hdr_.record_size, slot);
+
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
+
+        return record;
     }
-
-    // 获取页面句柄
-    RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
-    // 创建RmRecord并复制数据
-    char* slot = page_handle.get_slot(rid.slot_no);
-    auto record = std::make_unique<RmRecord>(file_hdr_.record_size, slot);
-
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
-
-    return record;
 }
 
 /**
@@ -60,6 +67,7 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
  * @param {Context*} context 事务上下文，用于并发控制
  * @return {Rid} 新插入记录的标识符
  */
+// 修改后的 insert_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
 Rid RmFileHandle::insert_record(char* buf, Context* context) {
     // 插入记录的步骤：
     // 1. 获取或创建一个有空闲空间的页面句柄
@@ -69,31 +77,35 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     // 5. 如果页面已满，更新文件头的空闲页面链表
     // 6. 返回新记录的RID标识符
 
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
+    if(context != nullptr && context->txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+        
+    } else {
+        if (context != nullptr) {
+            context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
+        }
+
+        // 获取空闲页面
+        RmPageHandle page_handle = create_page_handle();
+
+        // 找到空闲slot
+        int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
+        // 复制数据到slot
+        char* slot = page_handle.get_slot(slot_no);
+        memcpy(slot, buf, file_hdr_.record_size);
+
+        // 设置bitmap和更新记录数
+        Bitmap::set(page_handle.bitmap, slot_no);
+        page_handle.page_hdr->num_records++;
+        file_hdr_.record_num++;
+        // 如果页面已满,更新空闲页面链表
+        if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page) {
+            file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
+        }
+
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
+
+        return Rid{page_handle.page->get_page_id().page_no, slot_no};
     }
-
-    // 获取空闲页面
-    RmPageHandle page_handle = create_page_handle();
-
-    // 找到空闲slot
-    int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
-    // 复制数据到slot
-    char* slot = page_handle.get_slot(slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
-
-    // 设置bitmap和更新记录数
-    Bitmap::set(page_handle.bitmap, slot_no);
-    page_handle.page_hdr->num_records++;
-    file_hdr_.record_num++;
-    // 如果页面已满,更新空闲页面链表
-    if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page) {
-        file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
-    }
-
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
-
-    return Rid{page_handle.page->get_page_id().page_no, slot_no};
 }
 
 /**
@@ -102,8 +114,6 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
  * @param {char*} buf 要插入记录的数据
  */
 void RmFileHandle::insert_record(const Rid& rid, char* buf) {
-    // 注：需要考虑事务上下文和并发控制
-
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
 
@@ -141,6 +151,7 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
  * @param {Context*} context 事务上下文
  * @throw RecordNotFoundError 如果记录不存在
  */
+// 修改后的 delete_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
 void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     // 删除记录的步骤：
     // 1. 获取记录所在页面的句柄
@@ -148,31 +159,34 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     // 3. 更新页面头部信息(减少记录数)
     // 4. 如果页面从满变为非满，需要将其加入空闲页面链表
     // 5. 更新文件头的记录总数
+    if(context != nullptr && context->txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+        
+    } else {
+        if (context != nullptr) {
+            context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
+        }
 
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
+        // 获取页面句柄
+        RmPageHandle page_handle = fetch_page_handle(rid.page_no);
+
+        // 检查record是否存在
+        if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
+            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
+            throw RecordNotFoundError(rid.page_no, rid.slot_no);
+        }
+
+        // 复位bitmap
+        Bitmap::reset(page_handle.bitmap, rid.slot_no);
+        page_handle.page_hdr->num_records--;
+        file_hdr_.record_num--;
+
+        // 如果页面从满变为未满,加入空闲页面链表
+        if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page - 1) {
+            release_page_handle(page_handle);
+        }
+
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
     }
-
-    // 获取页面句柄
-    RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
-    // 检查record是否存在
-    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
-        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
-        throw RecordNotFoundError(rid.page_no, rid.slot_no);
-    }
-
-    // 复位bitmap
-    Bitmap::reset(page_handle.bitmap, rid.slot_no);
-    page_handle.page_hdr->num_records--;
-    file_hdr_.record_num--;
-
-    // 如果页面从满变为未满,加入空闲页面链表
-    if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page - 1) {
-        release_page_handle(page_handle);
-    }
-
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
 /**
@@ -189,31 +203,34 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
  * @param {Context*} context 事务上下文
  * @throw RecordNotFoundError 如果记录不存在
  */
+// 修改后的 update_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
 void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
     // 更新记录的步骤：
     // 1. 获取记录所在页面的句柄
     // 2. 验证记录是否存在
     // 3. 用新数据覆盖原记录
     // 4. 标记页面为脏页以便后续写回磁盘
+    if(context != nullptr && context->txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+        
+    } else {
+        if (context != nullptr) {
+            context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
+        }
 
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
+        // 获取页面句柄
+        RmPageHandle page_handle = fetch_page_handle(rid.page_no);
+
+        // 检查record是否存在
+        if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
+            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
+            throw RecordNotFoundError(rid.page_no, rid.slot_no);
+        }
+        // 更新记录
+        char* slot = page_handle.get_slot(rid.slot_no);
+        memcpy(slot, buf, file_hdr_.record_size);
+
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
     }
-
-    // 获取页面句柄
-    RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
-    // 检查record是否存在
-    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
-        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
-        throw RecordNotFoundError(rid.page_no, rid.slot_no);
-    }
-
-    // 更新记录
-    char* slot = page_handle.get_slot(rid.slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
-
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
 /**

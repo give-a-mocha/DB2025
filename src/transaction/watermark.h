@@ -30,6 +30,8 @@ public:
 
 	void UpdateCommitTs(timestamp_t commit_ts);
 
-	timestamp_t GetWatermark();
+	timestamp_t GetWatermark(){
+		return watermark_;
+	}
 
 };

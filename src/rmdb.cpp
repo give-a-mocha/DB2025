@@ -48,7 +48,7 @@ auto ix_manager = std::make_unique<IxManager>(disk_manager.get(), buffer_pool_ma
 auto sm_manager =
     std::make_unique<SmManager>(disk_manager.get(), buffer_pool_manager.get(), rm_manager.get(), ix_manager.get());
 auto lock_manager = std::make_unique<LockManager>();
-auto txn_manager = std::make_unique<TransactionManager>(lock_manager.get(), sm_manager.get());
+auto txn_manager = std::make_unique<TransactionManager>(lock_manager.get(), sm_manager.get(), ConcurrencyMode::MVCC);
 auto planner = std::make_unique<Planner>(sm_manager.get());
 auto optimizer = std::make_unique<Optimizer>(sm_manager.get(), planner.get());
 auto ql_manager = std::make_unique<QlManager>(sm_manager.get(), txn_manager.get(), nullptr);
@@ -90,9 +90,7 @@ void SetTransaction(txn_id_t *txn_id, Context *context) {
     if (context->txn_ == nullptr || context->txn_->get_state() == TransactionState::COMMITTED ||
         context->txn_->get_state() == TransactionState::ABORTED) {
         context->txn_ = txn_manager->begin(nullptr, context->log_mgr_);
-
         *txn_id = context->txn_->get_transaction_id();
-        context->txn_->set_txn_mode(false);
     }
 }
 
@@ -158,7 +156,7 @@ void *client_handler(void *sock_fd) {
         offset = 0;
 
         // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
-        auto context = std::make_unique<Context>(lock_manager.get(), log_manager.get(), nullptr, data_send, &offset);
+        auto context = std::make_unique<Context>(lock_manager.get(), log_manager.get(), txn_manager.get(), nullptr, data_send, &offset);
         SetTransaction(&txn_id, context.get());
 
         // 用于判断是否已经调用了yy_delete_buffer来删除buf
@@ -179,6 +177,10 @@ void *client_handler(void *sock_fd) {
                     std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context.get());
                     portal->run(portalStmt, ql_manager.get(), &txn_id, context.get());
                     portal->drop();
+                    if(context->txn_->get_txn_mode() == false) {
+                        // 如果是隐式的事务，当条语句执行完后自动提交事务
+                        txn_manager->commit(context->txn_, context->log_mgr_);
+                    }
                 } catch (TransactionAbortException &e) {
                     // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
                     std::string str = "abort\n";
