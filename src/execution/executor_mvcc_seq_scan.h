@@ -41,7 +41,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @param conds 过滤条件列表
      * @param context 执行上下文
      */
-    MvccSeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context) {
+    MvccSeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context, TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
@@ -55,6 +55,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         len_ = cols_.back().offset + cols_.back().len;
 
         context_ = context;
+        txn_mgr_ = txn_mgr;
         fed_conds_ = conds_;  // 暂未优化的条件列表
 
     }
@@ -69,12 +70,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = nullptr;
-            if(txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-            } else {
-                rec = fh_->get_record(rid_, context_);
-            }
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
@@ -100,14 +96,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = nullptr;
-            if(txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                // 如果是MVCC模式，获取记录的最新版本
-                rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-            } else {
-                // 否则直接获取当前记录
-                rec = fh_->get_record(rid_, context_);
-            }
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
@@ -126,11 +115,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
     std::unique_ptr<RmRecord> Next() override {
-        if(txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-            return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-        } else {
-            return fh_->get_record(rid_, context_);
-        }
+        return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
     }
 
     /**
@@ -159,5 +144,5 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @brief 获取执行器类型名称
      * @return 执行器的类型字符串
      */
-    std::string getType() override { return "SeqScanExecutor"; }
+    std::string getType() override { return "MvccSeqScanExecutor"; }
 };

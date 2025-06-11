@@ -41,7 +41,7 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @param context 执行上下文
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
      */
-    MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context) {
+    MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context, TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_ = sm_manager_->db_.get_table(tab_name);
         values_ = values;
@@ -52,6 +52,7 @@ class MvccInsertExecutor : public AbstractExecutor {
         }
         fh_ = sm_manager_->fhs_.at(tab_name).get();
         context_ = context;
+        txn_mgr_ = txn_mgr;
     };
 
     /**
@@ -86,65 +87,12 @@ class MvccInsertExecutor : public AbstractExecutor {
         }
 
         // 插入记录到文件
-        if(txn_mgr_->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-            // 如果是MVCC模式，使用MVCC插入
-            //!不支持索引
-            rid_ = mvcc_insert_record(rec.data, context_, fh_, txn_mgr_, values_);
-        } else {
-            // 否则使用普通插入
-            rid_ = fh_->insert_record(rec.data, context_);
-            // 更新索引
-            if (!insert_index(rec)) {
-                // 索引插入失败，回滚记录
-                fh_->delete_record(rid_, context_);
-                throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
-            }
-        }
+        rid_ = mvcc_insert_record(rec.data, context_, fh_, txn_mgr_, values_);
+        
         context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_name_, rid_));
         return nullptr;
     }
 
-    /**
-     * @brief 为新记录创建索引项
-     * @param rec 要创建索引的记录引用
-     * @return 是否成功创建所有索引
-     */
-    bool insert_index(RmRecord &rec) {
-        std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
-        inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
-
-        // 遍历表的所有索引
-        for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-            auto &index = tab_.indexes[i];
-            // 获取索引句柄
-            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
-
-            // 构造索引键值
-            auto key = std::make_unique<char[]>(index.col_tot_len);
-            int offset = 0;
-            for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-                memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
-                offset += index.cols[j].len;
-            }
-
-            // 插入索引项
-            auto res = ih->insert_entry(key.get(), rid_, context_->txn_);
-            if (res == INVALID_PAGE_ID) {
-                // 插入失败，回滚已插入的索引
-                for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
-                    auto &rollback_index = tab_.indexes[rollback_i];
-                    auto rollback_ih =
-                        sm_manager_->ihs_
-                            .at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, rollback_index.cols))
-                            .get();
-                    rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
-                }
-                return false;
-            }
-            inserted_keys.emplace_back(std::move(key));
-        }
-        return true;
-    }
     /**
      * @brief 获取插入记录的RID
      * @return 插入记录的RID引用
@@ -155,5 +103,5 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @brief 获取执行器类型名称
      * @return 执行器的类型字符串
      */
-    std::string getType() override { return "InsertExecutor"; }
+    std::string getType() override { return "MvccInsertExecutor"; }
 };

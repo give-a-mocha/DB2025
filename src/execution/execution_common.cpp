@@ -80,7 +80,6 @@ std::vector<Value> convert_rerecord_to_values(
     std::vector<Value> values;
     for (const auto &col : cols_) {
         Value value;
-        value.type = col.type;
         value.set_col_data(col.type, record->data + col.offset, col.len);
         values.push_back(value);
     }
@@ -96,7 +95,9 @@ std::unique_ptr<RmRecord> mvcc_get_record(
 ) {
     auto rec = fh_->get_record(rid, context_);
     auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
+    ERROR("MVCC: 事务 {}",context_->txn_->get_transaction_id());
     while(pre_undo_link.has_value()){
+        ERROR("有前一个版本");
         auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
         //可见性检查
         //如果是自己修改的直接返回
@@ -105,6 +106,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
             if(undo_log.is_deleted_){
                 return nullptr; //如果是删除的记录，返回空
             }
+            ERROR("自己修改的版本");
             return rec;
         }
         // 如果是已提交事物
@@ -112,12 +114,17 @@ std::unique_ptr<RmRecord> mvcc_get_record(
             if(undo_log.is_deleted_) {
                 return nullptr; //如果是删除的记录，返回空
             }
+            ERROR("其他事务提交修改的版本");
             return rec;
         }
+        ERROR("MVCC: 事务 {} 正在读取记录 {} 的前一个版本，时间戳: {}",
+              context_->txn_->get_transaction_id(), rid.page_no, rid.slot_no, undo_log.ts_);
         for(size_t i = 0; i < cols_.size(); i++) {
             if(undo_log.modified_fields_[i]){
                 Value val = undo_log.tuple_[i];
-                val.init_raw(cols_[i].len);
+                if(!val.raw) {
+                    val.init_raw(cols_[i].len);
+                }
                 memcpy(rec->data + cols_[i].offset, val.raw->data, cols_[i].len);
             }
         }
@@ -126,6 +133,8 @@ std::unique_ptr<RmRecord> mvcc_get_record(
             return nullptr;
         }
     }
+    INFO("MVCC:读取结束");
+    return rec;
 }
 
 Rid mvcc_insert_record(
@@ -177,14 +186,24 @@ void mvcc_delete_record(
 
 void mvcc_update_record(
     const Rid &rid,
-    std::unique_ptr<RmRecord> &record,
+    std::unique_ptr<RmRecord> &new_rec,
+    std::unique_ptr<RmRecord> &old_rec,
     Context *context_,
     RmFileHandle *fh_,
     TransactionManager *txn_mgr_,
-    const std::vector<ColMeta> &cols_
+    const std::vector<ColMeta> &cols_,
+    std::vector<bool> is_modify
 ) {
-    fh_->update_record(rid, record->data, context_);
-    std::vector<Value> values = convert_rerecord_to_values(record, cols_);
+    fh_->update_record(rid, new_rec->data, context_);
+    std::vector<Value> values(cols_.size());
+    for (size_t i = 0; i < cols_.size(); ++i) {
+        if(is_modify[i] == false) {
+            continue; // 如果该字段没有被修改，则跳过
+        }
+        Value value;
+        value.set_col_data(cols_[i].type, old_rec->data + cols_[i].offset, cols_[i].len);
+        values[i] = value;
+    }
     // 创建UndoLog
     UndoLog undo_log;
     undo_log.is_deleted_ = false; // 更新不是删除操作
@@ -197,7 +216,7 @@ void mvcc_update_record(
     } else {
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
-    undo_log.modified_fields_.resize(values.size(), true); // 全部字段都被修改
+    undo_log.modified_fields_ = std::move(is_modify); // 使用传入的修改标志
     auto undo_link = context_->txn_->AppendUndoLog(undo_log);
     txn_mgr_->UpdateUndoLink(rid, undo_link);
 }

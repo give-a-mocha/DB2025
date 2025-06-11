@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/common.h"
 #include "transaction/transaction.h"
 #include "transaction/transaction_manager.h"
+#include "common/print.hpp"
 
 auto ReconstructTuple(const TabMeta *schema, const RmRecord &base_tuple, const TupleMeta &base_meta,
                       const std::vector<UndoLog> &undo_logs) -> std::optional<RmRecord>;
@@ -56,9 +57,11 @@ void mvcc_delete_record(
 );
 void mvcc_update_record(
 	const Rid &rid,
-	std::unique_ptr<RmRecord> &record,
+	std::unique_ptr<RmRecord> &new_rec,
+    std::unique_ptr<RmRecord> &old_rec,
 	Context *context_,
 	RmFileHandle *fh_,
 	TransactionManager *txn_mgr_,
-	const std::vector<ColMeta> &cols_
+	const std::vector<ColMeta> &cols_,
+	std::vector<bool> is_modify
 );
