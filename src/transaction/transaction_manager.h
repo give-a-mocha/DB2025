@@ -59,6 +59,7 @@ struct VersionUndoLink {
     }
 };
 
+
 class TransactionManager {
 public:
     // 全局事务表，存放事务ID与事务对象的映射关系
@@ -123,6 +124,15 @@ public:
     void set_concurrency_mode(ConcurrencyMode concurrency_mode) { concurrency_mode_ = concurrency_mode; }
 
     LockManager *get_lock_manager() { return lock_manager_; }
+    
+    //!Masttf DO
+    timestamp_t get_next_txn_id() {
+        return next_txn_id_.fetch_add(1);
+    }
+    //!Masttf DO
+    timestamp_t get_next_timestamp() {
+        return next_timestamp_.fetch_add(1);
+    }
 
     /**
      * @description: 获取事务ID为txn_id的事务对象

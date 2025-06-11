@@ -25,3 +25,40 @@ auto IsWriteWriteConflict(timestamp_t tuple_ts, Transaction *txn) -> bool;
 auto message_out(Context *context_, const std::string &output) -> void;
 
 auto message_out(Context *context_, const char *output, size_t output_size) -> void;
+
+std::vector<Value> convert_rerecord_to_values(
+    const std::unique_ptr<RmRecord> &record, 
+    const std::vector<ColMeta> &cols_
+);
+
+std::unique_ptr<RmRecord> mvcc_get_record(
+	const Rid &rid, 
+	Context *context_,
+	RmFileHandle *fh_,
+	TransactionManager *txn_mgr_,
+	const std::vector<ColMeta> &cols_
+);
+
+Rid mvcc_insert_record(
+	char *buf, 
+	Context *context_,
+	RmFileHandle *fh_,
+	TransactionManager *txn_mgr_,
+	const std::vector<Value> &valus_
+);
+
+void mvcc_delete_record(
+	const Rid &rid,
+	Context *context_,
+	RmFileHandle *fh_,
+	TransactionManager *txn_mgr_,
+	const std::vector<ColMeta> &cols_
+);
+void mvcc_update_record(
+	const Rid &rid,
+	std::unique_ptr<RmRecord> &record,
+	Context *context_,
+	RmFileHandle *fh_,
+	TransactionManager *txn_mgr_,
+	const std::vector<ColMeta> &cols_
+);

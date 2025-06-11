@@ -64,20 +64,20 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
 
     if (txn == nullptr) {
         // 创建新事务，并分配递增的事务ID
-        txn = new Transaction(next_txn_id_.fetch_add(1), IsolationLevel::Snapshot_Isolation);
+        txn = new Transaction(get_next_txn_id(), IsolationLevel::REPEATABLE_READ);
     }
 
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
     txn_map.emplace(txn->get_transaction_id(), txn);
-    timestamp_t start_ts = next_timestamp_.fetch_add(1);
+    timestamp_t start_ts = get_next_timestamp();
     txn->set_start_ts(start_ts);  // 设置事务开始时间戳
-    txn->read_ts_.store(start_ts); // MVCC: 设置读时间戳为开始时间戳
+    txn->set_read_ts(last_commit_ts_); // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
     // MVCC: 将新事务添加到水位线跟踪
-    if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-        running_txns_.AddTxn(start_ts); // 使用 AddTxn 和 start_ts
-    }
+    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
+    //     running_txns_.AddTxn(start_ts); // 使用 AddTxn 和 start_ts
+    // }
     // 创建BEGIN事务日志记录，记录事务开始的操作
     auto* log = new BeginLogRecord(txn->get_transaction_id());
     record_link_management(log, log_manager, txn);
@@ -103,8 +103,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // MVCC: 分配提交时间戳
     timestamp_t commit_ts = INVALID_TS;
     if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-        commit_ts = next_timestamp_.fetch_add(1);
-        txn->commit_ts_.store(commit_ts);
+        commit_ts = get_next_timestamp();
+        txn->set_commit_ts(commit_ts); // 设置提交时间戳
         last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
     }
 
@@ -123,15 +123,15 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     txn->set_state(TransactionState::COMMITTED);
 
     // 从全局事务表中移除
-    {
-        std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-        txn_map.erase(txn->get_transaction_id());
-    }
+    // {
+    //     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
+    //     txn_map.erase(txn->get_transaction_id());
+    // }
 
     // MVCC: 从水位线中移除事务
-    if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-        running_txns_.RemoveTxn(txn->get_read_ts()); // 使用 RemoveTxn 和 read_ts (即 start_ts)
-    }
+    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
+    //     running_txns_.RemoveTxn(txn->get_read_ts()); // 使用 RemoveTxn 和 read_ts (即 start_ts)
+    // }
 }
 
 /**
@@ -217,15 +217,15 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     txn->set_state(TransactionState::ABORTED);
 
     // 从全局事务表中移除
-    {
-        std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-        txn_map.erase(txn->get_transaction_id());
-    }
+    // {
+    //     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
+    //     txn_map.erase(txn->get_transaction_id());
+    // }
 
     // MVCC: 从水位线中移除事务
-    if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-        running_txns_.RemoveTxn(txn->get_read_ts()); // 使用 RemoveTxn 和 read_ts (即 start_ts)
-    }
+    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
+    //     running_txns_.RemoveTxn(txn->get_read_ts()); // 使用 RemoveTxn 和 read_ts (即 start_ts)
+    // }
 }
 
 /**
@@ -287,7 +287,7 @@ void TransactionManager::insert_index_record(TabMeta tab_, RmRecord* rec, Rid ri
 bool TransactionManager::UpdateUndoLink(
     Rid rid,
     std::optional<UndoLink> prev_link,
-    std::function<bool(std::optional<UndoLink>)> &&check = nullptr)
+    std::function<bool(std::optional<UndoLink>)> &&check)
 {
     if(check != nullptr) {
         // 如果提供了检查函数，则先执行检查
@@ -295,29 +295,8 @@ bool TransactionManager::UpdateUndoLink(
             return false;  // 检查失败，返回 false
         }
     }
-    // 获取对应的版本信息
-    std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
-    auto it = version_info_.find(rid.page_no);
-    if (it == version_info_.end()) {
-        // 如果没有找到对应的版本信息，则创建一个新的
-        auto new_version_info = std::make_shared<PageVersionInfo>();
-        version_info_[rid.page_no] = new_version_info;
-        it = version_info_.find(rid.page_no);
-    }
-    auto &version_info = it->second;
-    lock.unlock();
-    std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
-    // 更新撤销链接
-    auto &prev_version_map = version_info->prev_version_;
     std::optional<VersionUndoLink> prev_version = VersionUndoLink::FromOptionalUndoLink(prev_link);
-    if (prev_link.has_value()) {
-        // 如果提供了前一个撤销链接，则更新或插入
-        prev_version_map[rid.slot_no] = *prev_version;
-    } else {
-        // 如果没有提供前一个撤销链接，则删除对应的条目
-        prev_version_map.erase(rid.slot_no);
-    }
-    return true;  // 更新成功，返回 true
+    return UpdateVersionLink(rid, prev_version);
 }
 
 /**
@@ -327,7 +306,7 @@ bool TransactionManager::UpdateUndoLink(
 bool TransactionManager::UpdateVersionLink(
     Rid rid,
     std::optional<VersionUndoLink> prev_version,
-    std::function<bool(std::optional<VersionUndoLink>)> &&check = nullptr)
+    std::function<bool(std::optional<VersionUndoLink>)> &&check)
 {
     if(check != nullptr) {
         // 如果提供了检查函数，则先执行检查
@@ -350,37 +329,28 @@ bool TransactionManager::UpdateVersionLink(
     // 更新版本链接
     auto &prev_version_map = version_info->prev_version_;
     if (prev_version.has_value()) {
-        // 如果提供了前一个版本链接，则更新或插入
+        // 如果提供了版本链接，则更新或插入
         prev_version_map[rid.slot_no] = *prev_version;
     } else {
-        // 如果没有提供前一个版本链接，则删除对应的条目
-        prev_version_map.erase(rid.slot_no);
+        return false;
     }
     // 如果是 MVCC 模式，则需要更新版本状态
-    if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-        // 如果是 MVCC 模式，设置版本状态为不在进行中
-        if (prev_version.has_value()) {
-            prev_version_map[rid.slot_no].in_progress_ = false;
-        }
-    }
+    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
+    //     // 如果是 MVCC 模式，设置版本状态为不在进行中
+    //     if (prev_version.has_value()) {
+    //         prev_version_map[rid.slot_no].in_progress_ = false;
+    //     }
+    // }
     return true;  // 更新成功，返回 true
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
 std::optional<UndoLink> TransactionManager::GetUndoLink(Rid rid){
-    std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
-    auto it = version_info_.find(rid.page_no);
-    if (it == version_info_.end()) {
-        return std::nullopt;  // 如果没有找到对应的版本信息，则返回 nullopt
+    std::optional<VersionUndoLink> version_link = GetVersionLink(rid);
+    if (!version_link.has_value()) {
+        return std::nullopt;  // 如果没有找到对应的版本链接，则返回 nullopt
     }
-    auto &version_info = it->second;
-    lock.unlock();
-    std::shared_lock<std::shared_mutex> version_lock(version_info->mutex_);
-    auto prev_version_it = version_info->prev_version_.find(rid.slot_no);
-    if (prev_version_it == version_info->prev_version_.end()) {
-        return std::nullopt;  // 如果没有找到对应的前一个版本链接，则返回 nullopt
-    }
-    return prev_version_it->second.prev_;  // 返回前一个撤销链接
+    return version_link->prev_;  // 返回前一个版本链接的撤销日志
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
@@ -441,9 +411,7 @@ timestamp_t TransactionManager::GetWatermark(){
     std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
     timestamp_t min_ts = std::numeric_limits<timestamp_t>::max();
     for (const auto& [txn_id, txn] : txn_map) {
-        if (txn->get_state() == TransactionState::DEFAULT) {
-            min_ts = std::min(min_ts, txn->get_start_ts());
-        }
+        min_ts = std::min(min_ts, txn->get_read_ts());
     }
     return min_ts;
 }
@@ -473,73 +441,9 @@ void TransactionManager::GarbageCollection(){
         }
     }
     lock.unlock();
-    // 更新活跃事务水位线
-    // running_txns_.Update(GetWatermark());
-    // 更新最近提交事务的时间戳
-    // last_commit_ts_ = std::max(last_commit_ts_, GetWatermark());
-    // 清理过期的事务
-    // std::unique_lock<std::shared_mutex> txn_lock(txn_map_mutex_);
-    // for (auto txn_it = txn_map.begin(); txn_it != txn_map.end();) {
-    //     Transaction* txn = txn_it->second;
-    //     if (txn->get_state() == TransactionState::COMMITTED || txn->get_state() == TransactionState::ABORTED) {
-    //         // 如果事务已提交或回滚，则从全局事务表中移除
-    //         delete txn;  // 释放事务对象内存
-    //         txn_it = txn_map.erase(txn_it);
-    //     } else {
-    //         ++txn_it;  // 否则继续下一个事务
-    //     }
-    // }
-    // 清理过期的撤销日志
-    // for (auto txn_it = txn_map.begin(); txn_it != txn_map.end();) {
-    //     Transaction* txn = txn_it->second;
-    //     if (txn->GetUndoLogNum() > 0) {
-    //         // 如果事务有撤销日志，则清理过期的日志
-    //         txn->ClearExpiredUndoLogs(last_commit_ts_);
-    //     }
-    //     ++txn_it;  // 继续下一个事务
-    // }
-    // 清理过期的锁
-    // lock_manager_->GarbageCollection(last_commit_ts_);
-    // 清理过期的索引
-    // sm_manager_->get_ix_manager()->GarbageCollection(last_commit_ts_);
-    // 清理过期的文件句柄
-    // sm_manager_->GarbageCollection(last_commit_ts_);
-    // 清理过期的文件
-    // sm_manager_->fhs_.GarbageCollection(last_commit_ts_);
-    // 清理过期的索引句柄
-    // sm_manager_->ihs_.GarbageCollection(last_commit_ts_);
-    // 清理过期的表元数据
-    // sm_manager_->db_.tabs_.GarbageCollection(last_commit_ts_);
-    // 清理过期的数据库元数据
-    // sm_manager_->db_.GarbageCollection(last_commit_ts_);
-    // 清理过期的日志
-    // log_manager_->GarbageCollection(last_commit_ts_);
-    // 清理过期的缓冲池页面
-    // sm_manager_->get_bpm()->GarbageCollection(last_commit_ts_);
-    // 清理过期的上下文
-    // Context::GarbageCollection(last_commit_ts_);
-    // 清理过期的锁数据
-    // lock_manager_->GetLockDataManager()->GarbageCollection(last_commit_ts_);
-    // 清理过期的锁数据
-    // sm_manager_->get_rm_manager()->GarbageCollection(last_commit_ts_);
-    // 清理过期的索引数据
-    // sm_manager_->get_ix_manager()->GarbageCollection(last_commit_ts_);
-    // 清理过期的系统管理器
-    // sm_manager_->GarbageCollection(last_commit_ts_);
-    // 清理过期的磁盘管理器
-    // sm_manager_->get_disk_manager()->GarbageCollection(last_commit_ts_);
-    // 清理过期的缓冲池管理器
-    // sm_manager_->get_buffer_pool_manager()->GarbageCollection(last_commit_ts_);
-    // 清理过期的日志管理器
-    // log_manager_->GarbageCollection(last_commit_ts_);
-    // 清理过期的执行上下文
-    // Context::GarbageCollection(last_commit_ts_);
-    // 清理过期的锁管理器
-    // lock_manager_->GarbageCollection(last_commit_ts_);
-    // 清理过期的事务管理器
+
     txn_map.clear();  // 清空全局事务表
     next_txn_id_ = 0;  // 重置事务ID计数器
     next_timestamp_ = 0;  // 重置时间戳计数器
     last_commit_ts_ = 0;  // 重置最近提交时间戳 
 }
-

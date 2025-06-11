@@ -205,7 +205,7 @@ class RmFileHandle {
      */
     RmPageHandle fetch_page_handle(int page_no) const;
 
-   private:
+    private:
     /**
      * @brief 创建页面句柄的内部方法
      * @return 新创建的页面句柄

@@ -9,8 +9,6 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "rm_file_handle.h"
-#include "transaction/transaction.h"
-#include "transaction/transaction_manager.h"
 
 /**
  * @description: 获取当前表中指定记录号的记录

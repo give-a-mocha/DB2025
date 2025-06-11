@@ -44,7 +44,8 @@ struct UndoLog {
     bool is_deleted_;
     /* 此撤销日志修改的字段 */
     std::vector<bool> modified_fields_;
-    /* 修改后的字段 */
+    //? 原注释/* 修改后的字段 */
+    /* 修改前的字段 */
     std::vector<Value> tuple_;
 
     RmRecord *tuple_test_;
@@ -55,7 +56,6 @@ struct UndoLog {
 };
 
 class Transaction {
-friend class TransactionManager; // 允许 TransactionManager 访问私有成员
 private:
     // 用于标识当前事务为显式事务还是单条SQL语句的隐式事务
     bool txn_mode_;
@@ -154,8 +154,15 @@ public:
 
     inline timestamp_t get_read_ts() const { return read_ts_; }
 
+    inline void set_read_ts(timestamp_t read_ts){
+        read_ts_.store(read_ts);
+    }
+
     inline timestamp_t get_commit_ts() const { return commit_ts_; }
 
+    inline void set_commit_ts(timestamp_t commit_ts) {
+        commit_ts_.store(commit_ts);
+    }
     /** 修改现有的撤销日志 */
     inline auto ModifyUndoLog(int log_idx, UndoLog new_log) {
         std::scoped_lock<std::mutex> lck(latch_);

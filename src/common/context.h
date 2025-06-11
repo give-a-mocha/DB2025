@@ -32,13 +32,13 @@ class Context {
      * @param data_send 数据发送缓冲区指针
      * @param offset 数据偏移量指针
      */
-    Context(LockManager *lock_mgr, LogManager *log_mgr,TransactionManager *txn_mgr, Transaction *txn, char *data_send = nullptr,
+    Context(LockManager *lock_mgr, LogManager *log_mgr, Transaction *txn, char *data_send = nullptr,
             int *offset = &const_offset)
-        : lock_mgr_(lock_mgr), log_mgr_(log_mgr), txn_mgr_(txn_mgr), txn_(txn), data_send_(data_send), offset_(offset) {
+        : lock_mgr_(lock_mgr), log_mgr_(log_mgr), txn_(txn), data_send_(data_send), offset_(offset) {
         ellipsis_ = false;
     }
 
-    TransactionManager *txn_mgr_;  // 事务管理器指针
+    // TransactionManager *txn_mgr_;  // 事务管理器指针
     LockManager *lock_mgr_;  // 锁管理器指针，用于并发控制
     LogManager *log_mgr_;    // 日志管理器指针，用于事务恢复
     Transaction *txn_;       // 当前事务指针
