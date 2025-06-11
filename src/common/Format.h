@@ -14,16 +14,16 @@
 
 #include <algorithm>
 #include <cassert>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <iostream>
 
 namespace util {
 
 template <typename T>
 concept _can_print_ = requires(T &&a) {
-    { std::cout << std::forward<T>(a) };
+    { std::cout << a };
 };
 
 template <_can_print_... Args>

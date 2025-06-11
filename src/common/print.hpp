@@ -9,7 +9,7 @@
 
 template <typename T>
 concept _can_print_ = requires(T &&a) {
-    { std::cout << std::forward<T>(a) };
+    { std::cout << a };
 };
 
 template <_can_print_... Args>
