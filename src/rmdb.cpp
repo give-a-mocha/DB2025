@@ -177,10 +177,6 @@ void *client_handler(void *sock_fd) {
                     std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context.get(), txn_manager.get());
                     portal->run(portalStmt, ql_manager.get(), &txn_id, context.get());
                     portal->drop();
-                    if(context->txn_->get_txn_mode() == false) {
-                        // 如果是隐式的事务，当条语句执行完后自动提交事务
-                        txn_manager->commit(context->txn_, context->log_mgr_);
-                    }
                 } catch (TransactionAbortException &e) {
                     // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
                     std::string str = "abort\n";
