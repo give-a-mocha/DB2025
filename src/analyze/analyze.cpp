@@ -119,6 +119,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // assert(x->group.empty());
         // 处理group by子句
         for (auto &sv_group_col : x->group) {
+            if (sv_group_col->cols->aggregate_type != ast::SvAggregateType::NONE) {
+                throw InternalError("GROUP BY column cannot have aggregate function");
+            }
             TabCol group_col = {"", sv_group_col->cols->col_name, sv_group_col->cols->tab_name};
             convert_tabname(all_cols, group_col, tab_refs);  // 处理表名和别名
             query->group_cols.push_back(group_col);          // 添加到查询的分组列列表
