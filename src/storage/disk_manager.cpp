@@ -14,13 +14,12 @@ See the Mulan PSL v2 for more details. */
 #include <dirent.h>    // for DIR, opendir, readdir, closedir
 #include <errno.h>     // for errno
 #include <fcntl.h>     // for open flags
-#include <string.h>    // for memset
 #include <sys/stat.h>  // for stat
 #include <unistd.h>    // for lseek
 
 #include "defs.h"
 
-DiskManager::DiskManager() { std::memset(fd2pageno_, 0, MAX_FD * (sizeof(std::atomic<page_id_t>) / sizeof(char))); }
+DiskManager::DiskManager() {}
 /**
  * @brief 将数据写入文件的指定页面
  *

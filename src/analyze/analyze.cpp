@@ -40,7 +40,7 @@ bool is_column_in_group(const TabCol &col, const std::vector<TabCol> &group_cols
  * @param col_type 列的数据类型(INT, FLOAT, STRING)
  * @throws InternalError 当聚合函数类型与列类型不兼容时抛出异常
  */
-void validate_aggregate_type(AggregateType agg_type, ColType col_type) {
+[[maybe_unused]] void validate_aggregate_type(AggregateType agg_type, ColType col_type) {
     if (agg_type == AggregateType::NONE) return;
 
     switch (agg_type) {

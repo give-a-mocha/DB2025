@@ -400,7 +400,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 3. 获取索引列的元数据
     std::vector<ColMeta> cols(col_names.size());
     int tot_col_len = 0;  // 索引键的总长度
-    for (int i = 0; i < col_names.size(); ++i) {
+    for (size_t i = 0; i < col_names.size(); ++i) {
         auto col_name = col_names[i];
         cols[i] = (*tab.get_col(col_name));  // 获取列的元数据
         tot_col_len += cols[i].len;          // 累加列长度
