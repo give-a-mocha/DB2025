@@ -17,16 +17,10 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <iostream>
 
 namespace util {
 
-template <typename T>
-concept _can_print_ = requires(T &&a) {
-    { std::cout << a };
-};
-
-template <_can_print_... Args>
+template <typename... Args>
 std::string format(std::string fmt, Args &&...args);
 
 namespace detail {
@@ -35,7 +29,7 @@ inline void format_helper(std::stringstream &ss, std::string &fmt) {
     fmt.clear();
 }
 
-template <_can_print_ T, _can_print_... Args>
+template <typename T, typename... Args>
 void format_helper(std::stringstream &ss, std::string &fmt, T &&val, Args &&...args) {
     size_t start = fmt.find('{');
     size_t end = fmt.find('}', start);
@@ -53,7 +47,7 @@ void format_helper(std::stringstream &ss, std::string &fmt, T &&val, Args &&...a
 }
 }  // namespace detail
 
-template <_can_print_... Args>
+template <typename... Args>
 std::string format(std::string fmt, Args &&...args) {
     if (sizeof...(args) == 0) {
         return fmt;
