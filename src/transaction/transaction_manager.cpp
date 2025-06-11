@@ -399,7 +399,7 @@ UndoLog TransactionManager::GetUndoLog(UndoLink link){
 
     // 检查撤销日志索引是否有效
     if (link.prev_log_idx_ < 0 || link.prev_log_idx_ >= txn->GetUndoLogNum()) {
-        throw std::out_of_range("Invalid undo log index");
+        throw RangeError("Invalid undo log index: " + std::to_string(link.prev_log_idx_));
     }
 
     // 返回对应的撤销日志

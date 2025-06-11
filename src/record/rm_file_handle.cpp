@@ -28,9 +28,9 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
     // Todo:
     // !1. 获取指定记录所在的page handle
     // !2. 初始化一个指向RmRecord的指针（赋值其内部的data和size）
-    if (context != nullptr) {
-        context->lock_mgr_->lock_shared_on_record(context->txn_, rid, fd_);
-    }
+    // if (context != nullptr) {
+    //     context->lock_mgr_->lock_shared_on_record(context->txn_, rid, fd_);
+    // }
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
 
@@ -68,9 +68,9 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     // 5. 如果页面已满，更新文件头的空闲页面链表
     // 6. 返回新记录的RID标识符
 
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
-    }
+    // if (context != nullptr) {
+    //     context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
+    // }
 
     // 获取空闲页面
     RmPageHandle page_handle = create_page_handle();
@@ -147,9 +147,9 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     // 4. 如果页面从满变为非满，需要将其加入空闲页面链表
     // 5. 更新文件头的记录总数
     
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
-    }
+    // if (context != nullptr) {
+    //     context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
+    // }
 
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
@@ -195,9 +195,9 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
     // 3. 用新数据覆盖原记录
     // 4. 标记页面为脏页以便后续写回磁盘
 
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
-    }
+    // if (context != nullptr) {
+    //     context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
+    // }
 
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);

@@ -285,7 +285,6 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
     // 3. 把rid存入result参数中
     // 提示：使用完buffer_pool提供的page之后，记得unpin page；记得处理并发的上锁
 
-    std::lock_guard<std::mutex> lock(root_latch_);
     auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::FIND, transaction);
     Rid *rid;
     if (leaf_node->leaf_lookup(key, &rid)) {
