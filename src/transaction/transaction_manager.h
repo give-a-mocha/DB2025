@@ -23,13 +23,16 @@ See the Mulan PSL v2 for more details. */
 #include "transaction.h"
 #include "watermark.h"
 
+/* 系统采用的并发控制算法，当前题目中要求两阶段封锁并发控制算法 */
 enum class ConcurrencyMode {
     TWO_PHASE_LOCKING = 0,  // 两阶段封锁协议
     BASIC_TO,               // 基本时间戳排序
     MVCC                    // 多版本并发控制
 };
 
+/// 版本链中的第一个撤销链接，将表堆元组链接到撤销日志
 struct VersionUndoLink {
+    /** 版本链中的下一个版本。 */
     UndoLink prev_;  // 指向记录前一个版本的撤销日志链接
                      // 用于构建版本链，支持MVCC和事务回滚
 
@@ -58,7 +61,7 @@ struct VersionUndoLink {
 
 class TransactionManager {
 public:
-    // 全局事务表，维护所有活跃事务
+    // 全局事务表，存放事务ID与事务对象的映射关系
     static std::unordered_map<txn_id_t, Transaction *> txn_map;
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
@@ -81,29 +84,26 @@ public:
     /** 存储表堆中每个元组的先前版本。 */
     std::unordered_map<page_id_t, std::shared_ptr<PageVersionInfo>> version_info_;
 private:
-    // 当前使用的并发控制模式，决定使用哪种并发控制策略
+    // 事务使用的并发控制算法，目前只需要考虑2PL
     ConcurrencyMode concurrency_mode_;
 
-    // 事务ID生成器，保证每个事务有唯一的ID 使用atomic保证多线程下的原子递增
+    // 用于分发事务ID
     std::atomic<txn_id_t> next_txn_id_{0};
 
-    // 事务时间戳生成器，用于MVCC和时间戳排序 使用atomic保证多线程下的原子递增
+    // 用于分发事务时间戳
     std::atomic<timestamp_t> next_timestamp_{0};
 
-    // 保护事务相关数据结构的互斥锁 用于保护事务表等共享数据结构的并发访问
+    // 用于txn_map的并发
     std::mutex latch_;
 
     SmManager *sm_manager_;
 
     LockManager *lock_manager_;
 
-    // MVCC相关成员
-    // 最近提交事务的时间戳，用于实现快照隔离
+    // 最后提交的时间戳,仅用于MVCC
     std::atomic<timestamp_t> last_commit_ts_{0};
 
-    // 活跃事务的时间水位线
-    // 用于垃圾回收：低于水位线的版本可以安全删除
-    // 因为它们不会再被任何活跃事务访问
+    /// 存储所有正在运行事务的读取时间戳，以便于垃圾回收，仅用于MVCC
     Watermark running_txns_{0};
 
 public:
@@ -124,6 +124,11 @@ public:
 
     LockManager *get_lock_manager() { return lock_manager_; }
 
+    /**
+     * @description: 获取事务ID为txn_id的事务对象
+     * @return {Transaction*} 事务对象的指针
+     * @param {txn_id_t} txn_id 事务ID
+     */  
     Transaction *get_transaction(txn_id_t txn_id) {
         if (txn_id == INVALID_TXN_ID) return nullptr;
         std::unique_lock<std::mutex> lock(latch_);
@@ -139,65 +144,37 @@ public:
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
 
     /**
-     * @brief 更新元组的撤销链接，将其连接到其第一个撤销日志。
-     * 可选地在更新前执行检查。
-     * @param rid 元组的记录ID。
-     * @param prev_link 要设置的前一个撤销链接。
-     * @param check 在更新前验证当前链接的可选函数。
-     * @return 如果更新成功则返回 true，否则返回 false。
-     */
+    * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+    * 在更新之前，将调用 `check` 函数以确保有效性。
+    */
     bool UpdateUndoLink(Rid rid, std::optional<UndoLink> prev_link,
                         std::function<bool(std::optional<UndoLink>)> &&check = nullptr);
 
     /**
-     * @brief 更新元组的版本链接，用于 MVCC。
-     * 可选地在更新前执行检查。
-     * @param rid 元组的记录ID。
-     * @param prev_version 要设置的前一个版本链接。
-     * @param check 在更新前验证当前版本链接的可选函数。
-     * @return 如果更新成功则返回 true，否则返回 false。
+     * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+     * 在更新之前，将调用 `check` 函数以确保有效性。
      */
     bool UpdateVersionLink(Rid rid, std::optional<VersionUndoLink> prev_version,
                            std::function<bool(std::optional<VersionUndoLink>)> &&check = nullptr);
 
-    /**
-     * @brief 获取与元组关联的第一个撤销链接。
-     * @param rid 元组的记录ID。
-     * @return 一个可选的 UndoLink。
-     */
+    /** @brief 获取表堆元组的第一个撤销日志。 */
     std::optional<UndoLink> GetUndoLink(Rid rid);
 
-    /**
-     * @brief 获取与元组关联的第一个版本链接 (用于 MVCC)。
-     * @param rid 元组的记录ID。
-     * @return 一个可选的 VersionUndoLink。
-     */
+    /** @brief 获取表堆元组的第一个撤销日志。*/
     std::optional<VersionUndoLink> GetVersionLink(Rid rid);
 
-    /**
-     * @brief 从事务的撤销缓冲区中检索撤销日志。
-     * @param link 指向所需日志的 UndoLink。
-     * @return 一个可选的 UndoLog。如果事务不存在，则返回 nullopt。
-     * @throws std::out_of_range 如果链接的索引超出范围。
-     */
+    /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
+     * 如果索引超出范围仍然会抛出异常。 */
     std::optional<UndoLog> GetUndoLogOptional(UndoLink link);
 
-    /**
-     * @brief 从事务的撤销缓冲区中检索撤销日志。
-     * 这是访问撤销日志的首选方法，除非访问当前事务的缓冲区。
-     * @param link 指向所需日志的 UndoLink。
-     * @return UndoLog。
-     * @throws TransactionAbortException 如果事务不存在或发生其他错误。
-     */
+    /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
+     * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
     UndoLog GetUndoLog(UndoLink link);
 
-    /**
-     * @brief 获取所有正在运行的事务中的最低读取时间戳 (水位线)。
-     * @return 当前水位线时间戳。
-     */
+    /** @brief 获取系统中的最低读时间戳。 */
     timestamp_t GetWatermark();
 
-    /** @brief 在 MVCC 中为旧版本执行垃圾回收。仅应在没有活动事务时调用。 */
+    /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
     void GarbageCollection();
 
 

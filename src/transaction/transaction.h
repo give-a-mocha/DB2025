@@ -22,10 +22,11 @@ See the Mulan PSL v2 for more details. */
 #include "record/rm_defs.h"
 #include "transaction/txn_defs.h"
 
+/** 表示此tuple的前一个版本的链接 */
 struct UndoLink {
-    //创建前一个版本的事务ID。
+    /* 之前的版本可以在其中的事务中找到 */
     txn_id_t prev_txn_{INVALID_TXN_ID};
-    // 前一个版本在对应事务撤销日志中的索引。
+    /* 在 `prev_txn_` 中前一个版本的日志索引 */
     int prev_log_idx_{0};
 
     friend auto operator==(const UndoLink &a, const UndoLink &b) {
@@ -39,64 +40,59 @@ struct UndoLink {
 
 
 struct UndoLog {
-    // 标记此日志条目是否代表一个删除操作。
+    /* 此日志是否为删除标记 */
     bool is_deleted_;
-    // 一个布尔向量，标记哪些字段被修改了 (true 表示对应索引的字段被修改)
+    /* 此撤销日志修改的字段 */
     std::vector<bool> modified_fields_;
-    // 存储被修改字段在修改前的值
+    /* 修改后的字段 */
     std::vector<Value> tuple_;
-    // 指向实际元组记录的指针
+
     RmRecord *tuple_test_;
-    // 此撤销日志条目的时间戳，用于可见性检查
+    /* 此撤销日志的时间戳 */
     timestamp_t ts_{INVALID_TS};
-    // 指向该元组下一个更旧版本的链接，构成版本链。
+    /* 撤销日志的前一个版本 */
     UndoLink prev_version_{};
 };
 
-/**
- * @brief 代表一个数据库事务。
- * @details 管理事务的状态、隔离级别、写集合、锁集合以及撤销日志等。
- */
 class Transaction {
 friend class TransactionManager; // 允许 TransactionManager 访问私有成员
 private:
-    // 事务模式标志：true 表示显式事务，false 表示隐式事务（单条 SQL 语句）
+    // 用于标识当前事务为显式事务还是单条SQL语句的隐式事务
     bool txn_mode_;
-    // 事务当前状态（例如：DEFAULT, RUNNING, COMMITTED, ABORTED）
+    // 事务状态
     TransactionState state_;
-    // 事务的隔离级别（例如：READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE）
+    // 事务的隔离级别，默认隔离级别为可串行化
     IsolationLevel isolation_level_;
-    // 执行该事务的线程 ID
+    // 当前事务对应的线程id
     std::thread::id thread_id_;
-    // 前一个日志序列号 (LSN)，用于 WAL（预写日志）和故障恢复
+    // 当前事务执行的最后一条操作对应的lsn，用于系统故障恢复
     lsn_t prev_lsn_;
-    // 事务的唯一标识符
+    // 事务的ID，唯一标识符
     txn_id_t txn_id_;
-    // 事务的开始时间戳，用于并发控制
+    // 事务的开始时间戳
     timestamp_t start_ts_;
 
-    // 事务的写集合，记录所有写操作 (使用智能指针管理内存)
+    // 事务包含的所有写操作
     std::shared_ptr<std::deque<std::unique_ptr<WriteRecord>>> write_set_;
-    // 事务持有的所有锁，用于并发控制
+    // 事务申请的所有锁
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set_;
-    // 事务中已加锁的索引页面集合
+    // 维护事务执行过程中加锁的索引页面
     std::shared_ptr<std::deque<Page *>> index_latch_page_set_;
-    // 事务中已删除的索引页面集合
+    // 维护事务执行过程中删除的索引页面
     std::shared_ptr<std::deque<Page *>> index_deleted_page_set_;
 
-    // 读时间戳，原子变量确保线程安全
+
     std::atomic<timestamp_t> read_ts_{0};
-    // 提交时间戳，事务提交时分配，用于确定对其他事务的可见性。原子变量确保线程安全
+    /** 提交时间戳 */
     std::atomic<timestamp_t> commit_ts_{INVALID_TS};
 
     /**
-     * @brief 存储事务的所有撤销日志。
-     * @details 其他事务/表通过 (txn_id, index) 对引用这些日志，
-     * 因此只能追加或修改，不能删除其中的元素。
+     * @brief 存储撤销日志。
+     * 其他撤销日志/表堆将存储 (txn_id, index) 对，因此只能向此vector中追加内容或就地更新内容，而不能删除任何内容。
      */
     std::vector<UndoLog> undo_logs_;
 
-    /** @brief 保护撤销日志向量访问的互斥锁，确保多线程环境下的安全访问。 */
+    /** 用于访问事务级撤销日志的锁。 */
     std::mutex latch_;
 public:
 
@@ -116,9 +112,7 @@ public:
         thread_id_ = std::this_thread::get_id();
     }
 
-    /** @brief 默认析构函数。 */
     ~Transaction() = default;
-
 
     inline txn_id_t get_transaction_id() { return txn_id_; }
 
@@ -162,11 +156,13 @@ public:
 
     inline timestamp_t get_commit_ts() const { return commit_ts_; }
 
+    /** 修改现有的撤销日志 */
     inline auto ModifyUndoLog(int log_idx, UndoLog new_log) {
         std::scoped_lock<std::mutex> lck(latch_);
         undo_logs_[log_idx] = std::move(new_log);
     }
 
+    /** @return 此事务中撤销日志的索引 */
     inline auto AppendUndoLog(UndoLog log) -> UndoLink {
         std::scoped_lock<std::mutex> lck(latch_);
         undo_logs_.emplace_back(std::move(log));
@@ -179,6 +175,7 @@ public:
         return undo_logs_[log_id];
     }
 
+    /** @return 撤销日志的数量 */
     inline auto GetUndoLogNum() -> size_t {
         std::scoped_lock<std::mutex> lck(latch_);
         return undo_logs_.size();

@@ -16,22 +16,27 @@ See the Mulan PSL v2 for more details. */
 #include "transaction/transaction.h"
 
 
+/**
+ * @brief 追踪所有的读时间戳
+ *
+ */
 class Watermark {
 public:
-	mutable timestamp_t commit_ts_;             // 当前的提交时间戳
-	timestamp_t watermark_;                     // 当前的水位线值
-	std::map<timestamp_t, int> current_reads_;  // 当前活跃的读操作时间戳计数
-
+	mutable timestamp_t commit_ts_;
+	
+	timestamp_t watermark_;
+	
+	std::map<timestamp_t, int> current_reads_;
+	
 	explicit Watermark(timestamp_t commit_ts) : commit_ts_(commit_ts), watermark_(commit_ts) {}
 
 	void AddTxn(timestamp_t read_ts);
 
 	void RemoveTxn(timestamp_t read_ts);
 
+	/** 调用者应在从水印中移除事务之前更新提交时间戳，以便我们能够正确跟踪水印。 */
 	void UpdateCommitTs(timestamp_t commit_ts);
 
-	timestamp_t GetWatermark(){
-		return watermark_;
-	}
+	timestamp_t GetWatermark();
 
 };

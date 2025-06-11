@@ -49,11 +49,10 @@ TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_
 }
 
 /**
- * @brief 开始一个新事务
- *
- * @param txn 传入的事务指针，如果为 nullptr 则创建新事务
- * @param log_manager 日志管理器指针，用于记录事务日志
- * @return Transaction* 返回当前事务指针
+ * @description: 事务的开始方法
+ * @return {Transaction*} 开始事务的指针
+ * @param {Transaction*} txn 事务指针，空指针代表需要创建新事务，否则开始已有事务
+ * @param {LogManager*} log_manager 日志管理器指针
  */
 Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager) {
     // Todo:
@@ -61,6 +60,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     // 2. 如果为空指针，创建新事务
     // 3. 把开始事务加入到全局事务表中
     // 4. 返回当前事务指针
+    // 如果需要支持MVCC请在上述过程中添加代码
 
     if (txn == nullptr) {
         // 创建新事务，并分配递增的事务ID
@@ -86,18 +86,18 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
 }
 
 /**
- * @brief 提交事务
-
- * @param txn 要提交的事务指针
- * @param log_manager 日志管理器指针
+ * @description: 事务的提交方法
+ * @param {Transaction*} txn 需要提交的事务
+ * @param {LogManager*} log_manager 日志管理器指针
  */
 void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // Todo:
     // 1. 如果存在未提交的写操作，提交所有的写操作
     // 2. 释放所有锁
-    // 3. 释放事务相关资源
+    // 3. 释放事务相关资源，eg.锁集
     // 4. 把事务日志刷入磁盘中
     // 5. 更新事务状态
+    // 如果需要支持MVCC请在上述过程中添加代码
 
 
     // MVCC: 分配提交时间戳
@@ -135,10 +135,9 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 }
 
 /**
- * @brief 回滚事务
- *
- * @param context 执行上下文，包含当前事务信息
- * @param log_manager 日志管理器指针，用于记录回滚日志
+ * @description: 事务的终止（回滚）方法
+ * @param {Transaction *} txn 需要回滚的事务
+ * @param {LogManager} *log_manager 日志管理器指针
  */
 void TransactionManager::abort(Context* context, LogManager* log_manager) {
     // Todo:
@@ -147,6 +146,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     // 3. 清空事务相关资源，eg.锁集
     // 4. 把事务日志刷入磁盘中
     // 5. 更新事务状态
+    // 如果需要支持MVCC请在上述过程中添加代码
 
 
     Transaction* txn = context->txn_;
@@ -281,13 +281,9 @@ void TransactionManager::insert_index_record(TabMeta tab_, RmRecord* rec, Rid ri
 
 
 /**
- * @brief 更新元组的撤销链接，将其连接到其第一个撤销日志。
- * 可选地在更新前执行检查。
- * @param rid 元组的记录ID。
- * @param prev_link 要设置的前一个撤销链接。
- * @param check 在更新前验证当前链接的可选函数。
- * @return 如果更新成功则返回 true，否则返回 false。
- */
+* @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+* 在更新之前，将调用 `check` 函数以确保有效性。
+*/
 bool TransactionManager::UpdateUndoLink(
     Rid rid,
     std::optional<UndoLink> prev_link,
@@ -325,12 +321,8 @@ bool TransactionManager::UpdateUndoLink(
 }
 
 /**
- * @brief 更新元组的版本链接，用于 MVCC。
- * 可选地在更新前执行检查。
- * @param rid 元组的记录ID。
- * @param prev_version 要设置的前一个版本链接。
- * @param check 在更新前验证当前版本链接的可选函数。
- * @return 如果更新成功则返回 true，否则返回 false。
+ * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+ * 在更新之前，将调用 `check` 函数以确保有效性。
  */
 bool TransactionManager::UpdateVersionLink(
     Rid rid,
@@ -374,11 +366,7 @@ bool TransactionManager::UpdateVersionLink(
     return true;  // 更新成功，返回 true
 }
 
-/**
- * @brief 获取与元组关联的第一个撤销链接。
- * @param rid 元组的记录ID。
- * @return 一个可选的 UndoLink。
- */
+/** @brief 获取表堆元组的第一个撤销日志。 */
 std::optional<UndoLink> TransactionManager::GetUndoLink(Rid rid){
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     auto it = version_info_.find(rid.page_no);
@@ -395,11 +383,7 @@ std::optional<UndoLink> TransactionManager::GetUndoLink(Rid rid){
     return prev_version_it->second.prev_;  // 返回前一个撤销链接
 }
 
-/**
- * @brief 获取与元组关联的第一个版本链接 (用于 MVCC)。
- * @param rid 元组的记录ID。
- * @return 一个可选的 VersionUndoLink。
- */
+/** @brief 获取表堆元组的第一个撤销日志。 */
 std::optional<VersionUndoLink> TransactionManager::GetVersionLink(Rid rid){
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     auto it = version_info_.find(rid.page_no);
@@ -416,12 +400,8 @@ std::optional<VersionUndoLink> TransactionManager::GetVersionLink(Rid rid){
     return prev_version_it->second;  // 返回前一个版本链接
 }
 
-/**
- * @brief 从事务的撤销缓冲区中检索撤销日志。
- * @param link 指向所需日志的 UndoLink。
- * @return 一个可选的 UndoLog。如果事务不存在，则返回 nullopt。
- * @throws std::out_of_range 如果链接的索引超出范围。
- */
+/** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
+ * 如果索引超出范围仍然会抛出异常。 */
 std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link){
     // 检查事务是否存在
     auto txn = get_transaction(link.prev_txn_);
@@ -438,13 +418,8 @@ std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link){
     return txn->GetUndoLog(link.prev_log_idx_);
 }
 
-/**
- * @brief 从事务的撤销缓冲区中检索撤销日志。
- * 这是访问撤销日志的首选方法，除非访问当前事务的缓冲区。
- * @param link 指向所需日志的 UndoLink。
- * @return UndoLog。
- * @throws TransactionAbortException 如果事务不存在或发生其他错误。
- */
+/** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
+ * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
 UndoLog TransactionManager::GetUndoLog(UndoLink link){
     // 检查事务是否存在
     auto txn = get_transaction(link.prev_txn_);
@@ -461,10 +436,7 @@ UndoLog TransactionManager::GetUndoLog(UndoLink link){
     return txn->GetUndoLog(link.prev_log_idx_);
 }
 
-/**
- * @brief 获取所有正在运行的事务中的最低读取时间戳 (水位线)。
- * @return 当前水位线时间戳。
- */
+/** @brief 获取系统中的最低读时间戳。 */
 timestamp_t TransactionManager::GetWatermark(){
     std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
     timestamp_t min_ts = std::numeric_limits<timestamp_t>::max();
@@ -475,8 +447,7 @@ timestamp_t TransactionManager::GetWatermark(){
     }
     return min_ts;
 }
-
-/** @brief 在 MVCC 中为旧版本执行垃圾回收。仅应在没有活动事务时调用。 */
+/** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
 void TransactionManager::GarbageCollection(){
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     for (auto it = version_info_.begin(); it != version_info_.end();) {
@@ -571,3 +542,4 @@ void TransactionManager::GarbageCollection(){
     next_timestamp_ = 0;  // 重置时间戳计数器
     last_commit_ts_ = 0;  // 重置最近提交时间戳 
 }
+
