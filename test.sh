@@ -55,15 +55,24 @@ echo -e "${GREEN}cmake配置成功${NC}"
 
 # 编译rmdb
 echo -e "${YELLOW}编译rmdb...${NC}"
-make rmdb -j8 || error_exit "rmdb编译失败"
+make rmdb -j16 || error_exit "rmdb编译失败"
 echo -e "${GREEN}rmdb编译成功${NC}"
 
 # 编译unit_test
 echo -e "${YELLOW}编译unit_test...${NC}"
-make unit_test -j8 || error_exit "unit_test编译失败"
+make unit_test -j16 || error_exit "unit_test编译失败"
 echo -e "${GREEN}unit_test编译成功${NC}"
+
+echo -e "$${YELLOW}编译test_parser...${NC}"
+make test_parser -j16 || error_exit "test_parser编译失败"
+echo -e "${GREEN}test_parser编译成功${NC}"
 
 # 运行测试
 echo -e "${YELLOW}运行unit_test...${NC}"
 ./bin/unit_test || error_exit "unit_test执行失败"
 echo -e "${GREEN}所有测试完成${NC}"
+
+# 运行test_parser
+echo -e "${YELLOW}运行test_parser...${NC}"
+./bin/test_parser || error_exit "test_parser执行失败"
+echo -e "${GREEN}test_parser执行成功${NC}"

@@ -630,6 +630,11 @@ joinExpr:
     {
         $$ = std::make_shared<JoinExpr>($2, $4, $1);
     }
+    |
+        joinType tableRef
+    {
+        $$ = std::make_shared<JoinExpr>($2, std::vector<std::shared_ptr<BinaryExpr>>{}, $1); // 没有ON条件
+    }
     ;
 
 /* JOIN类型 */
