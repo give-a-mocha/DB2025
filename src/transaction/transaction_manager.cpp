@@ -81,7 +81,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     // 创建BEGIN事务日志记录，记录事务开始的操作
     auto* log = new BeginLogRecord(txn->get_transaction_id());
     record_link_management(log, log_manager, txn);
-
+    running_txns_.AddTxn(start_ts); // 添加事务到水位线
     return txn;
 }
 
@@ -121,17 +121,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     record_link_management(log, log_manager, txn);
 
     txn->set_state(TransactionState::COMMITTED);
-
-    // 从全局事务表中移除
-    // {
-    //     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-    //     txn_map.erase(txn->get_transaction_id());
-    // }
-
-    // MVCC: 从水位线中移除事务
-    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-    //     running_txns_.RemoveTxn(txn->get_read_ts()); // 使用 RemoveTxn 和 read_ts (即 start_ts)
-    // }
+    running_txns_.RemoveTxn(txn->get_start_ts()); // 从水位线中移除事务
+    running_txns_.UpdateCommitTs(commit_ts); // 更新水位线的提交时间戳
 }
 
 /**
@@ -215,17 +206,6 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
 
 
     txn->set_state(TransactionState::ABORTED);
-
-    // 从全局事务表中移除
-    // {
-    //     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-    //     txn_map.erase(txn->get_transaction_id());
-    // }
-
-    // MVCC: 从水位线中移除事务
-    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-    //     running_txns_.RemoveTxn(txn->get_read_ts()); // 使用 RemoveTxn 和 read_ts (即 start_ts)
-    // }
 }
 
 /**
@@ -374,14 +354,19 @@ std::optional<VersionUndoLink> TransactionManager::GetVersionLink(Rid rid){
  * 如果索引超出范围仍然会抛出异常。 */
 std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link){
     // 检查事务是否存在
-    auto txn = get_transaction(link.prev_txn_);
-    if (txn == nullptr) {
+    if (link.prev_txn_ == INVALID_TXN_ID) return std::nullopt;
+    std::unique_lock<std::mutex> lock(latch_);
+    auto it = TransactionManager::txn_map.find(link.prev_txn_);
+    if (it == TransactionManager::txn_map.end()) {
+        lock.unlock();
         return std::nullopt;  // 如果事务不存在，则返回 nullopt
     }
+    auto txn = it->second;
+    lock.unlock();
 
     // 检查撤销日志索引是否有效
     if (link.prev_log_idx_ < 0 || link.prev_log_idx_ >= txn->GetUndoLogNum()) {
-        throw std::out_of_range("Invalid undo log index");
+        throw RangeError("Invalid undo log index: " + std::to_string(link.prev_log_idx_));
     }
 
     // 返回对应的撤销日志
@@ -392,10 +377,17 @@ std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link){
  * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
 UndoLog TransactionManager::GetUndoLog(UndoLink link){
     // 检查事务是否存在
-    auto txn = get_transaction(link.prev_txn_);
-    if (txn == nullptr) {
-        throw TransactionAbortException(link.prev_txn_, AbortReason::LOCK_ON_SHIRINKING);
+    if (link.prev_txn_ == INVALID_TXN_ID){
+        throw RMDBError("Invalid transaction ID: " + std::to_string(link.prev_txn_));
     }
+    std::unique_lock<std::mutex> lock(latch_);
+    auto it = TransactionManager::txn_map.find(link.prev_txn_);
+    if (it == TransactionManager::txn_map.end()) {
+        lock.unlock();
+        throw RMDBError("Transaction not found: " + std::to_string(link.prev_txn_));
+    }
+    auto txn = it->second;
+    lock.unlock();
 
     // 检查撤销日志索引是否有效
     if (link.prev_log_idx_ < 0 || link.prev_log_idx_ >= txn->GetUndoLogNum()) {
@@ -408,12 +400,7 @@ UndoLog TransactionManager::GetUndoLog(UndoLink link){
 
 /** @brief 获取系统中的最低读时间戳。 */
 timestamp_t TransactionManager::GetWatermark(){
-    std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
-    timestamp_t min_ts = std::numeric_limits<timestamp_t>::max();
-    for (const auto& [txn_id, txn] : txn_map) {
-        min_ts = std::min(min_ts, txn->get_read_ts());
-    }
-    return min_ts;
+    return running_txns_.GetWatermark();
 }
 /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
 void TransactionManager::GarbageCollection(){
