@@ -75,7 +75,7 @@ using namespace ast;
 
 // WHERE相关
 %type <sv_cond> condition                   // 条件表达式
-%type <sv_conds> whereClause optWhereClause // WHERE子句
+%type <sv_conds> whereClause optWhereClause opt_on_clause// WHERE子句
 
 // ORDER BY相关
 %type <sv_orderby> order_clause 
@@ -630,16 +630,22 @@ joinExprs:
     }
     ;
 
+opt_on_clause:
+        ON whereClause                      // 有ON条件
+    {
+        $$ = $2;                            // 返回WHERE子句内容
+    }
+    |   /* epsilon */                       // 没有ON条件
+    {
+        $$ = std::vector<std::shared_ptr<BinaryExpr>>{};
+    }
+    ;
+
 /* JOIN表达式 */
 joinExpr:
-        joinType tableRef ON whereClause   // JOIN类型 表 ON 条件
+        joinType tableRef opt_on_clause   // JOIN类型 表 ON 条件
     {
-        $$ = std::make_shared<JoinExpr>($2, $4, $1);
-    }
-    |
-        joinType tableRef
-    {
-        $$ = std::make_shared<JoinExpr>($2, std::vector<std::shared_ptr<BinaryExpr>>{}, $1); // 没有ON条件
+        $$ = std::make_shared<JoinExpr>($2, $3, $1);
     }
     ;
 
