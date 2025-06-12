@@ -79,7 +79,7 @@ using namespace ast;
 
 // ORDER BY相关
 %type <sv_orderby> order_clause 
-%type <sv_orderbys> opt_order_clause  // ORDER BY子句
+%type <sv_orderbys> order_clauses opt_order_clause  // ORDER BY子句
 %type <sv_orderby_dir> opt_asc_desc               // 排序方向
 
 // JOIN相关
@@ -521,13 +521,9 @@ tableList:
 
 /* 可选的ORDER BY子句 */
 opt_order_clause:
-    ORDER BY order_clause                   // 有ORDER BY子句
+    ORDER BY order_clauses                   // 有ORDER BY子句
     { 
-        $$ = std::vector<std::shared_ptr<OrderBy>>{$3};
-    }
-    |   opt_order_clause ',' order_clause
-    { 
-        $1.push_back($3);
+        $$ = $3;
     }
     |   /* epsilon */                       // 没有ORDER BY子句
     { 
@@ -541,7 +537,17 @@ order_clause:
     { 
         $$ = std::make_shared<OrderBy>($1, $2);
     }
-    ;   
+    ;
+
+order_clauses:
+      order_clause                          // 单个ORDER BY子句
+    {
+        $$ = std::vector<std::shared_ptr<OrderBy>>{$1};
+    }
+    |   order_clauses ',' order_clause      // 多个ORDER BY子句
+    {
+        $$.push_back($3);                   // 向现有列表添加新ORDER BY子句
+    }
 
 /* 可选的排序方向 */
 opt_asc_desc:
