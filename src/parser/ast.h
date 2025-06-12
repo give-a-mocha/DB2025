@@ -30,7 +30,7 @@ enum SetKnobType { EnableNestLoop, EnableSortMerge };
 enum class SvAggregateType { NONE, COUNT, SUM, AVG, MAX, MIN };
 
 inline std::string SvAggregateType2Str(SvAggregateType agg_type) {
-    static const std::string agg_type_str[] = {"NONE", "COUNT", "SUM", "AVG", "MAX", "MIN"};
+    static const std::string agg_type_str[] = {"none", "count", "sum", "avg", "max", "min"};
     return agg_type_str[static_cast<int>(agg_type)];
 }
 
@@ -47,9 +47,10 @@ inline std::string generate_alias(std::string tab_name, std::string col_name, Sv
     if (!tab_name.empty()) {
         tab_name += ".";
         tab_name += col_name;
-        return util::format("{}({})", SvAggregateType2Str(agg_type), tab_name);
+        // 防止列名与聚合类型冲突
+        return util::format("{}_{}", SvAggregateType2Str(agg_type), tab_name);
     } else {
-        return util::format("{}({})", SvAggregateType2Str(agg_type), col_name);
+        return util::format("{}_{}", SvAggregateType2Str(agg_type), col_name);
     }
 }
 

@@ -451,16 +451,14 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
 
     // 检查是否所有选定列都没有聚合类型
     if (std::all_of(x->cols.begin(), x->cols.end(), [](const auto &sel) {
-            return static_cast<int>(sel->aggregate_type) == static_cast<int>(AggregateType::NONE);
+            return sel->aggregate_type == ast::SvAggregateType::NONE;
         })) {
         return plan;
     }
     std::vector<AggregateType> agg_types;
-    static AggregateType agg_type_map[] = {AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM,
-                                           AggregateType::AVG,  AggregateType::MAX,   AggregateType::MIN};
     agg_types.reserve(x->cols.size());
     for (const auto &agg : x->cols) {
-        agg_types.push_back(agg_type_map[static_cast<int>(agg->aggregate_type)]);
+        agg_types.push_back(SvAggregateType2AggregateType(agg->aggregate_type));
     }
     return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query->cols, agg_types);
 }

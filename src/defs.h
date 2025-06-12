@@ -42,6 +42,29 @@ enum class ColType { TYPE_INT, TYPE_FLOAT, TYPE_STRING };
 
 enum class AggregateType { NONE, COUNT, SUM, AVG, MAX, MIN };
 
+/**
+ * @brief 比较操作符枚举，定义WHERE条件和JOIN条件中可用的比较操作
+ */
+enum class CompOp {
+    OP_EQ,  // 等于
+    OP_NE,  // 不等于
+    OP_LT,  // 小于
+    OP_GT,  // 大于
+    OP_LE,  // 小于等于
+    OP_GE   // 大于等于
+};
+
+/**
+ * @brief JOIN连接类型枚举，支持不同的SQL JOIN操作
+ */
+enum class JoinType {
+    INNER_JOIN,  // 内连接
+    LEFT_JOIN,   // 左外连接
+    RIGHT_JOIN,  // 右外连接
+    FULL_JOIN,   // 全外连接
+    SEMI_JOIN    // 半连接
+};
+
 inline std::string coltype2str(ColType type) {
     static std::string strs[] = {"INT", "FLOAT", "STRING"};
     assert(type >= ColType::TYPE_INT && type <= ColType::TYPE_STRING);
