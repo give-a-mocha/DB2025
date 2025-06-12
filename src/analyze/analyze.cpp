@@ -56,12 +56,12 @@ bool is_column_in_group(const TabCol &col, const std::vector<TabCol> &group_cols
                                        : agg_type == AggregateType::AVG ? "AVG"
                                        : agg_type == AggregateType::MIN ? "MIN"
                                                                         : "MAX";
-                throw InternalError("Cannot apply " + agg_name + " to non-numeric column");
+                throw AggregateError("Cannot apply " + agg_name + " to non-numeric column");
             }
             break;
 
         default:
-            throw InternalError("Unknown aggregate type");
+            throw AggregateError("Unknown aggregate type");
     }
 }
 }  // namespace
@@ -120,7 +120,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 处理group by子句
         for (auto &sv_group_col : x->group) {
             if (sv_group_col->cols->aggregate_type != ast::SvAggregateType::NONE) {
-                throw InternalError("GROUP BY column cannot have aggregate function");
+                throw AggregateError("GROUP BY column cannot have aggregate function");
             }
             TabCol group_col = {"", sv_group_col->cols->col_name, sv_group_col->cols->tab_name};
             convert_tabname(all_cols, group_col, tab_refs);  // 处理表名和别名
@@ -185,6 +185,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 // 转换JOIN条件
                 std::vector<Condition> join_conds;
                 get_clause_alias(all_cols, join_expr->conds, join_conds, tab_refs);
+                check_where_with_aggregate(join_conds);  // 检查JOIN条件中是否有聚合列
 
                 if (isSemiJoin) {
                     // 条件右侧是连接表
@@ -552,7 +553,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             lhs_type = lhs_col->type;  // 获取左侧列的类型
             if (cond.lhs_col.agg_type != AggregateType::NONE && lhs_type == ColType::TYPE_STRING) {
                 // 如果是聚合函数且列类型为字符串，抛出不支持的聚合类型错误
-                throw InternalError("Unsupported aggregate type for string column: " + coltype2str(lhs_type));
+                throw AggregateError("Unsupported aggregate type for string column: " + coltype2str(lhs_type));
             }
             lhs_col_len = lhs_col->len;
         } else {
@@ -574,7 +575,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
                 rhs_type = rhs_col->type;
                 if (cond.rhs_col.agg_type != AggregateType::NONE && rhs_type == ColType::TYPE_STRING) {
                     // 如果是聚合函数且列类型为字符串，抛出不支持的聚合类型错误
-                    throw InternalError("Unsupported aggregate type for string column: " + coltype2str(rhs_type));
+                    throw AggregateError("Unsupported aggregate type for string column: " + coltype2str(rhs_type));
                 }
             } else {
                 rhs_type = ColType::TYPE_INT;
@@ -602,8 +603,8 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
  * @param conds 需要检查的条件表达式集合(将被修改以填充完整的列信息)
  * @param col_check 自定义的列检查器对象
  */
-void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds,
-                           ColCheck &col_check) {
+[[maybe_unused]] void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds,
+                                            ColCheck &col_check) {
     TRACE_FUNCTION
     // 遍历检查每个条件
     for (auto &cond : conds) {
@@ -740,14 +741,14 @@ JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
  * 该函数检查WHERE条件中的所有列，确保没有使用聚合函数。
  *
  * @param conds WHERE条件列表
- * @throws InternalError 如果在WHERE条件中发现聚合函数
+ * @throws AggregateError 如果在WHERE条件中发现聚合函数
  */
 void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
     TRACE_FUNCTION
     for (const auto &cond : conds) {
         if (cond.lhs_col.agg_type != AggregateType::NONE ||
             (!cond.is_rhs_val && cond.rhs_col.agg_type != AggregateType::NONE)) {
-            throw InternalError("WHERE clause cannot contain aggregate columns");
+            throw AggregateError("WHERE clause cannot contain aggregate columns");
         }
     }
 }
@@ -758,13 +759,13 @@ void Analyze::check_having_conds(const std::vector<Condition> &conds, const std:
         if (cond.lhs_col.agg_type == AggregateType::NONE) {
             bool found = is_column_in_group(cond.lhs_col, group_cols);
             if (!found) {
-                throw InternalError("having_cond: Non aggregate column not in group by");
+                throw AggregateError("having_cond: Non aggregate column not in group by");
             }
         }
         if (!cond.is_rhs_val && cond.rhs_col.agg_type == AggregateType::NONE) {
             bool found = is_column_in_group(cond.rhs_col, group_cols);
             if (!found) {
-                throw InternalError("having_cond: Non aggregate column not in group by");
+                throw AggregateError("having_cond: Non aggregate column not in group by");
             }
         }
     }
@@ -778,7 +779,7 @@ void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std:
         bool has_non_aggr = std::any_of(cols.begin(), cols.end(),
                                         [](const TabCol &col) { return col.agg_type == AggregateType::NONE; });
         if (has_aggr && has_non_aggr) {
-            throw InternalError("SELECT must not contain both aggregate and non-aggregate columns without GROUP BY");
+            throw AggregateError("SELECT must not contain both aggregate and non-aggregate columns without GROUP BY");
         }
     } else {
         for (auto &col : cols) {
@@ -787,7 +788,7 @@ void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std:
             }
             bool found = is_column_in_group(col, group_cols);
             if (!found) {
-                throw InternalError("SELECT column not in GROUP BY: " + col.col_name);
+                throw AggregateError("SELECT column not in GROUP BY: " + col.col_name);
             }
         }
     }
