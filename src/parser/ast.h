@@ -25,6 +25,8 @@ enum SvCompOp { SV_OP_EQ, SV_OP_NE, SV_OP_LT, SV_OP_GT, SV_OP_LE, SV_OP_GE };
 
 enum OrderByDir { OrderBy_DEFAULT, OrderBy_ASC, OrderBy_DESC };
 
+enum SvArithOp { SV_ARITH_PLUS, SV_ARITH_MINUS, SV_ARITH_MULTIPLY, SV_ARITH_DIVIDE };
+
 enum SetKnobType { EnableNestLoop, EnableSortMerge };
 
 enum class SvAggregateType { NONE, COUNT, SUM, AVG, MAX, MIN };
@@ -187,11 +189,21 @@ struct Col : public Expr {
     }
 };
 
+// ArithExpr class to represent arithmetic expressions
+struct ArithExpr : public Expr {
+    std::shared_ptr<Expr> lhs;
+    SvArithOp op;
+    std::shared_ptr<Expr> rhs;
+
+    ArithExpr(std::shared_ptr<Expr> lhs_, SvArithOp op_, std::shared_ptr<Expr> rhs_)
+        : lhs(std::move(lhs_)), op(op_), rhs(std::move(rhs_)) {}
+};
+
 struct SetClause : public TreeNode {
     std::string col_name;
-    std::shared_ptr<Value> val;
+    std::shared_ptr<Expr> val; // Changed from Value to Expr
 
-    SetClause(std::string col_name_, std::shared_ptr<Value> val_)
+    SetClause(std::string col_name_, std::shared_ptr<Expr> val_) // Changed from Value to Expr
         : col_name(std::move(col_name_)), val(std::move(val_)) {}
 };
 
@@ -241,11 +253,11 @@ struct DeleteStmt : public TreeNode {
 };
 
 struct UpdateStmt : public TreeNode {
-    std::string tab_name;
+    TableRef tab_name;  // 使用TableRef以支持别名
     std::vector<std::shared_ptr<SetClause>> set_clauses;
     std::vector<std::shared_ptr<BinaryExpr>> conds;
 
-    UpdateStmt(std::string tab_name_, std::vector<std::shared_ptr<SetClause>> set_clauses_,
+    UpdateStmt(TableRef tab_name_, std::vector<std::shared_ptr<SetClause>> set_clauses_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_)
         : tab_name(std::move(tab_name_)), set_clauses(std::move(set_clauses_)), conds(std::move(conds_)) {}
 };
