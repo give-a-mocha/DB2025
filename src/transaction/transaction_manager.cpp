@@ -140,6 +140,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         undoLog.ts_ = commit_ts;
         txn->ModifyUndoLog(index, undoLog);
         if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
+            index++;
             continue;
         } else {
             //更新undo日志
