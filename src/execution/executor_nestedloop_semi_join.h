@@ -70,7 +70,7 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
         auto rec = left_->Next();
         // 检查空指针，记录为空则返回空指针
         if (!rec) {
-            std::cerr << "Error: One of the records is null at " + getType() << std::endl;
+            WARN("One of the records is null at {}", getType());
             return nullptr;
         }
         return rec;
