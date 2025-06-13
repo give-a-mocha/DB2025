@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "execution/execution_common.h" // 添加包含
 
 /**
  * @brief 更新执行器，负责实现UPDATE语句的功能
@@ -166,17 +167,41 @@ class UpdateExecutor : public AbstractExecutor {
             // 处理每个SET子句
             for (const auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
-                // 复制值以避免修改原始数据
-                auto value = set_clause.rhs;
-                value.raw.reset();
+                Value value; // 将 value 的声明提前
 
-                // 处理类型转换
-                if (col->type != set_clause.rhs.type) {
+                // 根据 rhs_type 获取值
+                if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
+                    value = set_clause.rhs_val; // 直接使用 rhs_val
+                } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
+                    // 创建一个临时的 ExprTerm 来包装 ArithExpr
+                    ExprTerm temp_expr_term(set_clause.rhs_expr);
+                    // 计算表达式的值 (使用 old_rec)
+                    // 注意：需要包含 execution_common.h 才能调用 EvaluateExpr 和 GetColumnValue
+                    value = EvaluateExpr(temp_expr_term, *old_rec, tab_.cols);
+                } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
+                    // 从旧记录中获取列的值 (使用 old_rec)
+                    const ColMeta* rhs_col_meta = nullptr;
+                    for(const auto& meta : tab_.cols) {
+                        if (meta.tab_name == set_clause.rhs_col.tab_name && meta.name == set_clause.rhs_col.col_name) {
+                            rhs_col_meta = &meta;
+                            break;
+                        }
+                    }
+                    if (!rhs_col_meta) {
+                         throw std::runtime_error("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
+                    }
+                    value = GetColumnValue(*old_rec, *rhs_col_meta);
+                } else {
+                     throw std::runtime_error("Unsupported SetRhsType");
+                }
+
+                // 处理类型转换 (使用计算或获取到的 value.type)
+                if (col->type != value.type) {
                     if (col->type == ColType::TYPE_INT && value.type == ColType::TYPE_FLOAT) {
                         value.set_int(static_cast<int>(value.float_val));
                     } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
                         value.set_float(static_cast<float>(value.int_val));
-                    } else {
+                    } else if (col->type != value.type) { // 添加一个检查，防止相同类型也抛出错误
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }

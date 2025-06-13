@@ -159,6 +159,14 @@ struct BoolLit : public Value {
 
     BoolLit(bool val_) : val(val_) {}
 };
+// 表别名结构
+struct TableRef : public TreeNode {
+    std::string tab_name;
+    std::string alias;  // 表别名
+
+    TableRef(std::string tab_name_) : tab_name(std::move(tab_name_)), alias("") {}
+    TableRef(std::string tab_name_, std::string alias_) : tab_name(std::move(tab_name_)), alias(std::move(alias_)) {}
+};
 
 struct Col : public Expr {
     std::string tab_name;
@@ -253,22 +261,13 @@ struct DeleteStmt : public TreeNode {
 };
 
 struct UpdateStmt : public TreeNode {
-    TableRef tab_name;  // 使用TableRef以支持别名
+    std::shared_ptr<TableRef> tab_name;  // 使用TableRef以支持别名
     std::vector<std::shared_ptr<SetClause>> set_clauses;
     std::vector<std::shared_ptr<BinaryExpr>> conds;
 
-    UpdateStmt(TableRef tab_name_, std::vector<std::shared_ptr<SetClause>> set_clauses_,
+    UpdateStmt(std::shared_ptr<TableRef> tab_name_, std::vector<std::shared_ptr<SetClause>> set_clauses_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_)
         : tab_name(std::move(tab_name_)), set_clauses(std::move(set_clauses_)), conds(std::move(conds_)) {}
-};
-
-// 表别名结构
-struct TableRef : public TreeNode {
-    std::string tab_name;
-    std::string alias;  // 表别名
-
-    TableRef(std::string tab_name_) : tab_name(std::move(tab_name_)), alias("") {}
-    TableRef(std::string tab_name_, std::string alias_) : tab_name(std::move(tab_name_)), alias(std::move(alias_)) {}
 };
 
 struct JoinExpr : public TreeNode {

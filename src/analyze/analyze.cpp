@@ -228,29 +228,29 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
-        query->tables.push_back(x->tab_name.tab_name);
+        query->tables.push_back(x->tab_name->tab_name);
         // 获取相关表的所有列，用于后续校验
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
-        std::vector<TabRef> tab_refs = {TabRef(x->tab_name.tab_name, x->tab_name.alias)};  // 创建表引用
+        std::vector<TabRef> tab_refs = {TabRef(x->tab_name->tab_name, x->tab_name->alias)};  // 创建表引用
         // 准备SET子句
         query->set_clauses.reserve(x->set_clauses.size());
         // 处理每个SET赋值
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
-            set_clause.lhs.tab_name = x->tab_name.tab_name;         // 设置左侧列的表名
+            set_clause.lhs.tab_name = x->tab_name->tab_name;         // 设置左侧列的表名
             set_clause.lhs.col_name = sv_set_clause->col_name;      // 设置左侧列名
-            set_clause.lhs.tab_alias = x->tab_name.alias;           // 设置左侧列的别名
+            set_clause.lhs.tab_alias = x->tab_name->alias;           // 设置左侧列的别名
             
             auto rhs_term = AnalyzeExprTerm(sv_set_clause->val, all_cols, tab_refs);
             if (rhs_term->term_type == TermType::VALUE) {
-                set_clause.rhs_type = SetRhsType::RHS_VALUE;
+                set_clause.rhs_type = SetRhsType::SET_RHS_VALUE;
                 set_clause.rhs_val = rhs_term->val;
             } else if (rhs_term->term_type == TermType::EXPR) {
-                set_clause.rhs_type = SetRhsType::RHS_EXPR;
+                set_clause.rhs_type = SetRhsType::SET_RHS_EXPR;
                 set_clause.rhs_expr = rhs_term->expr;
             } else if (rhs_term->term_type == TermType::COLUMN){ // TermType::COLUMN
-                set_clause.rhs_type = SetRhsType::RHS_COLUMN;
+                set_clause.rhs_type = SetRhsType::SET_RHS_COL;
                 set_clause.rhs_col = rhs_term->col;  // 设置右侧列引用
             } else{
                 throw RMDBError("Unsupported right-hand side type in UPDATE statement");
@@ -267,7 +267,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
 
             // 仅当右侧是值时，才进行类型兼容性检查和 init_raw
-            if (set_clause.rhs_type == SetRhsType::RHS_VALUE) {
+            if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
                 TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
                 auto col = tab.get_col(set_clause.lhs.col_name);
                 // 允许数值类型之间的转换(INT与FLOAT)
@@ -849,14 +849,15 @@ void Analyze::CheckArithExprType(const std::shared_ptr<ExprTerm>& term, const st
 
     switch (term->term_type) {
         case TermType::VALUE:
-            if (term->val.type != ColType::TYPE_INT && term->val.type != ColType::TYPE_FLOAT) {
+            if(term->val.type == ColType::TYPE_STRING) {
                 throw IncompatibleTypeError("Arithmetic expression", coltype2str(term->val.type));
             }
+            term->val.init_raw();
             break;
         case TermType::COLUMN: {
-            // Find the column metadata to check its type
+            // 如果是列检查是不是在全部列中，
+            // TODO: 可能需要更加详细的检查，比如防止出现别的表的列
             bool found = false;
-            ColType col_type = ColType::TYPE_INT; // Default, will be overwritten
             for (const auto& col_meta : all_cols) {
                 // Need to compare based on resolved table name, not alias
                 if (col_meta.tab_name == term->col.tab_name && col_meta.name == term->col.col_name) {

@@ -131,7 +131,7 @@ class TreePrinter {
             print_node_list(x->conds, offset);
         } else if (auto x = std::dynamic_pointer_cast<UpdateStmt>(node)) {
             std::cout << "UPDATE\n";
-            print_val(x->tab_name, offset);
+            print_val(x->tab_name->tab_name, offset); // Pass the string member
             print_node_list(x->set_clauses, offset);
             print_node_list(x->conds, offset);
         } else if (auto x = std::dynamic_pointer_cast<SelectStmt>(node)) {

@@ -61,7 +61,7 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
     // 从条件中提取所有涉及该表的列
     std::unordered_set<std::string> cols;
     for (auto &cond : curr_conds) {
-        if (cond.is_rhs_val && cond.lhs_col.tab_name.compare(tab_name) == 0) {
+        if (cond.rhs_type == ConditionRhsType::RHS_VALUE && cond.lhs_col.tab_name.compare(tab_name) == 0) {
             // 支持等值条件和范围条件
             if (cond.op == CompOp::OP_EQ || cond.op == CompOp::OP_GT || cond.op == CompOp::OP_GE ||
                 cond.op == CompOp::OP_LT || cond.op == CompOp::OP_LE) {
@@ -118,7 +118,7 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
     std::vector<Condition> temp;
     for (auto &it : conds) {
         if (it.lhs_col.tab_name.compare(tab_names) == 0 &&
-            (it.is_rhs_val || it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
+            (it.rhs_type == ConditionRhsType::RHS_VALUE || it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
             solved_conds.emplace_back(std::move(it));
         } else {
             temp.emplace_back(std::move(it));
@@ -205,7 +205,7 @@ std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> quer
     // 不存在两侧都为常数的情况
     auto it = query->conds.begin();
     while (it != query->conds.end()) {
-        if (!it->is_rhs_val && it->lhs_col == it->rhs_col) {
+        if (it->rhs_type != ConditionRhsType::RHS_VALUE && it->lhs_col == it->rhs_col) {
             if (it->op == CompOp::OP_EQ || it->op == CompOp::OP_LE || it->op == CompOp::OP_GE) {
                 // 恒真条件，可以直接移除
                 it = query->conds.erase(it);
@@ -597,17 +597,17 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
         // 只有一张表，不需要进行物理优化了
         // int index_no = get_indexNo(x->tab_name, query->conds);
         std::vector<std::string> index_col_names;
-        bool index_exist = get_index_cols(x->tab_name, query->conds, index_col_names);
+        bool index_exist = get_index_cols(x->tab_name->tab_name, query->conds, index_col_names);
 
         if (index_exist == false) {  // 该表没有索引
             index_col_names.clear();
             table_scan_executors =
-                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name, query->conds, index_col_names);
+                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name->tab_name, query->conds, index_col_names);
         } else {  // 存在索引
-            table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, x->tab_name,
+            table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, x->tab_name->tab_name,
                                                               query->conds, index_col_names);
         }
-        plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Update, table_scan_executors, x->tab_name,
+        plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Update, table_scan_executors, x->tab_name->tab_name,
                                                 std::vector<Value>(), query->conds, query->set_clauses);
     } else if (auto x = std::dynamic_pointer_cast<ast::ExplainStmt>(query->parse)) {
         // explain
@@ -666,7 +666,7 @@ std::vector<Condition> pop_conds_optimized(std::list<Condition> &conds, const st
     auto it = conds.begin();
     while (it != conds.end()) {
         if (it->lhs_col.tab_name.compare(tab_names) == 0 &&
-            (it->is_rhs_val || it->lhs_col.tab_name.compare(it->rhs_col.tab_name) == 0)) {
+            (it->rhs_type == ConditionRhsType::RHS_VALUE || it->lhs_col.tab_name.compare(it->rhs_col.tab_name) == 0)) {
             solved_conds.emplace_back(std::move(*it));
             it = conds.erase(it);
         } else {

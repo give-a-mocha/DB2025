@@ -538,7 +538,7 @@ struct JoinNode {
 /**
  * @brief SET子句右侧操作数类型枚举
  */
-enum SetRhsType { RHS_VALUE, RHS_EXPR, RHS_COLUMN };
+enum SetRhsType { SET_RHS_VALUE, SET_RHS_EXPR, SET_RHS_COL };
 
 /**
  * @brief SET子句结构体，用于UPDATE语句
