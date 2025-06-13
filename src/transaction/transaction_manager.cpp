@@ -140,6 +140,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         undoLog.ts_ = commit_ts;
         txn->ModifyUndoLog(index, undoLog);
         if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
+            index++;
             continue;
         } else {
             //更新undo日志
@@ -147,7 +148,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
             UpdateUndoLink(write_record->GetRid(), undoLink);
             auto& fh_ = sm_manager_->fhs_.at(write_record->GetTableName());
             if(write_record->GetWriteType() == WType::DELETE_TUPLE) {
-                fh_->delete_record(write_record->GetRid(), nullptr);
+                // fh_->delete_record(write_record->GetRid(), nullptr);
             } else if(write_record->GetWriteType() == WType::UPDATE_TUPLE) {
                 fh_->update_record(write_record->GetRid(), write_record->GetRecord().data, nullptr);
             }
@@ -209,11 +210,11 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             handle->delete_record(rid, context);
         }
         //在版本链中删除insert的
-        std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
+        std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
         auto pageversion_info = version_info_.find(rid.page_no);
         if (pageversion_info != version_info_.end()) {
             // 如果存在版本信息，则删除对应的版本链接
-            std::shared_lock<std::shared_mutex> lock(pageversion_info->second->mutex_);
+            std::unique_lock<std::shared_mutex> lock(pageversion_info->second->mutex_);
             auto& prev_version = pageversion_info->second->prev_version_;
             auto it = prev_version.find(rid.slot_no);
             if (it != prev_version.end()) {
