@@ -3,15 +3,40 @@
 # 当任何命令执行失败时，立即退出脚本
 set -e
 
-# --- 1. 参数检查 ---
-if [ $# -ne 1 ]; then
-    echo "😕 用法: $0 <sql_file_path>"
+# --- 1. 参数检查与帮助信息 ---
+# 定义帮助信息函数
+print_usage() {
+    echo "用法: $0 [sql_file_path]"
+    echo
+    echo "运行 RMDB 测试脚本。"
+    echo
+    echo "参数:"
+    echo "  sql_file_path    可选。要执行的 SQL 文件的路径。"
+    echo "                   如果未提供，则默认为 'test.sql'。"
+    echo
+    echo "选项:"
+    echo "  --help, -h       显示此帮助信息并退出。"
+}
+
+# 检查帮助选项
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_usage
+    exit 0
+fi
+
+# 检查参数数量
+if [ $# -gt 1 ]; then
+    echo "❌ 错误: 参数过多。" >&2
+    print_usage >&2
     exit 1
 fi
 
-sql_file=$1
+# 设置 SQL 文件路径
+sql_file=${1:-test.sql}
+
+# 检查文件是否存在
 if [ ! -f "$sql_file" ]; then
-    echo "❌ 错误: SQL 文件未找到于 '$sql_file'"
+    echo "❌ 错误: SQL 文件未找到于 '$sql_file'" >&2
     exit 1
 fi
 
