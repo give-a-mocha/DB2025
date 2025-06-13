@@ -73,7 +73,7 @@ mkdir -p build
 (
     cd build
     cmake .. > /dev/null
-    make rmdb
+    make rmdb -j16
 )
 echo "✅ server 编译完成！"
 
@@ -90,8 +90,8 @@ echo "\n🚀 正在后台启动 server..."
     # 以后台模式启动 server，并将输出重定向到 /dev/null
     ./bin/rmdb output > /dev/null 2>&1 &
 )
-# 获取最后一个后台进程的 PID
-server_pid=$!
+# 通过进程名获取 server 的 PID
+server_pid=$(pgrep rmdb)
 echo "✅ server 已启动，PID: $server_pid"
 # 等待片刻，确保 server 完全启动
 sleep 1
@@ -102,7 +102,7 @@ mkdir -p rmdb_client/build
 (
     cd rmdb_client/build
     cmake .. > /dev/null
-    make rmdb_client
+    make rmdb_client -j16
 )
 echo "✅ client 编译完成！"
 
