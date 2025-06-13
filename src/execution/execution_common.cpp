@@ -72,7 +72,7 @@ auto message_out(Context *context_, const char *output, size_t output_size) -> v
 }
 
 
-std::vector<Value> convert_rerecord_to_values(
+std::vector<Value> convert_record_to_values(
     const std::unique_ptr<RmRecord> &record, 
     const std::vector<ColMeta> &cols_
 ) {
@@ -93,6 +93,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
     TransactionManager *txn_mgr_,
     const std::vector<ColMeta> &cols_
 ) {
+    INFO("mvcc_get_record");
     auto rec = fh_->get_record(rid, context_);
     auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
     while(pre_undo_link.has_value()){
@@ -102,6 +103,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
         if(pre_undo_link.value().prev_txn_ == context_->txn_->get_transaction_id()) {
             return rec;
         }
+        INFO("mvcc_get_record_while");
         // 如果是已提交事物
         if(txn_mgr_->get_txn_state(pre_undo_link.value().prev_txn_) == TransactionState::COMMITTED){
             if(undo_log.ts_ <= context_->txn_->get_read_ts()){
@@ -119,7 +121,9 @@ std::unique_ptr<RmRecord> mvcc_get_record(
                     memcpy(rec->data + cols_[i].offset, val.raw->data, cols_[i].len);
                 }
             }
+            
         }
+        INFO("mvcc_get_record_while2");
         pre_undo_link = undo_log.prev_version_;
         if(!pre_undo_link->IsValid()) {
             rec = nullptr;
@@ -174,11 +178,16 @@ Rid mvcc_insert_record(
 void mvcc_delete_record(
     const Rid &rid,
     Context *context_,
+    RmFileHandle *fh_,
     TransactionManager *txn_mgr_,
     const std::vector<ColMeta> &cols_
 ) {
+    auto rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, cols_);
     UndoLog undo_log;
     undo_log.is_deleted_ = true;
+    std::vector<Value> values = convert_record_to_values(rec, cols_);
+    undo_log.tuple_ = std::move(values);
+    undo_log.modified_fields_.resize(cols_.size(), true); // 全部字段都被修改
     //此时commit_ts 应该是还未提交
     // undo_log.ts_ = txn_mgr_->get_next_timestamp();
     auto pre = txn_mgr_->GetUndoLink(rid);

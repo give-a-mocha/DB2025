@@ -27,7 +27,7 @@ auto message_out(Context *context_, const std::string &output) -> void;
 
 auto message_out(Context *context_, const char *output, size_t output_size) -> void;
 
-std::vector<Value> convert_rerecord_to_values(
+std::vector<Value> convert_record_to_values(
     const std::unique_ptr<RmRecord> &record, 
     const std::vector<ColMeta> &cols_
 );
@@ -51,6 +51,7 @@ Rid mvcc_insert_record(
 void mvcc_delete_record(
 	const Rid &rid,
 	Context *context_,
+	RmFileHandle *fh_,
 	TransactionManager *txn_mgr_,
 	const std::vector<ColMeta> &cols_
 );
