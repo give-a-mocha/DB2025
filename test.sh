@@ -73,7 +73,7 @@ mkdir -p build
 (
     cd build
     cmake .. > /dev/null
-    make rmdb -j16
+    make rmdb -j$(nproc)
 )
 echo "✅ server 编译完成！"
 
@@ -102,7 +102,7 @@ mkdir -p rmdb_client/build
 (
     cd rmdb_client/build
     cmake .. > /dev/null
-    make rmdb_client -j16
+    make rmdb_client -j$(nproc)
 )
 echo "✅ client 编译完成！"
 
