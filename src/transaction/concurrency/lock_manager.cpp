@@ -13,6 +13,8 @@ See the Mulan PSL v2 for more details. */
 #include "transaction/txn_defs.h"
 #include <mutex>
 #include <algorithm>
+#include <tuple>
+#include <utility>
 
 /**
  * @description: 申请行级共享锁
@@ -37,7 +39,15 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
     //创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
 
-    auto [queue_it, inserted] = lock_table_.emplace(lock_data_id, LockRequestQueue{});
+    auto queue_it = lock_table_.find(lock_data_id);
+    if(queue_it == lock_table_.end()) {
+        // 如果锁表中没有该锁数据标识符，则创建一个新的锁请求队列
+        queue_it = lock_table_.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(lock_data_id), // 构造 key
+            std::forward_as_tuple()             // 默认构造 value (LockRequestQueue)
+        ).first;
+    }
     LockRequestQueue& request_queue = queue_it->second;
 
     // 检查是否已经获得锁
@@ -154,7 +164,15 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
     //创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
 
-    auto [queue_it, inserted] = lock_table_.emplace(lock_data_id, LockRequestQueue{});
+    auto queue_it = lock_table_.find(lock_data_id);
+    if(queue_it == lock_table_.end()) {
+        // 如果锁表中没有该锁数据标识符，则创建一个新的锁请求队列
+        queue_it = lock_table_.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(lock_data_id), // 构造 key
+            std::forward_as_tuple()             // 默认构造 value (LockRequestQueue)
+        ).first;
+    }
     LockRequestQueue& request_queue = queue_it->second;
 
     // 检查是否已经获得锁
@@ -317,29 +335,25 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 
     auto lock_table_it = lock_table_.find(lock_data_id);
     if (lock_table_it == lock_table_.end()) {
-        size_t locks_removed_from_txn = txn->get_lock_set()->erase(lock_data_id);
-        return locks_removed_from_txn > 0;
+        return false;
     }
 
     LockRequestQueue& request_queue = lock_table_it->second;
     txn_id_t txn_id = txn->get_transaction_id();
-    bool found_and_removed_from_queue = false;
+    bool is_find = false;
 
     
     for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end(); ) {
         if (it->txn_id_ == txn_id) {
             it = request_queue.request_queue_.erase(it);
-            found_and_removed_from_queue = true;
+            is_find = true;
             break;
         } else {
             ++it;
         }
     }
-
-    size_t locks_removed_from_txn = txn->get_lock_set()->erase(lock_data_id);
-
     
-    if (found_and_removed_from_queue) {
+    if (is_find) {
         request_queue.cv_.notify_all();
     }
 
@@ -347,5 +361,5 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
         lock_table_.erase(lock_table_it);
     }
 
-    return locks_removed_from_txn > 0;
+    return true;
 }

@@ -25,6 +25,7 @@
 
 #include "record/rm_file_handle.h"
 #include "system/sm_manager.h"
+#include "common/print.hpp"
 
 std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
 
@@ -64,7 +65,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
 
     if (txn == nullptr) {
         // 创建新事务，并分配递增的事务ID
-        txn = new Transaction(get_next_txn_id(), IsolationLevel::REPEATABLE_READ);
+        txn = new Transaction(get_next_txn_id());
     }
 
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
@@ -99,30 +100,85 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-
+    ERROR("COMMIT 开始");
+    // 验证阶段
+    auto write_set = txn->get_write_set();
+    for(const auto& write_record : *write_set) {
+        if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
+            continue;
+        } else {
+            auto& fh_ = sm_manager_->fhs_.at(write_record->GetTableName());
+            INFO("获取锁");
+            bool ok = lock_manager_->lock_exclusive_on_record(txn, write_record->GetRid(), fh_->GetFd());
+            if(ok == false){
+                throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
+            }
+            auto pre_undoLink = GetUndoLink(write_record->GetRid());
+            if(pre_undoLink.has_value()) {
+                auto undoLog = GetUndoLog(pre_undoLink.value());
+                if(undoLog.ts_ > txn->get_read_ts()){
+                    throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                }
+            }
+        }
+    }
+    INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
+    // 提交阶段
+    ERROR("COMMIT 提交阶段");
     // MVCC: 分配提交时间戳
+    txn->set_state(TransactionState::COMMITTED);
     timestamp_t commit_ts = INVALID_TS;
     if (concurrency_mode_ == ConcurrencyMode::MVCC) {
         commit_ts = get_next_timestamp();
         txn->set_commit_ts(commit_ts); // 设置提交时间戳
         last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
     }
+    int index = 0;
+    for(const auto& write_record : *write_set) {
+        INFO("COMMIT 写操作: {}, {}", write_record->GetWriteType(), write_record->GetTableName());
+        auto undoLog = txn->GetUndoLog(index);
+        undoLog.ts_ = commit_ts;
+        txn->ModifyUndoLog(index, undoLog);
+        if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
+            continue;
+        } else {
+            //更新undo日志
+            UndoLink undoLink = {txn->get_transaction_id(), index};
+            UpdateUndoLink(write_record->GetRid(), undoLink);
+            auto& fh_ = sm_manager_->fhs_.at(write_record->GetTableName());
+            if(write_record->GetWriteType() == WType::DELETE_TUPLE) {
+                fh_->delete_record(write_record->GetRid(), nullptr);
+            } else if(write_record->GetWriteType() == WType::UPDATE_TUPLE) {
+                fh_->update_record(write_record->GetRid(), write_record->GetRecord().data, nullptr);
+            }
+
+        }
+        index++;
+    }
+    INFO("COMMIT 提交阶段结束");
+    INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
+    INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
+    
     for (const LockDataId& lock : *lock_set) {
+        ERROR("开始释放锁");
         lock_manager_->unlock(txn, lock);
     }
+    INFO("COMMIT 释放锁结束");
 
     // 清空事务相关的集合
     txn->clear();
+    INFO("COMMIT 清空事务相关集合结束");
     //?对于write_set中的所有数据项刷新buffer_pool
 
     auto log = new CommitLogRecord(txn->get_transaction_id());
     record_link_management(log, log_manager, txn);
 
-    txn->set_state(TransactionState::COMMITTED);
+    INFO("COMMIT 水位线");
     running_txns_.RemoveTxn(txn->get_start_ts()); // 从水位线中移除事务
     running_txns_.UpdateCommitTs(commit_ts); // 更新水位线的提交时间戳
+    ERROR("COMMIT 结束");
 }
 
 /**
@@ -149,62 +205,30 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         const auto table_name = (*iter)->GetTableName();
         const auto rid = (*iter)->GetRid();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
-
-        switch (write_type) {
-            case WType::INSERT_TUPLE: {
-                auto record = handle->get_record(rid, context);
-                // Pass *record (RmRecord) instead of record (unique_ptr<RmRecord>)
-                auto log_record = std::make_unique<DeleteLogRecord>(txn->get_transaction_id(), *record, rid, table_name);
-                record_link_management(log_record.get(), log_manager, txn);
-
-                delete_index_record(sm_manager_->db_.get_table(table_name), record.get(), rid, context );
-                handle->delete_record(rid, context);
-                break;
+        if(write_type == WType::INSERT_TUPLE) {
+            handle->delete_record(rid, context);
+        }
+        //在版本链中删除insert的
+        std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
+        auto pageversion_info = version_info_.find(rid.page_no);
+        if (pageversion_info != version_info_.end()) {
+            // 如果存在版本信息，则删除对应的版本链接
+            std::shared_lock<std::shared_mutex> lock(pageversion_info->second->mutex_);
+            auto& prev_version = pageversion_info->second->prev_version_;
+            auto it = prev_version.find(rid.slot_no);
+            if (it != prev_version.end()) {
+                prev_version.erase(it); // 删除对应的版本链接
             }
-            case WType::UPDATE_TUPLE: {
-                auto old_record = (*iter)->GetRecord();
-                auto new_record = handle->get_record(rid, context);
-                // Pass *new_record (RmRecord) instead of new_record (unique_ptr<RmRecord>)
-                auto log_record =
-                    std::make_unique<UpdateLogRecord>(txn->get_transaction_id(), old_record, *new_record, rid, table_name);
-                record_link_management(log_record.get(), log_manager, txn);
-
-
-                delete_index_record(sm_manager_->db_.get_table(table_name), new_record.get(), rid, context);
-                handle->update_record(rid, old_record.data, context);
-                insert_index_record(sm_manager_->db_.get_table(table_name), &old_record, rid, context);
-                break;
-            }
-            case WType::DELETE_TUPLE: {
-                auto record = (*iter)->GetRecord();
-                auto log_record = std::make_unique<InsertLogRecord>(txn->get_transaction_id(), record, rid, table_name);
-                record_link_management(log_record.get(), log_manager, txn);
-
-                insert_index_record(sm_manager_->db_.get_table(table_name), &record, rid, context);
-                handle->insert_record(rid, record.data);
-                break;
-            }
-            default:
-                throw InternalError("Invalid write type");
-                break;
         }
     }
-    write_set->clear();
-
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
     for (const LockDataId& lock : *lock_set) {
         lock_manager_->unlock(txn, lock);
     }
-
-
     txn->clear();
-
-
     AbortLogRecord* log = new AbortLogRecord(txn->get_transaction_id());
     record_link_management(log, log_manager, txn);
-
-
     txn->set_state(TransactionState::ABORTED);
 }
 

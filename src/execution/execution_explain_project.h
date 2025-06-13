@@ -50,8 +50,7 @@ class ExplainProjectExecutor : public AbstractExecutor {
         isStar_ = isStar;
         // 按表名(如果为空则用别名)和列名排序,保证解释计划输出的一致性
         std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
-            return std::make_pair(a.tab_name.empty() ? a.tab_alias : a.tab_name, a.col_name) <
-                   std::make_pair(b.tab_name.empty() ? b.tab_alias : b.tab_name, b.col_name);
+            return a.to_string() < b.to_string();
         });
     }
 

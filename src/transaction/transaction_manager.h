@@ -134,6 +134,14 @@ public:
         return next_timestamp_.fetch_add(1);
     }
 
+    TransactionState get_txn_state(txn_id_t txn_id) {
+        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
+        assert(txn_map.find(txn_id) != txn_map.end());
+        auto *txn = txn_map[txn_id];
+        assert(txn != nullptr);
+        return txn->get_state();
+    }
+
     /**
      * @description: 获取事务ID为txn_id的事务对象
      * @return {Transaction*} 事务对象的指针
