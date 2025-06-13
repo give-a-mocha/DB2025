@@ -228,46 +228,65 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
-        query->tables.push_back(x->tab_name);
-
+        query->tables.push_back(x->tab_name.tab_name);
+        // 获取相关表的所有列，用于后续校验
+        std::vector<ColMeta> all_cols;
+        get_all_cols(query->tables, all_cols);
+        std::vector<TabRef> tab_refs = {TabRef(x->tab_name.tab_name, x->tab_name.alias)};  // 创建表引用
         // 准备SET子句
         query->set_clauses.reserve(x->set_clauses.size());
         // 处理每个SET赋值
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
-            set_clause.lhs.tab_name = x->tab_name;                  // 设置左侧列的表名
+            set_clause.lhs.tab_name = x->tab_name.tab_name;         // 设置左侧列的表名
             set_clause.lhs.col_name = sv_set_clause->col_name;      // 设置左侧列名
-            set_clause.rhs = convert_sv_value(sv_set_clause->val);  // 转换右侧值
-            query->set_clauses.push_back(set_clause);               // 添加到SET子句列表
+            set_clause.lhs.tab_alias = x->tab_name.alias;           // 设置左侧列的别名
+            
+            auto rhs_term = AnalyzeExprTerm(sv_set_clause->val, all_cols, tab_refs);
+            if (rhs_term->term_type == TermType::VALUE) {
+                set_clause.rhs_type = SetRhsType::RHS_VALUE;
+                set_clause.rhs_val = rhs_term->val;
+            } else if (rhs_term->term_type == TermType::EXPR) {
+                set_clause.rhs_type = SetRhsType::RHS_EXPR;
+                set_clause.rhs_expr = rhs_term->expr;
+            } else if (rhs_term->term_type == TermType::COLUMN){ // TermType::COLUMN
+                set_clause.rhs_type = SetRhsType::RHS_COLUMN;
+                set_clause.rhs_col = rhs_term->col;  // 设置右侧列引用
+            } else{
+                throw RMDBError("Unsupported right-hand side type in UPDATE statement");
+            }
+            query->set_clauses.push_back(std::move(set_clause)); // 使用 move 提高效率
         }
 
-        // 获取相关表的所有列，用于后续校验
-        std::vector<ColMeta> all_cols;
-        get_all_cols(query->tables, all_cols);
-
         // 处理WHERE条件
-        get_clause(x->conds, query->conds);
+        get_clause_alias(all_cols,x->conds, query->conds, tab_refs);
         check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性
 
         // 检查每个SET子句的有效性和类型兼容性
         for (auto &set_clause : query->set_clauses) {
             set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
-            // 检查赋值类型的兼容性
-            TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
-            auto col = tab.get_col(set_clause.lhs.col_name);
-            // 允许数值类型之间的转换(INT与FLOAT)
-            bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
-                              (set_clause.rhs.type == ColType::TYPE_INT || set_clause.rhs.type == ColType::TYPE_FLOAT);
-            if (col->type != set_clause.rhs.type && !is_numeric) {
-                throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs.type));
+
+            // 仅当右侧是值时，才进行类型兼容性检查和 init_raw
+            if (set_clause.rhs_type == SetRhsType::RHS_VALUE) {
+                TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
+                auto col = tab.get_col(set_clause.lhs.col_name);
+                // 允许数值类型之间的转换(INT与FLOAT)
+                bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
+                                  (set_clause.rhs_val.type == ColType::TYPE_INT || set_clause.rhs_val.type == ColType::TYPE_FLOAT);
+                if (col->type != set_clause.rhs_val.type && !is_numeric) {
+                    throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
+                }
+                set_clause.rhs_val.init_raw(col->len);  // 初始化值的原始数据
             }
-            set_clause.rhs.init_raw(col->len);  // 初始化值的原始数据
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {  // 处理DELETE查询
         // 添加要删除数据的表名
         query->tables.push_back(x->tab_name);
+        std::vector<ColMeta> all_cols;  // 存储相关表的列元数据
+        get_all_cols(query->tables, all_cols);  // 获取所有相关表的列
+        std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
         // 处理WHERE条件
-        get_clause(x->conds, query->conds);
+        get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
         check_clause({x->tab_name}, query->conds);                            // 检查WHERE条件的有效性
     } else if (auto x = std::dynamic_pointer_cast<ast::InsertStmt>(parse)) {  // 处理INSERT查询
         // 处理INSERT的VALUES值
@@ -459,20 +478,21 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
         convert_tabname(all_cols, cond.lhs_col, tab_refs);     // 处理表别名，转换为真实表名
         cond.op = convert_sv_comp_op(expr->op);                // 转换比较操作符
 
-        // 处理右侧操作数，可能是值或列引用
-        if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
-            // 右侧是常量值
-            cond.is_rhs_val = true;
-            cond.rhs_val = convert_sv_value(rhs_val);  // 转换右侧值
-        } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
-            // 右侧是列引用
-            cond.is_rhs_val = false;
-            cond.rhs_col.tab_alias = rhs_col->tab_name;          // 设置右侧列的表别名
-            cond.rhs_col.col_name = rhs_col->col_name;           // 设置右侧列名
-            cond.rhs_col.set_col_alias(rhs_col->alias);          // 设置右侧列的别名
-            cond.rhs_col.set_agg_type(rhs_col->aggregate_type);  // 设置右侧列的聚合类型
-            convert_tabname(all_cols, cond.rhs_col, tab_refs);   // 处理表别名，转换为真实表名
+        // 处理右侧操作数，可能是值、列引用或算术表达式
+        auto rhs_term = AnalyzeExprTerm(expr->rhs, all_cols, tab_refs);
+        if (rhs_term->term_type == TermType::VALUE) {
+            cond.rhs_type = ConditionRhsType::RHS_VALUE;
+            cond.rhs_val = rhs_term->val;
+        } else if (rhs_term->term_type == TermType::COLUMN) {
+            cond.rhs_type = ConditionRhsType::RHS_COLUMN;
+            cond.rhs_col = rhs_term->col; // 已经由 AnalyzeExprTerm 处理过别名和检查
+        } else if (rhs_term->term_type == TermType::EXPR) {
+            cond.rhs_type = ConditionRhsType::RHS_EXPR;
+            cond.rhs_expr = rhs_term->expr;
+        } else {
+             throw InternalError("Unsupported expression term type in condition analysis");
         }
+
         conds.push_back(cond);  // 添加条件到结果集
     }
 }
@@ -486,6 +506,7 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
  * @param sv_conds 输入的语法树中的二元表达式集合
  * @param conds 输出参数，用于存储转换后的条件对象
  */
+/*
 void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds) {
     TRACE_FUNCTION
     // 清空输出条件向量
@@ -518,7 +539,7 @@ void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv
         conds.push_back(cond);
     }
 }
-
+*/
 /**
  * @brief 检查条件表达式的有效性及类型兼容性
  *
@@ -540,7 +561,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         cond.lhs_col = check_column(all_cols, cond.lhs_col);
 
         // 如果右侧是列引用(而非常量值)，也需要推断和验证表名
-        if (!cond.is_rhs_val) {
+        if (cond.rhs_type == ConditionRhsType::RHS_COLUMN) {
             cond.rhs_col = check_column(all_cols, cond.rhs_col);
         }
         ColType lhs_type;
@@ -563,11 +584,11 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
 
         // 获取右侧的类型信息(可能是值或列)
         ColType rhs_type;
-        if (cond.is_rhs_val) {
+        if (cond.rhs_type == ConditionRhsType::RHS_VALUE) {
             // 如果右侧是常量值，初始化其原始数据，并获取类型
             cond.rhs_val.init_raw(lhs_col_len);
             rhs_type = cond.rhs_val.type;
-        } else {
+        } else if (cond.rhs_type == ConditionRhsType::RHS_COLUMN) {
             if (cond.rhs_col.agg_type != AggregateType::COUNT) {
                 // 如果右侧是列引用，获取其类型
                 TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
@@ -580,6 +601,13 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             } else {
                 rhs_type = ColType::TYPE_INT;
             }
+        } else { // rhs_type == ConditionRhsType::RHS_EXPR
+            // 检查表达式内部是否都是数值类型
+            CheckArithExprType(cond.rhs_expr->lhs, all_cols);
+            CheckArithExprType(cond.rhs_expr->rhs, all_cols);
+            // 假设算术表达式的结果总是数值类型 (例如 FLOAT 用于比较)
+            // 更精确的类型推断可以后续添加 (例如 INT + INT = INT, INT + FLOAT = FLOAT)
+            rhs_type = ColType::TYPE_FLOAT; // Assume float for comparison simplicity
         }
 
         // 允许数值类型之间的比较(INT与FLOAT)
@@ -593,57 +621,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
     }
 }
 
-/**
- * @brief 使用自定义列检查器验证条件表达式的有效性及类型兼容性
- *
- * 该函数是check_clause的重载版本，接受一个列检查器对象来进行列存在性验证，
- * 适用于需要自定义列检查逻辑的场景。
- *
- * @param tab_names 条件中涉及的表名列表
- * @param conds 需要检查的条件表达式集合(将被修改以填充完整的列信息)
- * @param col_check 自定义的列检查器对象
- */
-[[maybe_unused]] void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds,
-                                            ColCheck &col_check) {
-    TRACE_FUNCTION
-    // 遍历检查每个条件
-    for (auto &cond : conds) {
-        // 使用自定义检查器推断并验证左侧列
-        cond.lhs_col = col_check.check(cond.lhs_col);
 
-        // 如果右侧是列引用(而非常量值)，也需要使用自定义检查器进行验证
-        if (!cond.is_rhs_val) {
-            cond.rhs_col = col_check.check(cond.rhs_col);
-        }
-
-        // 获取左侧列的类型信息
-        TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
-        auto lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
-        ColType lhs_type = lhs_col->type;
-
-        // 获取右侧的类型信息(可能是值或列)
-        ColType rhs_type;
-        if (cond.is_rhs_val) {
-            // 如果右侧是常量值，初始化其原始数据，并获取类型
-            cond.rhs_val.init_raw(lhs_col->len);
-            rhs_type = cond.rhs_val.type;
-        } else {
-            // 如果右侧是列引用，获取其类型
-            TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
-            auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
-            rhs_type = rhs_col->type;
-        }
-
-        // 允许数值类型之间的比较(INT与FLOAT)
-        bool is_numeric = (lhs_type == ColType::TYPE_INT || lhs_type == ColType::TYPE_FLOAT) &&
-                          (rhs_type == ColType::TYPE_INT || rhs_type == ColType::TYPE_FLOAT);
-
-        // 如果类型不匹配且不是数值类型比较，则抛出类型不兼容错误
-        if (lhs_type != rhs_type && !is_numeric) {
-            throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
-        }
-    }
-}
 
 /**
  * @brief 将语法树中的值对象转换为系统内部的Value对象
@@ -747,7 +725,7 @@ void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
     TRACE_FUNCTION
     for (const auto &cond : conds) {
         if (cond.lhs_col.agg_type != AggregateType::NONE ||
-            (!cond.is_rhs_val && cond.rhs_col.agg_type != AggregateType::NONE)) {
+            (cond.rhs_type == ConditionRhsType::RHS_COLUMN && cond.rhs_col.agg_type != AggregateType::NONE)) {
             throw AggregateError("WHERE clause cannot contain aggregate columns");
         }
     }
@@ -762,7 +740,7 @@ void Analyze::check_having_conds(const std::vector<Condition> &conds, const std:
                 throw AggregateError("having_cond: Non aggregate column not in group by");
             }
         }
-        if (!cond.is_rhs_val && cond.rhs_col.agg_type == AggregateType::NONE) {
+        if (cond.rhs_type == ConditionRhsType::RHS_COLUMN && cond.rhs_col.agg_type == AggregateType::NONE) {
             bool found = is_column_in_group(cond.rhs_col, group_cols);
             if (!found) {
                 throw AggregateError("having_cond: Non aggregate column not in group by");
@@ -791,5 +769,119 @@ void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std:
                 throw AggregateError("SELECT column not in GROUP BY: " + col.col_name);
             }
         }
+    }
+}
+/**
+ * @brief 将语法树中的算术操作符转换为系统内部的 ArithOp
+ * @param op 语法树中的算术操作符
+ * @return 系统内部的 ArithOp 枚举值
+ */
+ArithOp Analyze::convert_sv_arith_op(ast::SvArithOp op) {
+    switch (op) {
+        case ast::SV_ARITH_PLUS:
+            return ArithOp::OP_PLUS;
+        case ast::SV_ARITH_MINUS:
+            return ArithOp::OP_MINUS;
+        case ast::SV_ARITH_MULTIPLY:
+            return ArithOp::OP_MULTIPLY;
+        case ast::SV_ARITH_DIVIDE:
+            return ArithOp::OP_DIVIDE;
+        default:
+            throw InternalError("Unknown arithmetic operator in semantic analysis");
+    }
+}
+
+/**
+ * @brief 递归分析语法树中的表达式节点 (Value, Col, ArithExpr) 并转换为 ExprTerm
+ * @param ast_expr 语法树中的表达式节点
+ * @param all_cols 所有相关表的列元数据
+ * @param tab_refs 查询涉及的表引用
+ * @return 转换后的 ExprTerm 对象
+ */
+std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Expr> &ast_expr,
+                                                  const std::vector<ColMeta> &all_cols,
+                                                  const std::vector<TabRef> &tab_refs) {
+    TRACE_FUNCTION
+
+    if (!ast_expr) {
+        throw InternalError("Null expression encountered during analysis");
+    }
+
+    // Case 1: Constant Value
+    if (auto sv_val = std::dynamic_pointer_cast<ast::Value>(ast_expr)) {
+        Value common_val = convert_sv_value(sv_val);
+        return std::make_shared<ExprTerm>(common_val);
+    }
+    // Case 2: Column Reference
+    else if (auto sv_col = std::dynamic_pointer_cast<ast::Col>(ast_expr)) {
+        TabCol common_col = {"", sv_col->col_name, sv_col->tab_name};
+        common_col.set_col_alias(sv_col->alias);
+        common_col.set_agg_type(sv_col->aggregate_type); // Keep aggregate info if present
+        convert_tabname(all_cols, common_col, tab_refs);
+        // We might not need check_column here if convert_tabname already validates sufficiently,
+        // but keeping it ensures robustness. Revisit if performance becomes an issue.
+        check_column(all_cols, common_col);
+        return std::make_shared<ExprTerm>(common_col);
+    }
+    // Case 3: Arithmetic Expression (Recursive Step)
+    else if (auto sv_arith_expr = std::dynamic_pointer_cast<ast::ArithExpr>(ast_expr)) {
+        auto lhs_term = AnalyzeExprTerm(sv_arith_expr->lhs, all_cols, tab_refs);
+        auto rhs_term = AnalyzeExprTerm(sv_arith_expr->rhs, all_cols, tab_refs);
+        ArithOp common_op = convert_sv_arith_op(sv_arith_expr->op);
+        auto common_arith_expr = std::make_shared<ArithExpr>(lhs_term, common_op, rhs_term);
+        return std::make_shared<ExprTerm>(common_arith_expr);
+    }
+    // Error Case: Unknown expression type
+    else {
+        throw InternalError("Unsupported expression type encountered during analysis");
+    }
+}
+/**
+ * @brief 递归检查算术表达式中的项是否都是数值类型
+ * @param term 要检查的表达式项
+ * @param all_cols 所有相关表的列元数据
+ * @throw IncompatibleTypeError 如果发现非数值类型
+ */
+void Analyze::CheckArithExprType(const std::shared_ptr<ExprTerm>& term, const std::vector<ColMeta>& all_cols) {
+    if (!term) {
+        throw InternalError("Null expression term encountered during type checking");
+    }
+
+    switch (term->term_type) {
+        case TermType::VALUE:
+            if (term->val.type != ColType::TYPE_INT && term->val.type != ColType::TYPE_FLOAT) {
+                throw IncompatibleTypeError("Arithmetic expression", coltype2str(term->val.type));
+            }
+            break;
+        case TermType::COLUMN: {
+            // Find the column metadata to check its type
+            bool found = false;
+            ColType col_type = ColType::TYPE_INT; // Default, will be overwritten
+            for (const auto& col_meta : all_cols) {
+                // Need to compare based on resolved table name, not alias
+                if (col_meta.tab_name == term->col.tab_name && col_meta.name == term->col.col_name) {
+                     if (col_meta.type != ColType::TYPE_INT && col_meta.type != ColType::TYPE_FLOAT) {
+                         throw IncompatibleTypeError("Arithmetic expression", coltype2str(col_meta.type));
+                     }
+                     found = true;
+                     break; // Found the column
+                }
+            }
+            if (!found) {
+                 // This should ideally not happen if check_column was called before, but as a safeguard:
+                 throw ColumnNotFoundError(term->col.to_string());
+            }
+            break;
+        }
+        case TermType::EXPR:
+            if (!term->expr) {
+                 throw InternalError("Null nested expression encountered during type checking");
+            }
+            // Recursively check left and right operands
+            CheckArithExprType(term->expr->lhs, all_cols);
+            CheckArithExprType(term->expr->rhs, all_cols);
+            break;
+        default:
+            throw InternalError("Unknown expression term type during type checking");
     }
 }
