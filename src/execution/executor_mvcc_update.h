@@ -98,12 +98,12 @@ class MvccUpdateExecutor : public AbstractExecutor {
                         }
                     }
                     if (!rhs_col_meta) {
-                         throw std::runtime_error("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
+                         throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
                     }
                     value = GetColumnValue(*old_rec, *rhs_col_meta);
 
                 } else {
-                     throw std::runtime_error("Unsupported SetRhsType");
+                     throw RMDBError("Unsupported SetRhsType");
                 }
 
                 // 确保 value 有 raw 数据，但避免不必要的重置

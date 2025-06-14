@@ -306,12 +306,12 @@ Value EvaluateExpr(const ExprTerm &term, const RmRecord &record, const std::vect
                     case ArithOp::OP_DIVIDE:
                         // 检查除零
                         if (std::fabs(rhs_float) < std::numeric_limits<float>::epsilon()) {
-                            throw std::runtime_error("Division by zero");
+                            throw RMDBError("Division by zero");
                         }
                         res_float = lhs_float / rhs_float;
                         break;
                     default:
-                         throw std::runtime_error("Unsupported arithmetic operator");
+                         throw RMDBError("Unsupported arithmetic operator");
                 }
                 result.set_float(res_float);
             } else if (lhs_val.type == ColType::TYPE_INT && rhs_val.type == ColType::TYPE_INT) {
@@ -333,22 +333,22 @@ Value EvaluateExpr(const ExprTerm &term, const RmRecord &record, const std::vect
                     case ArithOp::OP_DIVIDE:
                         // 检查除零
                         if (rhs_int == 0) {
-                            throw std::runtime_error("Division by zero");
+                            throw RMDBError("Division by zero");
                         }
                         // 注意：整数除法结果也是整数
                         res_int = lhs_int / rhs_int;
                         break;
                     default:
-                         throw std::runtime_error("Unsupported arithmetic operator");
+                         throw RMDBError("Unsupported arithmetic operator");
                 }
                  result.set_int(res_int);
             } else {
                 // 不支持的操作数类型（例如字符串）
-                throw std::runtime_error("Unsupported operand types for arithmetic operation");
+                throw RMDBError("Unsupported operand types for arithmetic operation");
             }
             return result;
         }
         default:
-            throw std::runtime_error("Unknown expression term type");
+            throw RMDBError("Unknown expression term type");
     }
 }

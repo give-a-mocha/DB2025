@@ -188,11 +188,11 @@ class UpdateExecutor : public AbstractExecutor {
                         }
                     }
                     if (!rhs_col_meta) {
-                         throw std::runtime_error("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
+                         throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
                     }
                     value = GetColumnValue(*old_rec, *rhs_col_meta);
                 } else {
-                     throw std::runtime_error("Unsupported SetRhsType");
+                     throw RMDBError("Unsupported SetRhsType");
                 }
 
                 // 处理类型转换 (使用计算或获取到的 value.type)

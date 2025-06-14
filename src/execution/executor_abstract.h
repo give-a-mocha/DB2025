@@ -186,7 +186,7 @@ class AbstractExecutor {
                 rhs_len = rhs_expr_val.raw->size;
                 break;
             default:
-                throw std::runtime_error("Unsupported ConditionRhsType");
+                throw RMDBError("Unsupported ConditionRhsType");
         }
 
         // 类型应该一致
