@@ -150,34 +150,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             }
         }
 
-        INFO("检查查询列");
-        for(const auto &col : query->cols) {
-            if(col.agg_type == AggregateType::NONE) {
-                ERROR(col.to_string());
-            } else {
-                switch (col.agg_type){
-                    case AggregateType::COUNT:
-                        INFO(col.to_string());
-                        INFO("COUNT: {}", col.to_string());
-                        break;
-                    case AggregateType::SUM:
-                        INFO("SUM: {}", col.to_string());
-                        break;
-                    case AggregateType::AVG:
-                        INFO("AVG: {}", col.to_string());
-                        break;
-                    case AggregateType::MAX:
-                        INFO("MAX: {}", col.to_string());
-                        break;
-                    case AggregateType::MIN:
-                        INFO("MIN: {}", col.to_string());
-                        break;
-                    default:
-                        throw InternalError("Unknown aggregate type in column");
-                }
-            }
-        }
-
         // 处理WHERE条件子句
         get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
         check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性

@@ -193,10 +193,8 @@ class Portal {
                                                             TransactionManager *txn_mgr) {
         TRACE_FUNCTION
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
-            INFO("ProjectionPlan");
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
-            INFO("ScanPlan");
             if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC){
                 return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
             }else{
@@ -208,7 +206,6 @@ class Portal {
                 }
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
-            INFO("JoinPlan");
             std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr);
             std::unique_ptr<AbstractExecutor> right = convert_plan_executor(x->right_, context, txn_mgr);
             if (x->type == JoinType::SEMI_JOIN) {
@@ -219,19 +216,15 @@ class Portal {
                                                                 std::move(x->conds_));
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-            INFO("SortPlan");
             return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_,
                                                    x->is_desc_);
         } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
-            INFO("AggregatePlan");
             return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_,
                                                        x->agg_types_);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
-            INFO("GroupPlan");
             return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_,
                                                    x->group_cols_, x->having_conds_);
         } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
-            INFO("LimitPlan");
             return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr), x->offset_, x->count_);
         }
         return nullptr;
@@ -241,12 +234,10 @@ class Portal {
                                                                     int offset, std::vector<std::string> &join_tables) {
         TRACE_FUNCTION
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
-            INFO("ProjectionPlan");
             return std::make_unique<ExplainProjectExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->sel_cols_), offset, x->isStar_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
-            INFO("ScanPlan");
             join_tables.push_back(x->tab_name_);
             if (x->conds_.empty()) {
                 return std::make_unique<ExplainScanExecutor>(std::move(x->tab_name_), offset);
@@ -255,7 +246,6 @@ class Portal {
                 return std::make_unique<ExplainFilterExecutor>(std::move(res), std::move(x->conds_), offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
-            INFO("JoinPlan");
             std::vector<Condition> solve_conds;
             std::vector<Condition> conds;
             for (const auto &cond : x->conds_) {
@@ -299,15 +289,12 @@ class Portal {
                                                              std::move(x->conds_), offset);
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-            INFO("SortPlan");
             return std::make_unique<ExplainSortExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->sel_cols_), std::move(x->is_desc_), offset);
         } else if(auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
-            INFO("AggregatePlan");
             return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
-            INFO("GroupPlan");
             return std::make_unique<ExplainGroupExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->group_cols_), std::move(x->having_conds_), offset);

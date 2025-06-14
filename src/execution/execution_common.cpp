@@ -79,9 +79,6 @@ std::vector<Value> convert_record_to_values(
     const std::unique_ptr<RmRecord> &record, 
     const std::vector<ColMeta> &cols_
 ) {
-    if(record == nullptr) {
-        assert(0);
-    }
     std::vector<Value> values;
     for (const auto &col : cols_) {
         Value value;
@@ -140,14 +137,15 @@ std::unique_ptr<RmRecord> mvcc_get_record(
             break;
         }
     }
+    INFO("mvcc_get_record_while_end");
     auto write_set = context_->txn_->get_write_set();
     for(const auto &write_record : *write_set) {
         if(write_record->GetRid() == rid) {
             // 如果是当前事务的写操作，直接返回
             if(write_record->GetWriteType() == WType::INSERT_TUPLE) {
-                return std::make_unique<RmRecord>(write_record->GetRecord());
+                rec =  std::make_unique<RmRecord>(write_record->GetRecord());
             } else if(write_record->GetWriteType() == WType::UPDATE_TUPLE) {
-                return std::make_unique<RmRecord>(write_record->GetRecord());
+                rec = std::make_unique<RmRecord>(write_record->GetRecord());
             } else if(write_record->GetWriteType() == WType::DELETE_TUPLE) {
                 return nullptr; // 删除操作返回空
             }
@@ -213,6 +211,7 @@ bool mvcc_delete_record(
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
     context_->txn_->AppendUndoLog(undo_log);
+    INFO("mvcc_delete_record 成功");
     return true;
 }
 
