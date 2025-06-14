@@ -98,6 +98,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
 ) {
     INFO("mvcc_get_record");
     auto rec = fh_->get_record(rid, context_);
+    INFO("fd : {}, RID : page_no = {}, slot_no = {}",fh_->GetFd(), rid.page_no, rid.slot_no);
     auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
     while(pre_undo_link.has_value()){
         auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
@@ -157,6 +158,8 @@ Rid mvcc_insert_record(
     const std::vector<Value> &valus_
 ) {
     auto res = fh_->insert_record(buf, context_);
+    INFO("mvcc_insert_record");
+    INFO("fd : {}, RID : page_no = {}, slot_no = {}",fh_->GetFd(), res.page_no, res.slot_no);
     // 插入记录后，创建UndoLog
     UndoLog undo_log;
     undo_log.is_deleted_ = false;
