@@ -294,9 +294,6 @@ class Portal {
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
             return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
-        } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
-            // 直接处理子计划，不需要为LIMIT创建特殊的explain executor
-            return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
         }
         return nullptr;
     }
