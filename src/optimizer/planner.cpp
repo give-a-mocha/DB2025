@@ -206,24 +206,24 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     // 使用优化的连接顺序生成计划
     std::shared_ptr<Plan> plan = make_one_rel_optimized(query);
 
-    // plan = generate_group_plan(query, std::move(plan));
-    // plan = generate_aggregate_plan(query, std::move(plan));
+    plan = generate_group_plan(query, std::move(plan));
+    plan = generate_aggregate_plan(query, std::move(plan));
     // 处理orderby
     plan = generate_sort_plan(query, std::move(plan));
 
     // 处理limit
-    // auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-    // if (x->limit) {
-    //     int offset = 0;
-    //     int count = INT_MAX;
-    //     if (auto offset_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->offset)) {
-    //         offset = offset_val->val;
-    //     }
-    //     if (auto count_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->count)) {
-    //         count = count_val->val;
-    //     }
-    //     plan = std::make_shared<LimitPlan>(std::move(plan), offset, count);
-    // }
+    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
+    if (x->limit) {
+        int offset = 0;
+        int count = INT_MAX;
+        if (auto offset_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->offset)) {
+            offset = offset_val->val;
+        }
+        if (auto count_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->count)) {
+            count = count_val->val;
+        }
+        plan = std::make_shared<LimitPlan>(std::move(plan), offset, count);
+    }
 
     return plan;
 }
@@ -441,16 +441,23 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     // joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
     bool is_star = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)->cols.empty();
-    return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), sel_cols, is_star);
-
-    // select * 不做投影下推
-    if (is_star) {
+    bool is_count_star = false;
+    for(const auto &col : sel_cols) {
+        if(col.agg_type == AggregateType::COUNT && col.col_name == "*") {
+            // 如果是count(*)，则不做投影下推
+            is_count_star = true;
+            break;
+        }
+    }
+    // 如果是 * 或者 count(*)，则不需要投影下推
+    if (is_star || is_count_star) {
         return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), sel_cols, is_star);
     }
     // 保证投影列不重复
     std::vector<TabCol> project_cols;
     std::vector<TabCol> temp2;
     for (auto &col : sel_cols) {
+        TabCol col_copy = col;
         if (std::find(project_cols.begin(), project_cols.end(), col) == project_cols.end()) {
             project_cols.emplace_back(col);
         }
@@ -987,11 +994,21 @@ std::shared_ptr<Plan> Planner::build_projection_plan(
         }
         return x;
     } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
-        // 处理Limit节点，类似Sort节点的处理
+        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
+        return x;
+    } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
+        for(const auto &col : x->group_cols_) {
+            if (std::find(need_cols.begin(), need_cols.end(), col) == need_cols.end()) {
+                need_cols.emplace_back(col);
+            }
+        }
         x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         while (need_cols.size() > siz) {
             need_cols.pop_back();
         }
+        return x;
+    } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
+        x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         return x;
     } else {
         throw InternalError("Unexpected plan type in projection optimization");

@@ -92,7 +92,10 @@ struct TabCol {
      *
      * @return 格式为"表名.列名"的字符串
      */
-    std::string to_string() const { return get_tab_name() + "." + col_name; }
+    std::string to_string() const {
+        if(!col_alias.empty()) return col_alias;
+        return get_tab_name() + "." + col_name;
+    }
 
     void set_col_alias(const std::string &alias) { col_alias = alias; }
 

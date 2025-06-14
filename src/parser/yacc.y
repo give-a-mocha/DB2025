@@ -216,9 +216,9 @@ dml:
     {
         $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8, $9, $10);
     }
-    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_group_clause opt_having_conds opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8, $9);
+        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8, $9, $10, $11);
     };
 
 /* LIMIT子句 */

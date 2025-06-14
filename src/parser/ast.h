@@ -308,12 +308,13 @@ struct SelectStmt : public TreeNode {
 };
 
 struct ExplainStmt : public SelectStmt {
+
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
-                std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-                std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
+               std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
+               std::vector<std::shared_ptr<GroupBy>> group_, std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
+               std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
         : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_),
-                     std::vector<std::shared_ptr<GroupBy>>(), std::vector<std::shared_ptr<BinaryExpr>>(),
-                     std::move(orders_), std::move(limit_)) {}
+                     std::move(group_), std::move(having_conds_), std::move(orders_), std::move(limit_)) {}
 };
 
 // set enable_nestloop
