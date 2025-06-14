@@ -208,17 +208,17 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if(write_type == WType::INSERT_TUPLE) {
             handle->delete_record(rid, context);
-        }
-        //在版本链中删除insert的
-        std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
-        auto pageversion_info = version_info_.find(rid.page_no);
-        if (pageversion_info != version_info_.end()) {
-            // 如果存在版本信息，则删除对应的版本链接
-            std::unique_lock<std::shared_mutex> lock(pageversion_info->second->mutex_);
-            auto& prev_version = pageversion_info->second->prev_version_;
-            auto it = prev_version.find(rid.slot_no);
-            if (it != prev_version.end()) {
-                prev_version.erase(it); // 删除对应的版本链接
+            //在版本链中删除insert的
+            std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
+            auto pageversion_info = version_info_.find(rid.page_no);
+            if (pageversion_info != version_info_.end()) {
+                // 如果存在版本信息，则删除对应的版本链接
+                std::unique_lock<std::shared_mutex> lock(pageversion_info->second->mutex_);
+                auto& prev_version = pageversion_info->second->prev_version_;
+                auto it = prev_version.find(rid.slot_no);
+                if (it != prev_version.end()) {
+                    prev_version.erase(it); // 删除对应的版本链接
+                }
             }
         }
     }
