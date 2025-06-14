@@ -120,8 +120,9 @@ class MvccUpdateExecutor : public AbstractExecutor {
                     }
                 }
 
-                // 更新新记录中的值
-                value.init_raw(col->len);
+                value.raw.reset(); // 确保 raw 数据被重置
+                value.init_raw(col->len); // 确保 raw 数据被初始化
+                
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
             mvcc_update_record(rids_[i], new_rec, old_rec, context_, txn_mgr_, tab_.cols, std::move(is_modify));

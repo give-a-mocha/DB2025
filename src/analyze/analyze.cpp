@@ -228,6 +228,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
+        if (!sm_manager_->db_.is_table(x->tab_name->tab_name)) {           // 检查表是否存在
+            throw TableNotFoundError(x->tab_name->tab_name);
+        }
         query->tables.push_back(x->tab_name->tab_name);
         // 获取相关表的所有列，用于后续校验
         std::vector<ColMeta> all_cols;
@@ -239,8 +242,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
             set_clause.lhs.tab_name = x->tab_name->tab_name;         // 设置左侧列的表名
-            set_clause.lhs.col_name = sv_set_clause->col_name;      // 设置左侧列名
             set_clause.lhs.tab_alias = x->tab_name->alias;           // 设置左侧列的别名
+            set_clause.lhs.col_name = sv_set_clause->col_name;      // 设置左侧列名
             
             auto rhs_term = AnalyzeExprTerm(sv_set_clause->val, all_cols, tab_refs);
             if (rhs_term->term_type == TermType::VALUE) {
@@ -266,7 +269,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         for (auto &set_clause : query->set_clauses) {
             set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
 
-            // 仅当右侧是值时，才进行类型兼容性检查和 init_raw
             if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
                 TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
                 auto col = tab.get_col(set_clause.lhs.col_name);
@@ -277,6 +279,14 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
                 }
                 set_clause.rhs_val.init_raw(col->len);  // 初始化值的原始数据
+            } else if(set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
+                // 检查右侧列是否存在
+                set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
+                // 验证聚合函数类型与列类型兼容
+            } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
+                std::shared_ptr<ExprTerm> temp = std::make_shared<ExprTerm>(set_clause.rhs_expr);
+                CheckArithExprType(temp, all_cols);
+                set_clause.rhs_expr = std::move(temp->expr);
             }
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {  // 处理DELETE查询
@@ -807,23 +817,18 @@ std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Ex
         throw InternalError("Null expression encountered during analysis");
     }
 
-    // Case 1: Constant Value
     if (auto sv_val = std::dynamic_pointer_cast<ast::Value>(ast_expr)) {
         Value common_val = convert_sv_value(sv_val);
         return std::make_shared<ExprTerm>(common_val);
     }
-    // Case 2: Column Reference
     else if (auto sv_col = std::dynamic_pointer_cast<ast::Col>(ast_expr)) {
         TabCol common_col = {"", sv_col->col_name, sv_col->tab_name};
         common_col.set_col_alias(sv_col->alias);
-        common_col.set_agg_type(sv_col->aggregate_type); // Keep aggregate info if present
+        common_col.set_agg_type(sv_col->aggregate_type);
         convert_tabname(all_cols, common_col, tab_refs);
-        // We might not need check_column here if convert_tabname already validates sufficiently,
-        // but keeping it ensures robustness. Revisit if performance becomes an issue.
         check_column(all_cols, common_col);
         return std::make_shared<ExprTerm>(common_col);
     }
-    // Case 3: Arithmetic Expression (Recursive Step)
     else if (auto sv_arith_expr = std::dynamic_pointer_cast<ast::ArithExpr>(ast_expr)) {
         auto lhs_term = AnalyzeExprTerm(sv_arith_expr->lhs, all_cols, tab_refs);
         auto rhs_term = AnalyzeExprTerm(sv_arith_expr->rhs, all_cols, tab_refs);
@@ -842,7 +847,7 @@ std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Ex
  * @param all_cols 所有相关表的列元数据
  * @throw IncompatibleTypeError 如果发现非数值类型
  */
-void Analyze::CheckArithExprType(const std::shared_ptr<ExprTerm>& term, const std::vector<ColMeta>& all_cols) {
+void Analyze::CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta>& all_cols) {
     if (!term) {
         throw InternalError("Null expression term encountered during type checking");
     }

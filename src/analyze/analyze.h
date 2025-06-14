@@ -214,7 +214,7 @@ class Analyze {
      * @param all_cols 所有相关表的列元数据
      * @throw IncompatibleTypeError 如果发现非数值类型
      */
-    void CheckArithExprType(const std::shared_ptr<ExprTerm>& term, const std::vector<ColMeta>& all_cols);
+    void CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta>& all_cols);
     /**
      * @brief 检查WHERE条件中是否包含聚合函数
      * @param conds WHERE子句的条件表达式集合
