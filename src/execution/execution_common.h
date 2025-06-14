@@ -45,7 +45,8 @@ Rid mvcc_insert_record(
 	Context *context_,
 	RmFileHandle *fh_,
 	TransactionManager *txn_mgr_,
-	const std::vector<Value> &valus_
+	const std::vector<Value> &valus_,
+	const std::vector<ColMeta> &cols_
 );
 
 bool mvcc_delete_record(

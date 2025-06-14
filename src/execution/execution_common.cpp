@@ -79,6 +79,9 @@ std::vector<Value> convert_record_to_values(
     const std::unique_ptr<RmRecord> &record, 
     const std::vector<ColMeta> &cols_
 ) {
+    if(record == nullptr) {
+        assert(0);
+    }
     std::vector<Value> values;
     for (const auto &col : cols_) {
         Value value;
@@ -105,7 +108,10 @@ std::unique_ptr<RmRecord> mvcc_get_record(
         //可见性检查
         //如果是自己修改的存下
         if(pre_undo_link.value().prev_txn_ == context_->txn_->get_transaction_id()) {
-            return rec;
+            if(undo_log.is_deleted_){
+                rec = nullptr;
+            }
+            break;
         }
         INFO("mvcc_get_record_while");
         // 如果是已提交事物
@@ -155,7 +161,8 @@ Rid mvcc_insert_record(
     Context *context_,
     RmFileHandle *fh_,
     TransactionManager *txn_mgr_,
-    const std::vector<Value> &valus_
+    const std::vector<Value> &valus_,
+    const std::vector<ColMeta> &cols_
 ) {
     auto res = fh_->insert_record(buf, context_);
     INFO("mvcc_insert_record");
@@ -167,7 +174,7 @@ Rid mvcc_insert_record(
     for (size_t i = 0; i < valus_.size(); ++i) {
         values[i] = valus_[i];
         if (!values[i].raw) {
-            values[i].init_raw(); // 确保每个Value都有原始数据缓冲区
+            values[i].init_raw(cols_[i].len); // 确保每个Value都有原始数据缓冲区
         }
     }
     undo_log.tuple_ = std::move(values);
