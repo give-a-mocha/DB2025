@@ -310,13 +310,28 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             } else if(set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                 // 检查右侧列是否存在
                 set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
-                // 验证聚合函数类型与列类型兼容
+                // 类型兼容校验：允许 INT↔FLOAT，其他必须完全一致
+                TabMeta &lhs_tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
+                auto l_col = lhs_tab.get_col(set_clause.lhs.col_name);
+                TabMeta &rhs_tab = sm_manager_->db_.get_table(set_clause.rhs_col.tab_name);
+                auto r_col = rhs_tab.get_col(set_clause.rhs_col.col_name);
+
+                bool is_numeric = (l_col->type == ColType::TYPE_INT || l_col->type == ColType::TYPE_FLOAT) &&
+                                  (r_col->type == ColType::TYPE_INT || r_col->type == ColType::TYPE_FLOAT);
+                if (l_col->type != r_col->type && !is_numeric) {
+                    throw IncompatibleTypeError(coltype2str(l_col->type), coltype2str(r_col->type));
+                }
             } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
                 std::shared_ptr<ExprTerm> temp = std::make_shared<ExprTerm>(set_clause.rhs_expr);
                 std::vector<ColMeta> ltable_cols;
                 get_all_cols({set_clause.lhs.tab_name}, ltable_cols);  // 获取左侧表的所有列
                 CheckArithExprType(temp, ltable_cols);
                 set_clause.rhs_expr = std::move(temp->expr);
+                TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
+                auto col = tab.get_col(set_clause.lhs.col_name);
+                if(col->type == ColType::TYPE_STRING) {
+                    throw IncompatibleTypeError(coltype2str(col->type), coltype2str(ColType::TYPE_FLOAT));
+                }
             }
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {  // 处理DELETE查询

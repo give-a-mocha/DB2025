@@ -181,7 +181,7 @@ Rid mvcc_insert_record(
     return res;
 }
 
-void mvcc_delete_record(
+bool mvcc_delete_record(
     const Rid &rid,
     Context *context_,
     RmFileHandle *fh_,
@@ -189,6 +189,9 @@ void mvcc_delete_record(
     const std::vector<ColMeta> &cols_
 ) {
     auto rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, cols_);
+    if(rec == nullptr) {
+        return false;
+    }
     UndoLog undo_log;
     undo_log.is_deleted_ = true;
     std::vector<Value> values = convert_record_to_values(rec, cols_);
@@ -203,6 +206,7 @@ void mvcc_delete_record(
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
     context_->txn_->AppendUndoLog(undo_log);
+    return true;
 }
 
 void mvcc_update_record(

@@ -56,10 +56,11 @@ class MvccDeleteExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         for (auto &rid : rids_) {
-            mvcc_delete_record(rid, context_, fh_, txn_mgr_, tab_.cols);
-            context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_name_, rid)
-            );
+            if(mvcc_delete_record(rid, context_, fh_, txn_mgr_, tab_.cols)){
+                context_->txn_->append_write_record(
+                    std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_name_, rid)
+                );
+            }
         }
         return nullptr;
     }

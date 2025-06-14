@@ -73,7 +73,7 @@ class ExplainSortExecutor : public AbstractExecutor {
                 res += " ASC";
             }
         }
-        res += "])";
+        res += "])\n";
 
         // 将解释写入输出文件
         std::fstream outfile;

@@ -118,7 +118,7 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
     std::vector<Condition> temp;
     for (auto &it : conds) {
         if (it.lhs_col.tab_name.compare(tab_name) == 0 &&
-            (it.rhs_type == ConditionRhsType::RHS_VALUE || it.rhs_type == ConditionRhsType::RHS_VALUE || it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
+            (it.rhs_type == ConditionRhsType::RHS_VALUE || it.rhs_type == ConditionRhsType::RHS_EXPR || it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
             solved_conds.emplace_back(std::move(it));
         } else {
             temp.emplace_back(std::move(it));

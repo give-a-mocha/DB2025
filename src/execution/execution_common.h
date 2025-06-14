@@ -48,7 +48,7 @@ Rid mvcc_insert_record(
 	const std::vector<Value> &valus_
 );
 
-void mvcc_delete_record(
+bool mvcc_delete_record(
 	const Rid &rid,
 	Context *context_,
 	RmFileHandle *fh_,
