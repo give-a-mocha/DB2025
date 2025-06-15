@@ -180,7 +180,11 @@ class AbstractExecutor {
                 // 计算表达式的值
                 // 注意：需要将 ArithExpr 包装在 ExprTerm 中传递
                 rhs_expr_val = EvaluateExpr(ExprTerm(cond.rhs_expr), *rec, rec_cols);
-                 // 检查计算结果的 raw 是否有效
+                // if(!rhs_expr_val.raw) {
+                //     ERROR("eval_cond::rhs_expr_val.raw is null at " + getType());
+                //     throw InternalError("eval_cond::rhs_expr_val.raw is null at " + getType());
+                // }
+                // 检查计算结果的 raw 是否有效
                 rhs_data = rhs_expr_val.raw->data;
                 rhs_type = rhs_expr_val.type;
                 rhs_len = rhs_expr_val.raw->size;
