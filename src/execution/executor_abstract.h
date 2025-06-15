@@ -185,6 +185,8 @@ class AbstractExecutor {
                 //     throw InternalError("eval_cond::rhs_expr_val.raw is null at " + getType());
                 // }
                 // 检查计算结果的 raw 是否有效
+                rhs_expr_val.raw.reset(); // 确保 raw 被正确初始化
+                rhs_expr_val.init_raw(); // 初始化 raw 缓冲区
                 rhs_data = rhs_expr_val.raw->data;
                 rhs_type = rhs_expr_val.type;
                 rhs_len = rhs_expr_val.raw->size;

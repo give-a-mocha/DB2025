@@ -260,7 +260,6 @@ void mvcc_update_record(
 Value GetColumnValue(const RmRecord &record, const ColMeta &col) {
     Value val;
     val.set_col_data(col.type, record.data + col.offset, col.len);
-    val.init_raw(col.len);
     return val;
 }
 
@@ -348,7 +347,6 @@ Value EvaluateExpr(const ExprTerm &term, const RmRecord &record, const std::vect
                 // 不支持的操作数类型（例如字符串）
                 throw RMDBError("Unsupported operand types for arithmetic operation");
             }
-            result.init_raw(); // 初始化原始数据缓冲区
             return result;
         }
         default:
