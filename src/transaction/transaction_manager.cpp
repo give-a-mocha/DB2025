@@ -107,12 +107,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
             continue;
         } else {
-            auto& fh_ = sm_manager_->fhs_.at(write_record->GetTableName());
-            INFO("获取锁");
-            bool ok = lock_manager_->lock_exclusive_on_record(txn, write_record->GetRid(), fh_->GetFd());
-            if(ok == false){
-                throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
-            }
             auto pre_undoLink = GetUndoLink(write_record->GetRid());
             if(pre_undoLink.has_value()) {
                 auto undoLog = GetUndoLog(pre_undoLink.value());

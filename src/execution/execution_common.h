@@ -61,6 +61,7 @@ void mvcc_update_record(
 	std::unique_ptr<RmRecord> &new_rec,
 	std::unique_ptr<RmRecord> &old_rec,
 	Context *context_,
+	RmFileHandle *fh_,
 	TransactionManager *txn_mgr_,
 	const std::vector<ColMeta> &cols_,
 	std::vector<bool> is_modify

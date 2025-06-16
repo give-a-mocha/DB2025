@@ -125,7 +125,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
-            mvcc_update_record(rids_[i], new_rec, old_rec, context_, txn_mgr_, tab_.cols, std::move(is_modify));
+            mvcc_update_record(rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, tab_.cols, std::move(is_modify));
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_name_, rids_[i], *new_rec)
             );

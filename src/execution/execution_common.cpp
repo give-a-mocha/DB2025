@@ -197,6 +197,10 @@ bool mvcc_delete_record(
     if(rec == nullptr) {
         return false;
     }
+    bool ok = txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
+    if(ok == false){
+        throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
+    }
     UndoLog undo_log;
     undo_log.is_deleted_ = true;
     std::vector<Value> values = convert_record_to_values(rec, cols_);
@@ -220,10 +224,16 @@ void mvcc_update_record(
     std::unique_ptr<RmRecord> &new_rec,
     std::unique_ptr<RmRecord> &old_rec,
     Context *context_,
+    RmFileHandle *fh_,
     TransactionManager *txn_mgr_,
     const std::vector<ColMeta> &cols_,
     std::vector<bool> is_modify
 ) {
+
+    bool ok = txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
+    if(ok == false){
+        throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
+    }
     std::vector<Value> values(cols_.size());
     for (size_t i = 0; i < cols_.size(); ++i) {
         if(is_modify[i] == false) {
