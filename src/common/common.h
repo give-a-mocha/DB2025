@@ -29,6 +29,12 @@ inline AggregateType SvAggregateType2AggregateType(ast::SvAggregateType sv_type)
     return types[static_cast<int>(sv_type)];
 }
 
+inline std::string coltype2str(ColType type) {
+    static std::string strs[] = {"INT", "FLOAT", "STRING"};
+    assert(type >= ColType::TYPE_INT && type <= ColType::TYPE_STRING);
+    return strs[static_cast<int>(type)];
+}
+
 /**
  * @brief 表列引用结构体，用于标识一个特定表中的列
  *
@@ -93,15 +99,13 @@ struct TabCol {
      * @return 格式为"表名.列名"的字符串
      */
     std::string to_string() const {
-        if(!col_alias.empty()) return col_alias;
+        if (!col_alias.empty()) return col_alias;
         return get_tab_name() + "." + col_name;
     }
 
     void set_col_alias(const std::string &alias) { col_alias = alias; }
 
-    void set_agg_type(ast::SvAggregateType agg_type_) {
-        agg_type = SvAggregateType2AggregateType(agg_type_);
-    }
+    void set_agg_type(ast::SvAggregateType agg_type_) { agg_type = SvAggregateType2AggregateType(agg_type_); }
 };
 
 /**
@@ -351,27 +355,17 @@ struct Value {
     }
 };
 
-/**
- * @brief 算术操作符枚举
- */
-enum ArithOp { OP_PLUS, OP_MINUS, OP_MULTIPLY, OP_DIVIDE };
-
 // 前向声明 ArithExpr
 struct ArithExpr;
-
-/**
- * @brief 表达式项类型枚举
- */
-enum class TermType { VALUE, COLUMN, EXPR }; // 支持嵌套表达式
 
 /**
  * @brief 表达式中的一个项，可以是值、列或另一个算术表达式
  */
 struct ExprTerm {
     TermType term_type;
-    Value val;                           // 当 term_type == TermType::VALUE 时使用
-    TabCol col;                          // 当 term_type == TermType::COLUMN 时使用
-    std::shared_ptr<ArithExpr> expr;     // 当 term_type == TermType::EXPR 时使用
+    Value val;                        // 当 term_type == TermType::VALUE 时使用
+    TabCol col;                       // 当 term_type == TermType::COLUMN 时使用
+    std::shared_ptr<ArithExpr> expr;  // 当 term_type == TermType::EXPR 时使用
 
     // 构造函数
     ExprTerm(Value v) : term_type(TermType::VALUE), val(std::move(v)) {}
@@ -402,14 +396,13 @@ struct ExprTerm {
     }
 };
 
-
 /**
  * @brief 算术表达式结构体
  */
 struct ArithExpr {
-    std::shared_ptr<ExprTerm> lhs; // 左操作数
-    ArithOp op;                    // 操作符
-    std::shared_ptr<ExprTerm> rhs; // 右操作数
+    std::shared_ptr<ExprTerm> lhs;  // 左操作数
+    ArithOp op;                     // 操作符
+    std::shared_ptr<ExprTerm> rhs;  // 右操作数
 
     ArithExpr(std::shared_ptr<ExprTerm> l, ArithOp o, std::shared_ptr<ExprTerm> r)
         : lhs(std::move(l)), op(o), rhs(std::move(r)) {}
@@ -418,12 +411,17 @@ struct ArithExpr {
      * @brief 将操作符转换为字符串
      */
     std::string op_to_string() const {
-         switch (op) {
-            case ArithOp::OP_PLUS: return "+";
-            case ArithOp::OP_MINUS: return "-";
-            case ArithOp::OP_MULTIPLY: return "*";
-            case ArithOp::OP_DIVIDE: return "/";
-            default: return "?";
+        switch (op) {
+            case ArithOp::OP_PLUS:
+                return "+";
+            case ArithOp::OP_MINUS:
+                return "-";
+            case ArithOp::OP_MULTIPLY:
+                return "*";
+            case ArithOp::OP_DIVIDE:
+                return "/";
+            default:
+                return "?";
         }
     }
 
@@ -448,15 +446,7 @@ struct ArithExpr {
 };
 
 // 实现 ExprTerm 中的辅助函数
-inline std::string ExprTerm::arith_expr_to_string() const {
-    return expr ? expr->to_string() : "[null expr]";
-}
-
-
-/**
- * @brief 条件表达式右侧操作数类型枚举
- */
-enum ConditionRhsType { RHS_VALUE, RHS_COLUMN, RHS_EXPR };
+inline std::string ExprTerm::arith_expr_to_string() const { return expr ? expr->to_string() : "[null expr]"; }
 
 /**
  * @brief 条件表达式结构体，表示WHERE子句或JOIN条件中的一个条件
@@ -464,12 +454,12 @@ enum ConditionRhsType { RHS_VALUE, RHS_COLUMN, RHS_EXPR };
  * 支持两种形式的条件：列与值的比较(如col = 10)和列与列的比较(如t1.col = t2.col)
  */
 struct Condition {
-    TabCol lhs_col;                      // 左侧列引用
-    CompOp op;                           // 比较操作符
-    ConditionRhsType rhs_type;           // 右侧操作数类型
-    TabCol rhs_col;                      // 右侧列引用 (当 rhs_type == RHS_COLUMN 时有效)
-    Value rhs_val;                       // 右侧值 (当 rhs_type == RHS_VALUE 时有效)
-    std::shared_ptr<ArithExpr> rhs_expr; // 右侧算术表达式 (当 rhs_type == RHS_EXPR 时有效)
+    TabCol lhs_col;                       // 左侧列引用
+    CompOp op;                            // 比较操作符
+    ConditionRhsType rhs_type;            // 右侧操作数类型
+    TabCol rhs_col;                       // 右侧列引用 (当 rhs_type == RHS_COLUMN 时有效)
+    Value rhs_val;                        // 右侧值 (当 rhs_type == RHS_VALUE 时有效)
+    std::shared_ptr<ArithExpr> rhs_expr;  // 右侧算术表达式 (当 rhs_type == RHS_EXPR 时有效)
 
     /**
      * @brief 将条件转换为字符串表示形式
@@ -500,8 +490,8 @@ struct Condition {
         };
 
         // 构造条件字符串
-        std::string res = lhs_col.to_string(); // 左侧列名
-        res += compOp2String(op);              // 添加操作符
+        std::string res = lhs_col.to_string();  // 左侧列名
+        res += compOp2String(op);               // 添加操作符
 
         // 根据右侧类型添加相应内容
         switch (rhs_type) {
@@ -539,19 +529,14 @@ struct JoinNode {
 };
 
 /**
- * @brief SET子句右侧操作数类型枚举
- */
-enum SetRhsType { SET_RHS_VALUE, SET_RHS_EXPR, SET_RHS_COL };
-
-/**
  * @brief SET子句结构体，用于UPDATE语句
  */
 struct SetClause {
-    TabCol lhs;                          // 要更新的列
-    SetRhsType rhs_type;                 // 右侧操作数类型
-    Value rhs_val;                       // 右侧值 (当 rhs_type == SET_RHS_VALUE 时有效)
+    TabCol lhs;           // 要更新的列
+    SetRhsType rhs_type;  // 右侧操作数类型
+    Value rhs_val;        // 右侧值 (当 rhs_type == SET_RHS_VALUE 时有效)
     TabCol rhs_col;
-    std::shared_ptr<ArithExpr> rhs_expr; // 右侧算术表达式 (当 rhs_type == RHS_EXPR 时有效)
+    std::shared_ptr<ArithExpr> rhs_expr;  // 右侧算术表达式 (当 rhs_type == RHS_EXPR 时有效)
 };
 
 struct OrderbyInfo {

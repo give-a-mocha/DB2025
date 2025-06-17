@@ -38,6 +38,17 @@ struct Rid {
     friend bool operator!=(const Rid &x, const Rid &y) { return !(x == y); }
 };
 
+class RecScan {
+   public:
+    virtual ~RecScan() = default;
+
+    virtual void next() = 0;
+
+    virtual bool is_end() const = 0;
+
+    virtual Rid rid() const = 0;
+};
+
 enum class ColType { TYPE_INT, TYPE_FLOAT, TYPE_STRING };
 
 enum class AggregateType { NONE, COUNT, SUM, AVG, MAX, MIN };
@@ -65,19 +76,22 @@ enum class JoinType {
     SEMI_JOIN    // 半连接
 };
 
-inline std::string coltype2str(ColType type) {
-    static std::string strs[] = {"INT", "FLOAT", "STRING"};
-    assert(type >= ColType::TYPE_INT && type <= ColType::TYPE_STRING);
-    return strs[static_cast<int>(type)];
-}
+/**
+ * @brief 算术操作符枚举
+ */
+enum ArithOp { OP_PLUS, OP_MINUS, OP_MULTIPLY, OP_DIVIDE };
 
-class RecScan {
-   public:
-    virtual ~RecScan() = default;
+/**
+ * @brief 表达式项类型枚举
+ */
+enum class TermType { VALUE, COLUMN, EXPR };  // 支持嵌套表达式
 
-    virtual void next() = 0;
+/**
+ * @brief 条件表达式右侧操作数类型枚举
+ */
+enum ConditionRhsType { RHS_VALUE, RHS_COLUMN, RHS_EXPR };
 
-    virtual bool is_end() const = 0;
-
-    virtual Rid rid() const = 0;
-};
+/**
+ * @brief SET子句右侧操作数类型枚举
+ */
+enum SetRhsType { SET_RHS_VALUE, SET_RHS_EXPR, SET_RHS_COL };
