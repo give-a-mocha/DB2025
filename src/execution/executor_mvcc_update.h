@@ -67,8 +67,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
 
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
+            if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
+                continue;
+            }
             // 获取旧记录并创建新记录
-            auto old_rec = fh_->get_record(rid, context_);
+            auto old_rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, tab_.cols);
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 

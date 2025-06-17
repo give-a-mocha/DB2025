@@ -236,7 +236,7 @@ void mvcc_delete_record(
     TRACE_FUNCTION
     if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) return ;
     
-    auto rec = fh_->get_record(rid, context_);
+    auto rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, tab_.cols);
     UndoLog undo_log;
     undo_log.is_deleted_ = true;
     std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
@@ -268,6 +268,7 @@ void mvcc_update_record(
     std::vector<bool> is_modify
 ) {
     TRACE_FUNCTION
+    // 在传入已经进行检查，但是这里保留检查
     if(check_conflict(context_->txn_, txn_mgr_, fh_, rid)) return ;
 
     std::vector<Value> values(tab_.cols.size());
