@@ -372,3 +372,69 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 
     return is_erase > 0;
 }
+
+bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
+    std::unique_lock<std::mutex> lock(latch_);
+
+    if (txn->get_state() == TransactionState::SHRINKING ||
+        txn->get_state() == TransactionState::COMMITTED ||
+        txn->get_state() == TransactionState::ABORTED) {
+        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
+    }
+    if (txn->get_state() == TransactionState::DEFAULT) {
+        txn->set_state(TransactionState::GROWING);
+    }
+
+    auto queue_it = gap_lock_table_.find(tab_fd);
+    if (queue_it == gap_lock_table_.end()) {
+        queue_it = gap_lock_table_.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(tab_fd),
+            std::forward_as_tuple() 
+        ).first;
+    }
+    GapLockRequestQueue& request_queue = queue_it->second;
+    request_queue.request_queue_.emplace_back(txn->get_transaction_id(), std::move(conds));
+    txn->get_lock_gap_set()->insert(tab_fd);
+    return true;
+}
+
+std::vector<Condition> LockManager::get_gap_condition(int tab_fd) {
+    std::unique_lock<std::mutex> lock(latch_);
+    std::vector<Condition> gap_conditions;
+    auto table_queue_it = gap_lock_table_.find(tab_fd);
+    if (table_queue_it == gap_lock_table_.end()) {
+        return std::move(gap_conditions);
+    }
+    GapLockRequestQueue& request_queue = table_queue_it->second;
+    for(const auto& gap_request : request_queue.request_queue_) {
+        gap_conditions.insert(gap_conditions.end(), gap_request.conds.begin(), gap_request.conds.end());
+    }
+    return std::move(gap_conditions);
+}
+
+bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
+    std::unique_lock<std::mutex> lock(latch_);
+
+    auto table_queue_it = gap_lock_table_.find(tab_fd);
+    if (table_queue_it == gap_lock_table_.end()) {
+        txn->get_lock_gap_set()->erase(tab_fd);
+        return false; 
+    }
+
+    GapLockRequestQueue& request_queue = table_queue_it->second;
+    for(auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end(); ) {
+        if (it->txn_id_ == txn->get_transaction_id()) {
+            it = request_queue.request_queue_.erase(it);
+            break;
+        } else {
+            ++it;
+        }
+    }
+    txn->get_lock_gap_set()->erase(tab_fd);
+    if (request_queue.request_queue_.empty()) {
+        gap_lock_table_.erase(table_queue_it);
+    }
+
+    return true;
+}

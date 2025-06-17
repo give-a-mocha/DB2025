@@ -13,8 +13,11 @@ See the Mulan PSL v2 for more details. */
 #include <condition_variable>
 #include <mutex>
 #include <unordered_map>
+#include <list>
 
 #include "transaction/transaction.h"
+#include "transaction/txn_defs.h"
+#include "common/common.h"
 
 static const std::string GroupLockModeStr[10] = {"NON_LOCK", "IS", "IX", "S", "X", "SIX"};
 
@@ -45,12 +48,24 @@ class LockManager {
         // 加锁队列的锁模式
         GroupLockMode group_lock_mode_ = GroupLockMode::NON_LOCK;
     };
+
+    // GapLockRequest is now defined in "transaction/txn_defs.h"
+
+    /* 数据表上的间隙锁队列 */
+    class GapLockRequestQueue {
+    public:
+        // 间隙锁加锁队列
+        std::list<GapLockRequest> request_queue_;
+    };
     
 private:
     // 用于锁表的并发
     std::mutex latch_;
     // 全局锁表
     std::unordered_map<LockDataId, LockRequestQueue> lock_table_;
+    // 全局间隙锁表, key 为 fd_
+    std::unordered_map<int, GapLockRequestQueue> gap_lock_table_;
+    
 public:
     LockManager() {}
 
@@ -69,4 +84,10 @@ public:
     bool lock_IX_on_table(Transaction* txn, int tab_fd);
 
     bool unlock(Transaction* txn, LockDataId lock_data_id);
+
+    bool lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds);
+
+    std::vector<Condition> get_gap_condition(int tab_fd);
+
+    bool unlock_gap(Transaction* txn, int tab_fd);
 };

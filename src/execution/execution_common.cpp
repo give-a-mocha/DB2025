@@ -156,11 +156,10 @@ std::unique_ptr<RmRecord> mvcc_get_record(
             }
             for(size_t i = 0; i < cols_.size(); i++) {
                 if(undo_log.modified_fields_[i]){
-                    Value val = undo_log.tuple_[i];
-                    if(!val.raw) {
-                        val.init_raw(cols_[i].len);
+                    if(!undo_log.tuple_[i].raw) {
+                        undo_log.tuple_[i].init_raw(cols_[i].len);
                     }
-                    memcpy(rec->data + cols_[i].offset, val.raw->data, cols_[i].len);
+                    memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
                 }
             }
             
@@ -199,10 +198,8 @@ Rid mvcc_insert_record(
 ) {
     TRACE_FUNCTION
     auto rid = fh_->insert_record(rec.data, context_);
-
     //加锁
     txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
-    
     INFO("mvcc_insert_record");
     INFO("fd : {}, RID : page_no = {}, slot_no = {}",fh_->GetFd(), rid.page_no, rid.slot_no);
     // 插入记录后，创建UndoLog
@@ -235,8 +232,6 @@ void mvcc_delete_record(
     TransactionManager *txn_mgr_
 ) {
     TRACE_FUNCTION
-    if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) return ;
-    
     auto rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, tab_.cols);
     UndoLog undo_log;
     undo_log.is_deleted_ = true;
@@ -269,9 +264,6 @@ void mvcc_update_record(
     std::vector<bool> is_modify
 ) {
     TRACE_FUNCTION
-    // 在传入已经进行检查，但是这里保留检查
-    if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) return ;
-
     std::vector<Value> values(tab_.cols.size());
     for (size_t i = 0; i < tab_.cols.size(); ++i) {
         if(is_modify[i] == false) {

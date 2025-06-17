@@ -129,6 +129,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
             mvcc_update_record(tab_, rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, std::move(is_modify));
+            txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         }
         return nullptr;
     }

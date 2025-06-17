@@ -87,6 +87,17 @@ class MvccInsertExecutor : public AbstractExecutor {
         }
 
         // 插入记录到文件
+        std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd());
+
+        ERROR("conds size : {}", conds.size());
+
+        for(const auto &cond : conds) {
+            INFO("conditon : {}", cond.to_string());
+        }
+
+        if(!conds.empty() && eval_conds(tab_.cols, conds, &rec)){
+            throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+        }
         rid_ = mvcc_insert_record(tab_, rec, context_, fh_, txn_mgr_, values_);   
         return nullptr;
     }

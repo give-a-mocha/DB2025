@@ -76,6 +76,8 @@ private:
     std::shared_ptr<std::deque<std::unique_ptr<WriteRecord>>> write_set_;
     // 事务申请的所有锁
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set_;
+
+    std::shared_ptr<std::unordered_set<int>> lock_gap_set_;
     // 维护事务执行过程中加锁的索引页面
     std::shared_ptr<std::deque<Page *>> index_latch_page_set_;
     // 维护事务执行过程中删除的索引页面
@@ -102,6 +104,8 @@ public:
         write_set_ = std::make_shared<std::deque<std::unique_ptr<WriteRecord>>>();
         /* 初始化事务持有的锁集合 */
         lock_set_ = std::make_shared<std::unordered_set<LockDataId>>();
+
+        lock_gap_set_ = std::make_shared<std::unordered_set<int>>();
         /* 初始化事务中使用的索引页面集合（加锁的索引页面） */
         index_latch_page_set_ = std::make_shared<std::deque<Page *>>();
         /* 初始化事务中删除的索引页面集合 */
@@ -151,6 +155,8 @@ public:
     inline void append_index_latch_page_set(Page *page) { index_latch_page_set_->push_back(page); }
 
     inline std::shared_ptr<std::unordered_set<LockDataId>> get_lock_set() { return lock_set_; }
+
+    inline std::shared_ptr<std::unordered_set<int>> get_lock_gap_set() { return lock_gap_set_; }
 
     inline timestamp_t get_read_ts() const { return read_ts_; }
 

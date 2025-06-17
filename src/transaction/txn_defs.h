@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/config.h"
 #include "defs.h"
 #include "record/rm_defs.h"
+#include "common/common.h" // Ensure Value is available
 
 /* 标识事务状态 */
 enum class TransactionState { DEFAULT, GROWING, SHRINKING, COMMITTED, ABORTED };
@@ -154,4 +155,14 @@ class TransactionAbortException : public std::exception {
             } break;
         }
     }
+};
+
+// Definition for GapLockRequest
+// Needs Value from common.h and txn_id_t from this file.
+// common.h should be included before this point if not already.
+struct GapLockRequest {
+    txn_id_t txn_id_;
+    std::vector<Condition> conds;
+    GapLockRequest(txn_id_t txn_id, std::vector<Condition> conds)
+        : txn_id_(txn_id), conds(std::move(conds)) {}
 };
