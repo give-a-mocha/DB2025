@@ -104,9 +104,10 @@ bool check_conflict(
     
     auto pre_undo_link = txn_mgr->GetUndoLink(rid);
     if(pre_undo_link.has_value()) {
+        auto pre_txn = pre_undo_link.value().prev_txn_;
         auto undo_log = txn_mgr->GetUndoLog(pre_undo_link.value());
         // 检查是否有已提交事务更新它且提交时间大于当前事务读时间
-        if(txn_mgr->get_txn_state(pre_undo_link.value().prev_txn_) == TransactionState::COMMITTED && undo_log.ts_ > txn->get_read_ts()) {
+        if(txn_mgr->get_txn_state(pre_txn) == TransactionState::COMMITTED && undo_log.ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
         
@@ -269,7 +270,7 @@ void mvcc_update_record(
 ) {
     TRACE_FUNCTION
     // 在传入已经进行检查，但是这里保留检查
-    if(check_conflict(context_->txn_, txn_mgr_, fh_, rid)) return ;
+    if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) return ;
 
     std::vector<Value> values(tab_.cols.size());
     for (size_t i = 0; i < tab_.cols.size(); ++i) {
