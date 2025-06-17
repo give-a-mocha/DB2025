@@ -101,24 +101,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 如果需要支持MVCC请在上述过程中添加代码
 
     ERROR("COMMIT 开始");
-    // 验证阶段
-    auto write_set = txn->get_write_set();
-    for(const auto& write_record : *write_set) {
-        if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
-            continue;
-        } else {
-            auto pre_undoLink = GetUndoLink(write_record->GetRid());
-            if(pre_undoLink.has_value()) {
-                auto undoLog = GetUndoLog(pre_undoLink.value());
-                if(undoLog.ts_ > txn->get_read_ts()){
-                    throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-                }
-            }
-        }
-    }
-    INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
-    // 提交阶段
-    ERROR("COMMIT 提交阶段");
     // MVCC: 分配提交时间戳
     txn->set_state(TransactionState::COMMITTED);
     timestamp_t commit_ts = INVALID_TS;
@@ -128,7 +110,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
     }
     int index = 0;
-    for(const auto& write_record : *write_set) {
+    for(const auto& write_record : *txn->get_write_set()) {
         INFO("COMMIT 写操作: {}, {}", write_record->GetWriteType(), write_record->GetTableName());
         auto undoLog = txn->GetUndoLog(index);
         undoLog.ts_ = commit_ts;
@@ -151,12 +133,12 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         index++;
     }
     INFO("COMMIT 提交阶段结束");
-    INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
     INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
-    
-    for (const LockDataId& lock : *lock_set) {
+
+    auto lock_set_copy = *lock_set; // 复制锁集合以避免迭代时修改
+    for (const LockDataId& lock : lock_set_copy) {
         ERROR("开始释放锁");
         lock_manager_->unlock(txn, lock);
     }
@@ -218,7 +200,9 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     }
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-    for (const LockDataId& lock : *lock_set) {
+    auto lock_set_copy = *lock_set; // 复制锁集合以避免迭代时修改
+    for (const LockDataId& lock : lock_set_copy) {
+        ERROR("开始释放锁");
         lock_manager_->unlock(txn, lock);
     }
     txn->clear();

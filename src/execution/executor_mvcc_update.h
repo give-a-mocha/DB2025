@@ -68,7 +68,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
             // 获取旧记录并创建新记录
-            auto old_rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, tab_.cols);
+            auto old_rec = fh_->get_record(rid, context_);
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 
@@ -125,10 +125,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
-            mvcc_update_record(rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, tab_.cols, std::move(is_modify));
-            context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_name_, rids_[i], *new_rec)
-            );
+            mvcc_update_record(tab_, rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, std::move(is_modify));
         }
         return nullptr;
     }

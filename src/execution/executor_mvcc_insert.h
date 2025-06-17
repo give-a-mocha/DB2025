@@ -87,8 +87,7 @@ class MvccInsertExecutor : public AbstractExecutor {
         }
 
         // 插入记录到文件
-        rid_ = mvcc_insert_record(rec.data, context_, fh_, txn_mgr_, values_, tab_.cols);   
-        context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_name_, rid_, rec));
+        rid_ = mvcc_insert_record(tab_, rec, context_, fh_, txn_mgr_, values_);   
         return nullptr;
     }
 

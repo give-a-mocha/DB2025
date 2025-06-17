@@ -38,14 +38,14 @@ struct UndoLink {
     bool IsValid() { return prev_txn_ != INVALID_TXN_ID; }
 };
 
-
+// 这里是创建跟当前操作相反的撤销日志
+// 对于insert操作需要创建delete
 struct UndoLog {
     /* 此日志是否为删除标记 */
     bool is_deleted_;
     /* 此撤销日志修改的字段 */
     std::vector<bool> modified_fields_;
-    //? 原注释/* 修改后的字段 */
-    /* 修改前的字段 */
+    /* 修改后的字段 */
     std::vector<Value> tuple_;
 
     RmRecord *tuple_test_;

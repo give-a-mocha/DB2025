@@ -41,30 +41,37 @@ std::unique_ptr<RmRecord> mvcc_get_record(
 );
 
 Rid mvcc_insert_record(
-	char *buf, 
+	const TabMeta &tab_,
+	RmRecord &rec,
 	Context *context_,
 	RmFileHandle *fh_,
 	TransactionManager *txn_mgr_,
-	const std::vector<Value> &valus_,
-	const std::vector<ColMeta> &cols_
+	const std::vector<Value> &valus_
 );
 
-bool mvcc_delete_record(
+void mvcc_delete_record(
+	const TabMeta &tab_,
 	const Rid &rid,
 	Context *context_,
 	RmFileHandle *fh_,
-	TransactionManager *txn_mgr_,
-	const std::vector<ColMeta> &cols_
+	TransactionManager *txn_mgr_
 );
 void mvcc_update_record(
+	const TabMeta &tab_,
 	const Rid &rid,
 	std::unique_ptr<RmRecord> &new_rec,
 	std::unique_ptr<RmRecord> &old_rec,
 	Context *context_,
 	RmFileHandle *fh_,
 	TransactionManager *txn_mgr_,
-	const std::vector<ColMeta> &cols_,
 	std::vector<bool> is_modify
+);
+
+bool check_conflict(
+	Transaction *txn,
+	TransactionManager *txn_mgr,
+	RmFileHandle *fh_,
+	const Rid &rid
 );
 
 /**
