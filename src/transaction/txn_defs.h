@@ -15,25 +15,13 @@ See the Mulan PSL v2 for more details. */
 #include "common/config.h"
 #include "defs.h"
 #include "record/rm_defs.h"
+#include "common/common.h" // Ensure Value is available
 
-/**
- * 事务状态的枚举类型
- * DEFAULT: 默认状态，事务初始化但尚未开始执行
- * GROWING: 增长阶段，事务可以获取新的锁但不释放任何锁
- * SHRINKING: 收缩阶段，事务可以释放锁但不能获取新锁（2PL协议的要求）
- * COMMITTED: 已提交状态，事务成功完成并确认所有修改
- * ABORTED: 已终止状态，事务执行失败，所有修改被回滚
- */
+/* 标识事务状态 */
 enum class TransactionState { DEFAULT, GROWING, SHRINKING, COMMITTED, ABORTED };
 
-/**
- * 事务隔离级别的枚举类型
- * READ_UNCOMMITTED: 读未提交，允许脏读，一个事务可以读取另一个事务未提交的数据
- * REPEATABLE_READ: 可重复读，确保在同一事务中多次读取同一数据得到相同结果，防止不可重复读
- * READ_COMMITTED: 读已提交，只允许读取已提交的数据，防止脏读但可能出现不可重复读和幻读
- * SERIALIZABLE: 可串行化，最高隔离级别，确保事务执行的结果与串行执行的结果相同，防止所有并发问题
- */
-enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE };
+/* 系统的隔离级别，当前赛题中为可串行化隔离级别 */
+enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE};
 
 /* 事务写操作类型，包括插入、删除、更新三种操作 */
 enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };
@@ -79,7 +67,6 @@ public:
     inline std::tuple<WType, const std::string &, const Rid &, const RmRecord &> GetAll() {
         return std::make_tuple(wtype_, tab_name_, rid_, record_);
     }
-
 };
 
 /* 多粒度锁，加锁对象的类型，包括记录和表 */
@@ -168,4 +155,14 @@ class TransactionAbortException : public std::exception {
             } break;
         }
     }
+};
+
+// Definition for GapLockRequest
+// Needs Value from common.h and txn_id_t from this file.
+// common.h should be included before this point if not already.
+struct GapLockRequest {
+    txn_id_t txn_id_;
+    std::vector<Condition> conds;
+    GapLockRequest(txn_id_t txn_id, std::vector<Condition> conds)
+        : txn_id_(txn_id), conds(std::move(conds)) {}
 };

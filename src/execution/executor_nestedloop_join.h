@@ -20,8 +20,8 @@ See the Mulan PSL v2 for more details. */
  */
 class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> left_;   // 外表执行器
-    std::unique_ptr<AbstractExecutor> right_;  // 内表执行器
+    std::unique_ptr<AbstractExecutor> left_;
+    std::unique_ptr<AbstractExecutor> right_;
     size_t len_;                               // 连接结果记录长度
     std::vector<ColMeta> cols_;                // 结果集列元数据
     std::vector<Condition> fed_conds_;         // 连接条件列表
@@ -85,10 +85,14 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         if (is_end()) return;
-        left_->nextTuple();
-        if (left_->is_end()) {
-            right_->nextTuple();
-            left_->beginTuple();
+        right_->nextTuple();
+        if (right_->is_end()) {
+            left_->nextTuple();
+            if(left_->is_end()) {
+                _is_end = true;
+                return;
+            }
+            right_->beginTuple();
         }
         find_record();
     }
@@ -116,7 +120,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
         // 检查空指针，如果任一记录为空则返回空指针
         if (!left_rec || !right_rec) {
-            WARN("One of the records is null at {}", getType());
+            std::cerr << "Error: One of the records is null at " + getType() << std::endl;
             return nullptr;
         }
 
@@ -149,16 +153,15 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     void find_record() {
         while (!is_end()) {
-            if (left_->is_end()) {
-                right_->nextTuple();
-                if (right_->is_end()) {
+            if (right_->is_end()) {
+                left_->nextTuple();
+                if (left_->is_end()) {
                     _is_end = true;
                     return;
                 }
-                left_->beginTuple();
+                right_->beginTuple();
                 continue;
             }
-
             auto left_rec = left_->Next();
             auto right_rec = right_->Next();
             if (!left_rec || !right_rec) {
@@ -172,7 +175,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             if (eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
-            left_->nextTuple();
+            right_->nextTuple();
         }
         _is_end = true;
     }

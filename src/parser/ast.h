@@ -25,6 +25,8 @@ enum SvCompOp { SV_OP_EQ, SV_OP_NE, SV_OP_LT, SV_OP_GT, SV_OP_LE, SV_OP_GE };
 
 enum OrderByDir { OrderBy_DEFAULT, OrderBy_ASC, OrderBy_DESC };
 
+enum SvArithOp { SV_ARITH_PLUS, SV_ARITH_MINUS, SV_ARITH_MULTIPLY, SV_ARITH_DIVIDE };
+
 enum SetKnobType { EnableNestLoop, EnableSortMerge };
 
 enum class SvAggregateType { NONE, COUNT, SUM, AVG, MAX, MIN };
@@ -157,6 +159,14 @@ struct BoolLit : public Value {
 
     BoolLit(bool val_) : val(val_) {}
 };
+// 表别名结构
+struct TableRef : public TreeNode {
+    std::string tab_name;
+    std::string alias;  // 表别名
+
+    TableRef(std::string tab_name_) : tab_name(std::move(tab_name_)), alias("") {}
+    TableRef(std::string tab_name_, std::string alias_) : tab_name(std::move(tab_name_)), alias(std::move(alias_)) {}
+};
 
 struct Col : public Expr {
     std::string tab_name;
@@ -187,11 +197,21 @@ struct Col : public Expr {
     }
 };
 
+// ArithExpr class to represent arithmetic expressions
+struct ArithExpr : public Expr {
+    std::shared_ptr<Expr> lhs;
+    SvArithOp op;
+    std::shared_ptr<Expr> rhs;
+
+    ArithExpr(std::shared_ptr<Expr> lhs_, SvArithOp op_, std::shared_ptr<Expr> rhs_)
+        : lhs(std::move(lhs_)), op(op_), rhs(std::move(rhs_)) {}
+};
+
 struct SetClause : public TreeNode {
     std::string col_name;
-    std::shared_ptr<Value> val;
+    std::shared_ptr<Expr> val; // Changed from Value to Expr
 
-    SetClause(std::string col_name_, std::shared_ptr<Value> val_)
+    SetClause(std::string col_name_, std::shared_ptr<Expr> val_) // Changed from Value to Expr
         : col_name(std::move(col_name_)), val(std::move(val_)) {}
 };
 
@@ -241,22 +261,13 @@ struct DeleteStmt : public TreeNode {
 };
 
 struct UpdateStmt : public TreeNode {
-    std::string tab_name;
+    std::shared_ptr<TableRef> tab_name;  // 使用TableRef以支持别名
     std::vector<std::shared_ptr<SetClause>> set_clauses;
     std::vector<std::shared_ptr<BinaryExpr>> conds;
 
-    UpdateStmt(std::string tab_name_, std::vector<std::shared_ptr<SetClause>> set_clauses_,
+    UpdateStmt(std::shared_ptr<TableRef> tab_name_, std::vector<std::shared_ptr<SetClause>> set_clauses_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_)
         : tab_name(std::move(tab_name_)), set_clauses(std::move(set_clauses_)), conds(std::move(conds_)) {}
-};
-
-// 表别名结构
-struct TableRef : public TreeNode {
-    std::string tab_name;
-    std::string alias;  // 表别名
-
-    TableRef(std::string tab_name_) : tab_name(std::move(tab_name_)), alias("") {}
-    TableRef(std::string tab_name_, std::string alias_) : tab_name(std::move(tab_name_)), alias(std::move(alias_)) {}
 };
 
 struct JoinExpr : public TreeNode {
@@ -297,12 +308,13 @@ struct SelectStmt : public TreeNode {
 };
 
 struct ExplainStmt : public SelectStmt {
+
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
-                std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-                std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
+               std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
+               std::vector<std::shared_ptr<GroupBy>> group_, std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
+               std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
         : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_),
-                     std::vector<std::shared_ptr<GroupBy>>(), std::vector<std::shared_ptr<BinaryExpr>>(),
-                     std::move(orders_), std::move(limit_)) {}
+                     std::move(group_), std::move(having_conds_), std::move(orders_), std::move(limit_)) {}
 };
 
 // set enable_nestloop

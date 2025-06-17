@@ -21,6 +21,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution_defs.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "execution/execution_common.h"
 
 /**
  * @brief 执行器抽象基类，定义查询执行引擎的核心接口
@@ -159,16 +160,39 @@ class AbstractExecutor {
         char *rhs_data;
         ColType rhs_type;
         int rhs_len = 0;
+        Value rhs_expr_val; // 用于存储表达式计算结果
 
-        if (cond.is_rhs_val) {
-            rhs_data = cond.rhs_val.raw->data;
-            rhs_type = cond.rhs_val.type;
-            rhs_len = cond.rhs_val.raw->size;
-        } else {
-            auto rhs_col = get_col(rec_cols, cond.rhs_col);
-            rhs_data = rec->data + rhs_col->offset;
-            rhs_type = rhs_col->type;
-            rhs_len = rhs_col->len;
+        // 根据 rhs_type 获取右侧操作数信息
+        switch (cond.rhs_type) {
+            case ConditionRhsType::RHS_VALUE:
+                rhs_data = cond.rhs_val.raw->data;
+                rhs_type = cond.rhs_val.type;
+                rhs_len = cond.rhs_val.raw->size;
+                break;
+            case ConditionRhsType::RHS_COLUMN: {
+                auto rhs_col = get_col(rec_cols, cond.rhs_col);
+                rhs_data = rec->data + rhs_col->offset;
+                rhs_type = rhs_col->type;
+                rhs_len = rhs_col->len;
+                break;
+            }
+            case ConditionRhsType::RHS_EXPR:
+                // 计算表达式的值
+                // 注意：需要将 ArithExpr 包装在 ExprTerm 中传递
+                rhs_expr_val = EvaluateExpr(ExprTerm(cond.rhs_expr), *rec, rec_cols);
+                // if(!rhs_expr_val.raw) {
+                //     ERROR("eval_cond::rhs_expr_val.raw is null at " + getType());
+                //     throw InternalError("eval_cond::rhs_expr_val.raw is null at " + getType());
+                // }
+                // 检查计算结果的 raw 是否有效
+                rhs_expr_val.raw.reset(); // 确保 raw 被正确初始化
+                rhs_expr_val.init_raw(); // 初始化 raw 缓冲区
+                rhs_data = rhs_expr_val.raw->data;
+                rhs_type = rhs_expr_val.type;
+                rhs_len = rhs_expr_val.raw->size;
+                break;
+            default:
+                throw RMDBError("Unsupported ConditionRhsType");
         }
 
         // 类型应该一致

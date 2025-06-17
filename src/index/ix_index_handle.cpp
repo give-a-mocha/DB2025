@@ -285,7 +285,6 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
     // 3. 把rid存入result参数中
     // 提示：使用完buffer_pool提供的page之后，记得unpin page；记得处理并发的上锁
 
-    std::lock_guard<std::mutex> lock(root_latch_);
     auto [leaf_node, root_is_latched] = find_leaf_page(key, Operation::FIND, transaction);
     Rid *rid;
     if (leaf_node->leaf_lookup(key, &rid)) {
@@ -592,6 +591,7 @@ bool IxIndexHandle::adjust_root(IxNodeHandle *old_root_node) {
             file_hdr_->root_page_ = new_root_node->get_page_no();
             new_root_node->page_hdr->parent = INVALID_PAGE_ID;  // 更新新根结点的父亲结点为无效
             buffer_pool_manager_->unpin_page(new_root_node->get_page_id(), true);
+            delete new_root_node;  // 释放新根结点内存
             release_node_handle(*old_root_node);
             return true;
         }
@@ -701,6 +701,7 @@ bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, 
 Rid IxIndexHandle::get_rid(const Iid &iid) const {
     IxNodeHandle *node = fetch_node(iid.page_no);
     if (iid.slot_no >= node->get_size()) {
+        buffer_pool_manager_->unpin_page(node->get_page_id(), false);
         delete node;  // 异常情况也要释放内存
         throw IndexEntryNotFoundError();
     }

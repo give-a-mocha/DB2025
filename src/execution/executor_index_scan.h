@@ -99,7 +99,7 @@ class IndexScanExecutor : public AbstractExecutor {
         for (auto &cond : conds_) {
             if (cond.lhs_col.tab_name != tab_name_) {
                 // lhs is on other table, now rhs must be on this table
-                assert(!cond.is_rhs_val && cond.rhs_col.tab_name == tab_name_);
+                assert(!(cond.rhs_type==ConditionRhsType::RHS_EXPR) && !(cond.rhs_type==ConditionRhsType::RHS_VALUE) && cond.rhs_col.tab_name == tab_name_);
                 // swap lhs and rhs
                 std::swap(cond.lhs_col, cond.rhs_col);
                 cond.op = swap_op(cond.op);
@@ -145,9 +145,11 @@ class IndexScanExecutor : public AbstractExecutor {
                     throw InternalError("Unsupported column type in index scan");
             }
             for (const auto &cond : fed_conds_) {
-                if (cond.lhs_col.col_name == col.name && cond.is_rhs_val) {
+                // 只使用右侧为常量值的条件来确定索引边界
+                if (cond.lhs_col.col_name == col.name && cond.rhs_type == ConditionRhsType::RHS_VALUE) {
                     switch (cond.op) {
                         case CompOp::OP_EQ: {
+                            // 因为 rhs_type == RHS_VALUE，所以可以直接使用 cond.rhs_val
                             if (Value::compare(cond.rhs_val, min_val, CompOp::OP_GT)) {
                                 min_val = cond.rhs_val;
                             }

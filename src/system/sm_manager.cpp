@@ -363,9 +363,9 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
     }
 
     // 2. 获取表的排他锁，确保当前没有其他事务在访问该表
-    if (context != nullptr) {
-        context->lock_mgr_->lock_exclusive_on_table(context->txn_, fhs_[tab_name]->GetFd());
-    }
+    // if (context != nullptr) {
+    //     context->lock_mgr_->lock_exclusive_on_table(context->txn_, fhs_[tab_name]->GetFd());
+    // }
 
     // 3. 获取表元数据
     TabMeta& tab_meta = db_.get_table(tab_name);
@@ -487,6 +487,7 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<std::s
     auto it = ihs_.find(index_name);
 
     if (it != ihs_.end()) {
+        // 如果已经打开从缓冲池中删掉，并关闭文件
         ix_manager_->drop_index(it->second.get());
         ihs_.erase(it);
     }

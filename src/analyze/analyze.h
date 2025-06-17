@@ -42,84 +42,6 @@
 #include "common/common.h"
 #include "parser/parser.h"
 #include "system/sm.h"
-
-/**
- * @brief 列检查器类，用于高效验证列引用的有效性
- *
- * 该类缓存列名信息，提供快速查找机制，用于检查列是否存在和解决列名歧义。
- * 预先构建映射表以提高查询效率，适用于大量列检查操作的场景。
- */
-class ColCheck {
-   private:
-    // 列名到表名的映射, bool判断是否重复
-    std::unordered_map<uint64, std::pair<std::string, bool>> cols;
-
-   public:
-    /**
-     * @brief 构造函数，预处理所有列信息建立索引
-     *
-     * @param all_cols 所有相关表的列元数据集合
-     */
-    ColCheck(const std::vector<ColMeta> &all_cols) {
-        TRACE_FUNCTION
-        for (const auto &col : all_cols) {
-            uint64 hashcode = getHashCode(col.name);
-            hashcode = getHashCode(col.tab_name, hashcode);
-
-            auto it = cols.find(hashcode);
-            if (it == cols.end()) {
-                cols.emplace(hashcode, std::make_pair(col.tab_name, false));
-            } else {
-                it->second.second = true;
-            }
-        }
-    }
-
-    /**
-     * @brief 检查给定的列引用是否有效，并解决表名推断
-     *
-     * 如果列引用中没有指定表名，则尝试推断；如果指定了表名，则验证其存在性。
-     * 遇到歧义或不存在的列时抛出相应异常。
-     *
-     * @param target_col 需要检查的目标列引用
-     * @return TabCol 处理后的列引用(可能添加了推断出的表名)
-     */
-    TabCol check(TabCol target_col) {
-        TRACE_FUNCTION
-        uint64 hashcode = getHashCode(target_col.col_name);
-
-        if (target_col.tab_name.empty()) {
-            auto it = cols.find(hashcode);
-
-            if (it == cols.end()) {
-                // 列名不存在
-                throw ColumnNotFoundError(target_col.col_name);
-            } else {
-                if (it->second.second) {
-                    // 列名重复，无法确定表名
-                    throw AmbiguousColumnError(target_col.col_name);
-                } else {
-                    target_col.tab_name = it->second.first;
-                }
-            }
-
-        } else {
-            hashcode = getHashCode(target_col.tab_name, hashcode);
-            // 情况2: 已指定表名，验证(表名,列名)对是否存在
-            auto it = cols.find(hashcode);
-            if (it == cols.end()) {
-                // 在指定表中未找到该列
-                throw ColumnNotFoundError(target_col.col_name);
-            }
-            if (it->second.second == true) {
-                // 在同一表中存在多个同名列(应该不会发生，但以防万一)
-                throw AmbiguousColumnError(target_col.col_name);
-            }
-        }
-        return target_col;  // 返回处理后的列引用
-    }
-};
-
 /**
  * @brief 查询对象类，表示经过语义分析的SQL语句
  */
@@ -242,14 +164,6 @@ class Analyze {
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
 
     /**
-     * @brief 使用自定义列检查器验证条件有效性
-     * @param tab_names 条件中涉及的表名列表
-     * @param conds 需要检查的条件表达式集合
-     * @param col_check 自定义列检查器
-     */
-    void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, ColCheck &col_check);
-
-    /**
      * @brief 将语法树中的值对象转换为系统内部的Value对象
      * @param sv_val 语法树中的值对象
      * @return 转换后的系统内部值对象
@@ -277,6 +191,30 @@ class Analyze {
      */
     JoinType convert_sv_join_type(ast::JoinType type);
 
+/**
+     * @brief 将语法树中的算术操作符转换为系统内部的 ArithOp
+     * @param op 语法树中的算术操作符
+     * @return 系统内部的 ArithOp 枚举值
+     */
+    ArithOp convert_sv_arith_op(ast::SvArithOp op);
+
+    /**
+     * @brief 递归分析语法树中的表达式节点 (Value, Col, ArithExpr) 并转换为 ExprTerm
+     * @param ast_expr 语法树中的表达式节点
+     * @param all_cols 所有相关表的列元数据
+     * @param tab_refs 查询涉及的表引用
+     * @return 转换后的 ExprTerm 对象
+     */
+    std::shared_ptr<ExprTerm> AnalyzeExprTerm(const std::shared_ptr<ast::Expr> &ast_expr,
+                                              const std::vector<ColMeta> &all_cols,
+                                              const std::vector<TabRef> &tab_refs);
+/**
+     * @brief 递归检查算术表达式中的项是否都是数值类型
+     * @param term 要检查的表达式项
+     * @param all_cols 所有相关表的列元数据
+     * @throw IncompatibleTypeError 如果发现非数值类型
+     */
+    void CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta>& all_cols);
     /**
      * @brief 检查WHERE条件中是否包含聚合函数
      * @param conds WHERE子句的条件表达式集合

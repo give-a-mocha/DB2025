@@ -54,3 +54,5 @@ lex.yy.hpp
 yacc.tab.cpp
 yacc.tab.h
 yacc.tab.hpp
+
+*.sql

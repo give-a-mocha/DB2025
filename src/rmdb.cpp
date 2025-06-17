@@ -48,7 +48,7 @@ auto ix_manager = std::make_unique<IxManager>(disk_manager.get(), buffer_pool_ma
 auto sm_manager =
     std::make_unique<SmManager>(disk_manager.get(), buffer_pool_manager.get(), rm_manager.get(), ix_manager.get());
 auto lock_manager = std::make_unique<LockManager>();
-auto txn_manager = std::make_unique<TransactionManager>(lock_manager.get(), sm_manager.get());
+auto txn_manager = std::make_unique<TransactionManager>(lock_manager.get(), sm_manager.get(), ConcurrencyMode::MVCC);
 auto planner = std::make_unique<Planner>(sm_manager.get());
 auto optimizer = std::make_unique<Optimizer>(sm_manager.get(), planner.get());
 auto ql_manager = std::make_unique<QlManager>(sm_manager.get(), txn_manager.get(), nullptr);
@@ -90,22 +90,7 @@ void SetTransaction(txn_id_t *txn_id, Context *context) {
     if (context->txn_ == nullptr || context->txn_->get_state() == TransactionState::COMMITTED ||
         context->txn_->get_state() == TransactionState::ABORTED) {
         context->txn_ = txn_manager->begin(nullptr, context->log_mgr_);
-
         *txn_id = context->txn_->get_transaction_id();
-        context->txn_->set_txn_mode(false);
-        // // std::cerr<< "DEBUG: Transaction ID updated to: " << *txn_id <<
-        // // std::endl; context->txn_->set_txn_mode(false);
-        // // 禁用事务：如果事务为空，则不创建新事务，这会使得后续操作因缺少事务对象而失败或跳过事务相关逻辑
-        // // if (context->txn_ == nullptr) {
-        // //     std::cerr << "DEBUG: Transaction is null and transaction creation "
-        // //                  "is disabled."
-        // //               << std::endl;
-        // // } else if (context->txn_->get_state() == TransactionState::COMMITTED ||
-        // //            context->txn_->get_state() == TransactionState::ABORTED) {
-        // //     std::cerr << "DEBUG: Transaction is already committed/aborted and "
-        // //                  "transaction creation is disabled."
-        // //               << std::endl;
-        // // }
     }
 }
 
@@ -189,7 +174,7 @@ void *client_handler(void *sock_fd) {
                     // 优化器
                     std::shared_ptr<Plan> plan = optimizer->plan_query(query, context.get());
                     // portal
-                    std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context.get());
+                    std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context.get(), txn_manager.get());
                     portal->run(portalStmt, ql_manager.get(), &txn_id, context.get());
                     portal->drop();
                 } catch (TransactionAbortException &e) {

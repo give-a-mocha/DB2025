@@ -42,6 +42,10 @@ using namespace ast;
 
 
 // 语句类型 - 所有返回TreeNode的语法规则
+%left '+' '-'
+%left '*' '/'
+
+// 语句类型 - 所有返回TreeNode的语法规则
 %type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
 %type <sv_limit> opt_limit_clause
 
@@ -54,7 +58,7 @@ using namespace ast;
 
 // 表达式和操作符
 %type <sv_comp_op> op                       // 比较操作符
-%type <sv_expr> expr                        // 表达式
+%type <sv_expr> expr term factor            // 表达式 (包括算术表达式)
 %type <sv_val> value                        // 值
 %type <sv_vals> valueList                   // 值列表
 
@@ -204,7 +208,7 @@ dml:
     {
         $$ = std::make_shared<DeleteStmt>($3, $4);
     }
-    |   UPDATE tbName SET setClauses optWhereClause  // 更新数据
+    |   UPDATE tableRef SET setClauses optWhereClause  // 更新数据
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
@@ -212,9 +216,9 @@ dml:
     {
         $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7, $8, $9, $10);
     }
-    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
+    |   EXPLAIN SELECT selector FROM tableList optJoinExprs optWhereClause opt_group_clause opt_having_conds opt_order_clause opt_limit_clause  // 查询数据(支持表别名，列别名，JOIN)
     {
-        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8, $9);
+        $$ = std::make_shared<ExplainStmt>($3, $5, $6, $7, $8, $9, $10, $11);
     };
 
 /* LIMIT子句 */
@@ -456,15 +460,47 @@ op:
     }
     ;
 
-/* 表达式 - 可以是值或列引用 */
+// 表达式 - 可以是值、列引用或算术表达式
 expr:
+        term
+    |   expr '+' term
+    {
+        // 需要在 ast.h 中定义 ArithExpr 和 SV_ARITH_PLUS
+        $$ = std::make_shared<ArithExpr>($1, SV_ARITH_PLUS, $3);
+    }
+    |   expr '-' term
+    {
+        // 需要在 ast.h 中定义 SV_ARITH_MINUS
+        $$ = std::make_shared<ArithExpr>($1, SV_ARITH_MINUS, $3);
+    }
+    ;
+
+term:
+        factor
+    |   term '*' factor
+    {
+        // 需要在 ast.h 中定义 SV_ARITH_MULTIPLY
+        $$ = std::make_shared<ArithExpr>($1, SV_ARITH_MULTIPLY, $3);
+    }
+    |   term '/' factor
+    {
+        // 需要在 ast.h 中定义 SV_ARITH_DIVIDE
+        $$ = std::make_shared<ArithExpr>($1, SV_ARITH_DIVIDE, $3);
+    }
+    ;
+
+factor:
         value                               // 值表达式
     {
         $$ = std::static_pointer_cast<Expr>($1);
     }
-    |   col                                 // 列表达式
+    |   col                                 // 列引用表达式
     {
         $$ = std::static_pointer_cast<Expr>($1);
+    }
+    |   '(' expr ')'                      // 括号表达式
+    {
+        $$ = $2; // Pass through the inner expression
     }
     ;
 
@@ -480,10 +516,11 @@ setClauses:
     }
     ;
 
-/* SET子句 - 列名=值 */
+// SET子句 - 列名=表达式
 setClause:
-        colName '=' value                   // 列名 = 新值
+        colName '=' expr                   // 列名 = 表达式 (可以是值、列或算术表达式)
     {
+        // 需要修改 ast.h 中的 SetClause 以接受 Expr 而不是 Value
         $$ = std::make_shared<SetClause>($1, $3);
     }
     ;
