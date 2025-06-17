@@ -163,14 +163,27 @@ void SmManager::flush_meta() {
 void SmManager::close_db() {
     //! DO
     auto&& db_name = db_.name_;
-    if (!is_dir(db_name)) {
-        throw DatabaseNotFoundError(db_name);
-    }
-    if (chdir(db_name.c_str()) < 0) {
-        throw UnixError();
+    if (chdir("..") >= 0) {
+        if (!is_dir(db_name)) {
+            throw DatabaseNotFoundError(db_name);
+        }
+        if (chdir(db_name.c_str()) < 0) {
+            throw UnixError();
+        }
     }
 
-    // 刷新元数据到磁盘
+    // 1. 先关闭所有表文件并确保数据写入磁盘
+    for (const auto& [table_name, file_handle] : fhs_) {
+        // 使用close_file_and_clear_buffer确保数据完全写入并清理缓冲区
+        rm_manager_->close_file_and_clear_buffer(file_handle.get());
+    }
+
+    // 2. 关闭所有索引文件
+    for (const auto& [index_name, index_handle] : ihs_) {
+        ix_manager_->close_index(index_handle.get());
+    }
+
+    // 3. 最后刷新并保存元数据
     flush_meta();
     //! 表文件和索引文件交给lru丢弃
     // 关闭所有的文件句柄
