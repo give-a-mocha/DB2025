@@ -30,3 +30,13 @@ void RecoveryManager::redo() {
 void RecoveryManager::undo() {
 
 }
+
+void RecoveryManager::create_static_check_point() {
+    // （1）停止接收新事务和正在运行事务
+	// （2）将仍保留在日志缓冲区中的内容写到日志文件中；
+	// （3）在日志文件中写入一个“检查点记录”；
+	// （4）将当前数据库缓冲区中的内容写到数据库中；
+	// （5）把日志文件中检查点记录的地址写到“重新启动文件”中。
+
+	
+}

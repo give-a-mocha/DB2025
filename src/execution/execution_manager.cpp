@@ -145,6 +145,9 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context, context->log_mgr_);
                 break;
+            } case PlanTag::T_Create_StaticCheckPoint: {
+                recovery_manager_->create_static_check_point();
+                break;
             }
             default:
                 throw InternalError("Unexpected field type");

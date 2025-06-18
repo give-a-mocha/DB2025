@@ -75,7 +75,11 @@ class Optimizer {
                 return std::make_shared<OtherPlan>(PlanTag::T_Transaction_commit, std::string());
             } else if (auto x = std::dynamic_pointer_cast<ast::TxnRollback>(query->parse)) {
                 return std::make_shared<OtherPlan>(PlanTag::T_Transaction_rollback, std::string());
+            } else if (auto x = std::dynamic_pointer_cast<ast::CreateStaticCheckpoint>(query->parse)){
+                // CreateStaticCheckpoint
+                return std::make_shared<OtherPlan>(PlanTag::T_Create_StaticCheckPoint, std::string());
             }
+
             // 3. 系统设置处理
             else if (auto x = std::dynamic_pointer_cast<ast::SetStmt>(query->parse)) {
                 return std::make_shared<SetKnobPlan>(x->set_knob_type_, x->bool_val_);

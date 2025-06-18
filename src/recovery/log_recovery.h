@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "log_manager.h"
 #include "storage/disk_manager.h"
 #include "system/sm_manager.h"
+#include "transaction/transaction_manager.h"
 
 class RedoLogsInPage {
    public:
@@ -31,11 +32,13 @@ private:
     DiskManager* disk_manager_;                  // 用来读写文件
     BufferPoolManager* buffer_pool_manager_;     // 对页面进行读写
     SmManager* sm_manager_;                      // 访问数据库元数据
+    TransactionManager* txn_mgr_;            // 事务管理器
 public:
-    RecoveryManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, SmManager* sm_manager) {
+    RecoveryManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, SmManager* sm_manager, TransactionManager* txn_mgr) {
         disk_manager_ = disk_manager;
         buffer_pool_manager_ = buffer_pool_manager;
         sm_manager_ = sm_manager;
+        txn_mgr_ = txn_mgr;
     }
 
     void analyze();
@@ -43,4 +46,6 @@ public:
     void redo();
 
     void undo();
+
+    void create_static_check_point();
 };

@@ -48,6 +48,7 @@ enum class PlanTag {
     T_Projection,
     T_Group,
     T_Aggregate,
+    T_Create_StaticCheckPoint,
 };
 
 // 查询执行计划

@@ -48,6 +48,7 @@
 #include "record/rm.h"
 #include "system/sm.h"
 #include "transaction/transaction_manager.h"
+#include "recovery/log_recovery.h"
 
 class Planner;
 
@@ -71,6 +72,8 @@ class QlManager {
      */
     Planner *planner_;
 
+    RecoveryManager *recovery_manager_;
+
    public:
     /**
      * @brief 构造函数
@@ -78,8 +81,8 @@ class QlManager {
      * @param txn_mgr 事务管理器指针
      * @param planner 查询计划器指针
      */
-    QlManager(SmManager *sm_manager, TransactionManager *txn_mgr, Planner *planner)
-        : sm_manager_(sm_manager), txn_mgr_(txn_mgr), planner_(planner) {}
+    QlManager(SmManager *sm_manager, TransactionManager *txn_mgr, Planner *planner, RecoveryManager *recovery_manager)
+        : sm_manager_(sm_manager), txn_mgr_(txn_mgr), planner_(planner), recovery_manager_(recovery_manager) {}
 
     /**
      * @brief 执行多语句查询
