@@ -70,8 +70,10 @@ class MvccUpdateExecutor : public AbstractExecutor {
             if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
+            // 加锁间隙
+            txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
             // 获取旧记录并创建新记录
-            auto old_rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, tab_.cols);
+            auto old_rec = fh_->get_record(rid, context_);
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 
@@ -129,7 +131,6 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
             mvcc_update_record(tab_, rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, std::move(is_modify));
-            txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         }
         return nullptr;
     }

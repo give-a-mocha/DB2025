@@ -137,34 +137,28 @@ std::unique_ptr<RmRecord> mvcc_get_record(
     auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
     while(pre_undo_link.has_value()){
         auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
-        //可见性检查
-        //如果是自己修改的存下
+        //如果是自己修改的直接返回
         if(pre_undo_link.value().prev_txn_ == context_->txn_->get_transaction_id()) {
             if(undo_log.is_deleted_){
                 rec = nullptr;
             }
-            break;
+            return rec;
         }
-        INFO("mvcc_get_record_while");
         // 如果是已提交事物
-        if(txn_mgr_->get_txn_state(pre_undo_link.value().prev_txn_) == TransactionState::COMMITTED){
-            if(undo_log.ts_ <= context_->txn_->get_read_ts()){
-                if(undo_log.is_deleted_) {
-                    rec = nullptr;
-                }
-                break;
+        if(undo_log.ts_ <= context_->txn_->get_read_ts()){
+            if(undo_log.is_deleted_) {
+                rec = nullptr;
             }
-            for(size_t i = 0; i < cols_.size(); i++) {
-                if(undo_log.modified_fields_[i]){
-                    if(!undo_log.tuple_[i].raw) {
-                        undo_log.tuple_[i].init_raw(cols_[i].len);
-                    }
-                    memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
-                }
-            }
-            
+            return rec;
         }
-        INFO("mvcc_get_record_while2");
+        for(size_t i = 0; i < cols_.size(); i++) {
+            if(undo_log.modified_fields_[i]){
+                if(!undo_log.tuple_[i].raw) {
+                    undo_log.tuple_[i].init_raw(cols_[i].len);
+                }
+                memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
+            }
+        }
         pre_undo_link = undo_log.prev_version_;
         if(!pre_undo_link->IsValid()) {
             rec = nullptr;
@@ -172,22 +166,9 @@ std::unique_ptr<RmRecord> mvcc_get_record(
         }
     }
     INFO("mvcc_get_record_while_end");
-    auto write_set = context_->txn_->get_write_set();
-    for(const auto &write_record : *write_set) {
-        if(write_record->GetRid() == rid) {
-            // 如果是当前事务的写操作，直接返回
-            if(write_record->GetWriteType() == WType::INSERT_TUPLE) {
-                rec =  std::make_unique<RmRecord>(write_record->GetRecord());
-            } else if(write_record->GetWriteType() == WType::UPDATE_TUPLE) {
-                rec = std::make_unique<RmRecord>(write_record->GetRecord());
-            } else if(write_record->GetWriteType() == WType::DELETE_TUPLE) {
-                return nullptr; // 删除操作返回空
-            }
-        }
-    }
     return rec;
 }
-// insert 的话应该只有这个版本
+
 Rid mvcc_insert_record(
     const TabMeta &tab_,
     RmRecord &rec,
@@ -214,7 +195,7 @@ Rid mvcc_insert_record(
     }
     undo_log.tuple_ = std::move(values);
     //此时commit_ts 应该是还未提交
-    // undo_log.ts_ = txn_mgr_->get_next_timestamp();
+    undo_log.ts_ = txn_mgr_->get_next_timestamp();
     // 插入时没有前一个版本
     undo_log.prev_version_ = UndoLink{}; 
     undo_log.modified_fields_.resize(valus_.size(), true); // 全部字段都被修改
@@ -232,24 +213,26 @@ void mvcc_delete_record(
     TransactionManager *txn_mgr_
 ) {
     TRACE_FUNCTION
-    auto rec = mvcc_get_record(rid, context_, fh_, txn_mgr_, tab_.cols);
+    auto rec = fh_->get_record(rid, context_);
     UndoLog undo_log;
     undo_log.is_deleted_ = true;
     std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
     undo_log.tuple_ = std::move(values);
     undo_log.modified_fields_.resize(tab_.cols.size(), true); // 全部字段都被修改
     //此时commit_ts 应该是还未提交
-    // undo_log.ts_ = txn_mgr_->get_next_timestamp();
+    undo_log.ts_ = txn_mgr_->get_next_timestamp();
     auto pre = txn_mgr_->GetUndoLink(rid);
     if(pre.has_value()) {
         undo_log.prev_version_ = pre.value(); // 获取前一个版本的撤销链接
     } else {
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
-    context_->txn_->AppendUndoLog(undo_log);
     INFO("mvcc_delete_record 成功");
+
+    auto undo_link = context_->txn_->AppendUndoLog(undo_log);
+    txn_mgr_->UpdateUndoLink(rid, undo_link);
     context_->txn_->append_write_record(
-        std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid)
+        std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec)
     );
 }
 
@@ -264,6 +247,7 @@ void mvcc_update_record(
     std::vector<bool> is_modify
 ) {
     TRACE_FUNCTION
+    fh_->update_record(rid, new_rec->data, context_);
     std::vector<Value> values(tab_.cols.size());
     for (size_t i = 0; i < tab_.cols.size(); ++i) {
         if(is_modify[i] == false) {
@@ -278,8 +262,8 @@ void mvcc_update_record(
     UndoLog undo_log;
     undo_log.is_deleted_ = false; // 更新不是删除操作
     undo_log.tuple_ = values;
-    //此时commit_ts 应该是还未提交
-    // undo_log.ts_ = txn_mgr_->get_next_timestamp();
+    // 此时commit_ts 应该是还未提交
+    undo_log.ts_ = txn_mgr_->get_next_timestamp();
     auto pre = txn_mgr_->GetUndoLink(rid);
     if(pre.has_value()) {
         undo_log.prev_version_ = pre.value(); // 获取前一个版本的撤销链接
@@ -287,10 +271,13 @@ void mvcc_update_record(
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
     undo_log.modified_fields_ = std::move(is_modify); // 使用传入的修改标志
-    context_->txn_->AppendUndoLog(undo_log);
     INFO("mvcc_update_record 成功");
+
+    auto undo_link = context_->txn_->AppendUndoLog(undo_log);
+    txn_mgr_->UpdateUndoLink(rid, undo_link);
+
     context_->txn_->append_write_record(
-        std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *new_rec)
+        std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *old_rec)
     );
 }
 
