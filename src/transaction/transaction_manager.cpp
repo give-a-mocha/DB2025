@@ -158,7 +158,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
         } else if(write_type == WType::DELETE_TUPLE) {
             auto rec = handle->get_record(rid, context);
-            handle->insert_record(rid, rec->data);
+            handle->insert_record_force(rid, rec->data);
             log_manager->add_insert_log(context->txn_->get_transaction_id(), *rec, rid, table_name);
         }
         // 删除版本链记录
