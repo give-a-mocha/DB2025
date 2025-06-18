@@ -55,8 +55,11 @@ class TraceStackPrint {
         indentLevel = 0;
     }
 };
-#ifndef ENABLE_TRACE
-#define ENABLE_TRACE
+// #ifndef ENABLE_TRACE
+// #define ENABLE_TRACE
+// #endif
+#ifdef ENABLE_TRACE
+#undef ENABLE_TRACE
 #endif
 #ifdef ENABLE_TRACE
 #define TRACE_FUNCTION TraceStackPrint tracer(__FUNCTION__, __FILE__, __LINE__);
