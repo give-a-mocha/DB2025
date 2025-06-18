@@ -302,7 +302,6 @@ class Portal {
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->group_cols_), std::move(x->having_conds_), offset);
         } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
-            INFO("LimitPlan");
             return std::make_unique<ExplainLimitExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables), x->offset_,
                 x->count_, offset);
