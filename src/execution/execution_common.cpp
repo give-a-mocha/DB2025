@@ -130,10 +130,8 @@ std::unique_ptr<RmRecord> mvcc_get_record(
     const std::vector<ColMeta> &cols_
 ) {
     TRACE_FUNCTION
-    INFO("mvcc_get_record");
     auto rec = fh_->get_record(rid, context_);
 
-    INFO("fd : {}, RID : page_no = {}, slot_no = {}",fh_->GetFd(), rid.page_no, rid.slot_no);
     auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
     while(pre_undo_link.has_value()){
         auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
@@ -165,7 +163,6 @@ std::unique_ptr<RmRecord> mvcc_get_record(
             break;
         }
     }
-    INFO("mvcc_get_record_while_end");
     return rec;
 }
 
@@ -181,8 +178,6 @@ Rid mvcc_insert_record(
     auto rid = fh_->insert_record(rec.data, context_);
     //加锁
     txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
-    INFO("mvcc_insert_record");
-    INFO("fd : {}, RID : page_no = {}, slot_no = {}",fh_->GetFd(), rid.page_no, rid.slot_no);
     // 插入记录后，创建UndoLog
     UndoLog undo_log;
     undo_log.is_deleted_ = false;
@@ -228,7 +223,6 @@ void mvcc_delete_record(
     } else {
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
-    INFO("mvcc_delete_record 成功");
 
     auto undo_link = context_->txn_->AppendUndoLog(undo_log);
     txn_mgr_->UpdateUndoLink(rid, undo_link);
@@ -273,7 +267,6 @@ void mvcc_update_record(
         undo_log.prev_version_ = UndoLink{}; // 没有前一个版本
     }
     undo_log.modified_fields_ = std::move(is_modify); // 使用传入的修改标志
-    INFO("mvcc_update_record 成功");
 
     auto undo_link = context_->txn_->AppendUndoLog(undo_log);
     txn_mgr_->UpdateUndoLink(rid, undo_link);

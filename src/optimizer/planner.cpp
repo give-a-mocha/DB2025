@@ -647,9 +647,6 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
     }
     query->jointree.clear();
 
-    for(auto &cond : query->conds) {
-        INFO("Condition : {}", cond.to_string());
-    }
 
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());

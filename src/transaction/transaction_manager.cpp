@@ -95,7 +95,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-    ERROR("COMMIT 开始");
     // MVCC: 分配提交时间戳
     txn->set_state(TransactionState::COMMITTED);
     timestamp_t commit_ts = INVALID_TS;
@@ -118,10 +117,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     log_manager->add_commit_log(txn->get_transaction_id());
     log_manager->flush_log_to_disk();
 
-    INFO("COMMIT 水位线");
     running_txns_.RemoveTxn(txn->get_start_ts()); // 从水位线中移除事务
     running_txns_.UpdateCommitTs(commit_ts); // 更新水位线的提交时间戳
-    ERROR("COMMIT 结束");
 }
 
 /**

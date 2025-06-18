@@ -75,7 +75,6 @@ void RecoveryManager::recovery() {
 		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
 			continue;
 		}
-		INFO("redo");
 		redo(log_record);
 	}
 

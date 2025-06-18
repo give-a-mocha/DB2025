@@ -196,11 +196,9 @@ class Portal {
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if(is_current_read){
-                INFO("当前读");
                 return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
             }
             if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC){
-                INFO("快照读");
                 return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
             }else{
                 if (x->tag == PlanTag::T_SeqScan) {
