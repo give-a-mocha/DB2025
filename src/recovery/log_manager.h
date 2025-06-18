@@ -24,8 +24,8 @@ enum LogType : int {
     UPDATE = 0,
     INSERT,
     DELETE,
-    begin,
-    commit,
+    BEGIN,
+    COMMIT,
     ABORT
 };
 
@@ -67,7 +67,7 @@ public:
     }
 
     template <typename T>
-    void serialize_data(char* dest, int offset, const T* data, const int data_size = sizeof(T)) const {
+    void serialize_data(char* dest, int &offset, const T* data, const int data_size = sizeof(T)) const {
         memcpy(dest + offset, data, data_size);
         offset += data_size;
     }
@@ -102,7 +102,7 @@ public:
 
 class BeginLogRecord : public LogRecord {
    public:
-    BeginLogRecord() : LogRecord() { log_type_ = LogType::begin; }
+    BeginLogRecord() : LogRecord() { log_type_ = LogType::BEGIN; }
     BeginLogRecord(const txn_id_t txn_id) : BeginLogRecord() {
         log_tid_ = txn_id;  // 设置事务ID
     }
@@ -122,7 +122,7 @@ class BeginLogRecord : public LogRecord {
  */
 class CommitLogRecord : public LogRecord {
    public:
-    CommitLogRecord() : LogRecord() { log_type_ = LogType::commit; }
+    CommitLogRecord() : LogRecord() { log_type_ = LogType::COMMIT; }
     CommitLogRecord(const txn_id_t txn_id) : CommitLogRecord() { log_tid_ = txn_id; }
     virtual ~CommitLogRecord() = default;
     void serialize(char* dest) const override { LogRecord::serialize(dest); }
@@ -149,7 +149,11 @@ class AbortLogRecord : public LogRecord {
 };
 
 class InsertLogRecord : public LogRecord {
-   public:
+public:
+    RmRecord insert_value_;   // 插入的记录
+    Rid rid_;                 // 记录插入的位置
+    char* table_name_;        // 插入记录的表名称
+    size_t table_name_size_;  // 表名称的大小
     InsertLogRecord() : LogRecord() {
         log_type_ = LogType::INSERT;
         table_name_ = nullptr;
@@ -159,7 +163,9 @@ class InsertLogRecord : public LogRecord {
         log_tid_ = txn_id;
         insert_value_ = insert_value;
         rid_ = rid;
+        // 记录的长度
         log_tot_len_ += sizeof(int);
+        // 记录的大小
         log_tot_len_ += insert_value_.size;
         log_tot_len_ += sizeof(Rid);
         table_name_size_ = table_name.length();
@@ -200,18 +206,18 @@ class InsertLogRecord : public LogRecord {
         logINFO("insert rid: {}, {}", rid_.page_no, rid_.slot_no);
         logINFO("table name: {}", table_name_);
     }
-
-    RmRecord insert_value_;   // 插入的记录
-    Rid rid_;                 // 记录插入的位置
-    char* table_name_;        // 插入记录的表名称
-    size_t table_name_size_;  // 表名称的大小
 };
 
 /**
  * TODO: delete操作的日志记录
 */
 class DeleteLogRecord : public LogRecord {
-   public:
+public:
+    RmRecord delete_value_;   // 删除的记录
+    Rid rid_;                 // 记录删除的位置
+    char* table_name_;        // 删除记录的表名称
+    size_t table_name_size_;  // 表名称的大小
+
     DeleteLogRecord() : LogRecord() {
         log_type_ = LogType::DELETE;
         table_name_ = nullptr;
@@ -261,18 +267,18 @@ class DeleteLogRecord : public LogRecord {
         logINFO("delete rid: {}, {}", rid_.page_no, rid_.slot_no);
         logINFO("table name: {}", table_name_);
     }
-
-    RmRecord delete_value_;   // 删除的记录
-    Rid rid_;                 // 记录删除的位置
-    char* table_name_;        // 删除记录的表名称
-    size_t table_name_size_;  // 表名称的大小
 };
 
 /**
  * TODO: update操作的日志记录
 */
 class UpdateLogRecord : public LogRecord {
-   public:
+public:
+    RmRecord before_value_;   // 更新前的记录
+    RmRecord after_value_;    // 更新后的记录
+    Rid rid_;                 // 记录插入的位置
+    char* table_name_;        // 插入记录的表名称
+    size_t table_name_size_;  // 表名称的大小
     UpdateLogRecord() : LogRecord() {
         log_type_ = LogType::UPDATE;
         table_name_ = nullptr;
@@ -331,12 +337,6 @@ class UpdateLogRecord : public LogRecord {
         logINFO("update rid: {}, {}", rid_.page_no, rid_.slot_no);
         logINFO("table name: {}", table_name_);
     }
-
-    RmRecord before_value_;   // 更新前的记录
-    RmRecord after_value_;    // 更新后的记录
-    Rid rid_;                 // 记录插入的位置
-    char* table_name_;        // 插入记录的表名称
-    size_t table_name_size_;  // 表名称的大小
 };
 
 /* 日志缓冲区，只有一个buffer，因此需要阻塞地去把日志写入缓冲区中 */
@@ -355,6 +355,7 @@ class LogBuffer {
 
 /* 日志管理器，负责把日志写入日志缓冲区，以及把日志缓冲区中的内容写入磁盘中 */
 class LogManager {
+    friend class RecoveryManager; 
 private:
     std::atomic<lsn_t> global_lsn_{0};  // 全局lsn，递增，用于为每条记录分发lsn
     std::mutex latch_;                  // 用于对log_buffer_的互斥访问
@@ -366,8 +367,25 @@ public:
 
     lsn_t add_log_to_buffer(LogRecord* log_record);
 
+    lsn_t add_log_to_buffer_without_lock(LogRecord *log_record);
+
     void flush_log_to_disk();
+
+    void flush_log_to_disk_without_lock();
 
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
+    lsn_t add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid, const std::string &table_name);
+
+    lsn_t add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid, const std::string &table_name);
+
+    lsn_t add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid, const std::string &table_name);
+
+    lsn_t add_begin_log(txn_id_t txn_id);
+
+    lsn_t add_commit_log(txn_id_t txn_id);
+
+    lsn_t add_abort_log(txn_id_t txn_id);
+
+    std::vector<LogRecord *> read_logs_from_disk(size_t offset);
 };

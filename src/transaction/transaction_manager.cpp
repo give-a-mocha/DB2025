@@ -75,13 +75,8 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     txn->set_read_ts(last_commit_ts_); // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
-    // MVCC: 将新事务添加到水位线跟踪
-    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-    //     running_txns_.AddTxn(start_ts); // 使用 AddTxn 和 start_ts
-    // }
-    // 创建BEGIN事务日志记录，记录事务开始的操作
-    auto* log = new BeginLogRecord(txn->get_transaction_id());
-    record_link_management(log, log_manager, txn);
+    log_manager->add_begin_log(txn->get_transaction_id());
+
     running_txns_.AddTxn(start_ts); // 添加事务到水位线
     return txn;
 }
@@ -120,8 +115,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 清空事务相关的集合
     txn->clear();
 
-    auto log = new CommitLogRecord(txn->get_transaction_id());
-    record_link_management(log, log_manager, txn);
+    log_manager->add_commit_log(txn->get_transaction_id());
+    log_manager->flush_log_to_disk();
 
     INFO("COMMIT 水位线");
     running_txns_.RemoveTxn(txn->get_start_ts()); // 从水位线中移除事务
@@ -155,13 +150,16 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if(write_type == WType::INSERT_TUPLE) {
             handle->delete_record(rid, context);
+            log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
         } else if(write_type == WType::UPDATE_TUPLE) {
             auto new_rec = handle->get_record(rid, context);
             auto old_rec = (*iter)->GetRecord();
             handle->update_record(rid, old_rec.data, context);
+            log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
         } else if(write_type == WType::DELETE_TUPLE) {
             auto rec = handle->get_record(rid, context);
             handle->insert_record(rid, rec->data);
+            log_manager->add_insert_log(context->txn_->get_transaction_id(), *rec, rid, table_name);
         }
         // 删除版本链记录
         DeleteUpdateVersionLink(rid, context->txn_);
@@ -173,35 +171,11 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         lock_manager_->unlock(txn, lock);
     }
     txn->clear();
-    AbortLogRecord* log = new AbortLogRecord(txn->get_transaction_id());
-    record_link_management(log, log_manager, txn);
     txn->set_state(TransactionState::ABORTED);
+
+    log_manager->add_abort_log(txn->get_transaction_id());
 }
 
-/**
- * @brief 管理日志记录的链接关系
- *
- * @details
- * 该函数的主要作用是维护事务日志链的顺序关系，确保日志记录能够按照正确的顺序被写入和回放。
- * 具体操作包括：
- * 1. 设置当前日志记录的前序LSN（Log Sequence Number）。
- * 2. 将日志记录添加到日志管理器的缓冲区中。
- * 3. 更新事务的前序LSN为当前日志记录的LSN，以便后续日志能够正确链接。
- *
- * @param log_record 当前的日志记录指针
- * @param log_manager 日志管理器指针，用于管理日志缓冲区
- * @param txn 当前事务指针，用于更新事务的状态
- */
-void TransactionManager::record_link_management(LogRecord* log_record, LogManager* log_manager, Transaction* txn) {
-    // 设置当前日志记录的前序LSN为事务的前序LSN，建立日志链
-    log_record->prev_lsn_ = txn->get_prev_lsn();
-
-    // 将当前日志记录添加到日志管理器的缓冲区中，等待刷盘
-    log_manager->add_log_to_buffer(log_record);
-
-    // 更新事务的前序LSN为当前日志记录的LSN，以便后续日志能够正确链接
-    txn->set_prev_lsn(log_record->lsn_);
-}
 
 void TransactionManager::delete_index_record(TabMeta tab_, RmRecord* rec, Rid rid, Context *context){
     for(const auto& index : tab_.indexes) {

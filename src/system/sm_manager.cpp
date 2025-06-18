@@ -185,16 +185,7 @@ void SmManager::close_db() {
 
     // 3. 最后刷新并保存元数据
     flush_meta();
-    //! 表文件和索引文件交给lru丢弃
-    // 关闭所有的文件句柄
-    // for (auto& fh : fhs_) {
-    //     rm_manager_->close_file(fh.second.get());
-    // }
-
-    // // !关闭索引文件句柄，索引暂未实现，只是作为占位
-    // for (auto& ih : ihs_) {
-    //     ix_manager_->close_index(ih.second.get());
-    // }
+    
     db_.name_.clear();
     db_.tabs_.clear();
     fhs_.clear();

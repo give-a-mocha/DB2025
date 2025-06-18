@@ -32,20 +32,24 @@ private:
     DiskManager* disk_manager_;                  // 用来读写文件
     BufferPoolManager* buffer_pool_manager_;     // 对页面进行读写
     SmManager* sm_manager_;                      // 访问数据库元数据
-    TransactionManager* txn_mgr_;            // 事务管理器
+    LogManager* log_mgr_;
+
+    std::shared_mutex latch_;
 public:
-    RecoveryManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, SmManager* sm_manager, TransactionManager* txn_mgr) {
+    RecoveryManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, SmManager* sm_manager, LogManager* log_mgr) {
         disk_manager_ = disk_manager;
         buffer_pool_manager_ = buffer_pool_manager;
         sm_manager_ = sm_manager;
-        txn_mgr_ = txn_mgr;
+        log_mgr_ = log_mgr;
     }
 
-    void analyze();
+    void recovery();
 
-    void redo();
+    void flush_to_disk();
 
-    void undo();
+    void redo(LogRecord *log_record);
+
+    void undo(LogRecord *log_record);
 
     void create_static_check_point();
 };

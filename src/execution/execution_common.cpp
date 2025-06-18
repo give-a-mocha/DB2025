@@ -202,6 +202,7 @@ Rid mvcc_insert_record(
     auto undo_link = context_->txn_->AppendUndoLog(undo_log);
     txn_mgr_->UpdateUndoLink(rid, undo_link);
     context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid, rec));
+    context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(),rec,rid,tab_.name);
     return rid;
 }
 
@@ -234,6 +235,7 @@ void mvcc_delete_record(
     context_->txn_->append_write_record(
         std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec)
     );
+    context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *rec, rid, tab_.name);
 }
 
 void mvcc_update_record(
@@ -279,6 +281,7 @@ void mvcc_update_record(
     context_->txn_->append_write_record(
         std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *old_rec)
     );
+    context_->log_mgr_->add_update_log(context_->txn_->get_transaction_id(), *old_rec, *new_rec, rid, tab_.name);
 }
 
 /**
