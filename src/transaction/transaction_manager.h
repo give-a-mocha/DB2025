@@ -175,6 +175,7 @@ public:
     bool UpdateVersionLink(Rid rid, std::optional<VersionUndoLink> prev_version,
                            std::function<bool(std::optional<VersionUndoLink>)> &&check = nullptr);
 
+    void DeleteUpdateVersionLink(Rid rid, Transaction *txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
     std::optional<UndoLink> GetUndoLink(Rid rid);
 
@@ -188,6 +189,8 @@ public:
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
      * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
     UndoLog GetUndoLog(UndoLink link);
+
+    UndoLog GetUndoLogWithoutLock(UndoLink link);
 
     /** @brief 获取系统中的最低读时间戳。 */
     timestamp_t GetWatermark();

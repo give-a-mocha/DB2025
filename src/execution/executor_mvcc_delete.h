@@ -59,10 +59,9 @@ class MvccDeleteExecutor : public AbstractExecutor {
             if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)){
                 continue;
             }
-            mvcc_delete_record(tab_, rid, context_, fh_, txn_mgr_);
-
             // 添加间隙锁
             txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
+            mvcc_delete_record(tab_, rid, context_, fh_, txn_mgr_);
         }
         return nullptr;
     }

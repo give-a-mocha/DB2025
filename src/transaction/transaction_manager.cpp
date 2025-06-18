@@ -109,45 +109,16 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         txn->set_commit_ts(commit_ts); // 设置提交时间戳
         last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
     }
-    int index = 0;
-    for(const auto& write_record : *txn->get_write_set()) {
-        INFO("COMMIT 写操作: {}, {}", write_record->GetWriteType(), write_record->GetTableName());
-        auto undoLog = txn->GetUndoLog(index);
-        undoLog.ts_ = commit_ts;
-        txn->ModifyUndoLog(index, undoLog);
-        if (write_record->GetWriteType() == WType::INSERT_TUPLE) {
-            index++;
-            continue;
-        } else {
-            //更新undo日志
-            UndoLink undoLink = {txn->get_transaction_id(), index};
-            UpdateUndoLink(write_record->GetRid(), undoLink);
-            auto& fh_ = sm_manager_->fhs_.at(write_record->GetTableName());
-            if(write_record->GetWriteType() == WType::DELETE_TUPLE) {
-                // fh_->delete_record(write_record->GetRid(), nullptr);
-            } else if(write_record->GetWriteType() == WType::UPDATE_TUPLE) {
-                fh_->update_record(write_record->GetRid(), write_record->GetRecord().data, nullptr);
-            }
-
-        }
-        index++;
-    }
-    INFO("COMMIT 提交阶段结束");
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-    INFO("事务的锁集合大小: {}", txn->get_lock_set()->size());
 
     auto lock_set_copy = *lock_set; // 复制锁集合以避免迭代时修改
     for (const LockDataId& lock : lock_set_copy) {
-        ERROR("开始释放锁");
         lock_manager_->unlock(txn, lock);
     }
-    INFO("COMMIT 释放锁结束");
 
     // 清空事务相关的集合
     txn->clear();
-    INFO("COMMIT 清空事务相关集合结束");
-    //?对于write_set中的所有数据项刷新buffer_pool
 
     auto log = new CommitLogRecord(txn->get_transaction_id());
     record_link_management(log, log_manager, txn);
@@ -184,25 +155,21 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if(write_type == WType::INSERT_TUPLE) {
             handle->delete_record(rid, context);
-            //在版本链中删除insert的
-            std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
-            auto pageversion_info = version_info_.find(rid.page_no);
-            if (pageversion_info != version_info_.end()) {
-                // 如果存在版本信息，则删除对应的版本链接
-                std::unique_lock<std::shared_mutex> lock(pageversion_info->second->mutex_);
-                auto& prev_version = pageversion_info->second->prev_version_;
-                auto it = prev_version.find(rid.slot_no);
-                if (it != prev_version.end()) {
-                    prev_version.erase(it); // 删除对应的版本链接
-                }
-            }
+        } else if(write_type == WType::UPDATE_TUPLE) {
+            auto new_rec = handle->get_record(rid, context);
+            auto old_rec = (*iter)->GetRecord();
+            handle->update_record(rid, old_rec.data, context);
+        } else if(write_type == WType::DELETE_TUPLE) {
+            auto rec = handle->get_record(rid, context);
+            handle->insert_record(rid, rec->data);
         }
+        // 删除版本链记录
+        DeleteUpdateVersionLink(rid, context->txn_);
     }
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
     auto lock_set_copy = *lock_set; // 复制锁集合以避免迭代时修改
     for (const LockDataId& lock : lock_set_copy) {
-        ERROR("开始释放锁");
         lock_manager_->unlock(txn, lock);
     }
     txn->clear();
@@ -317,14 +284,39 @@ bool TransactionManager::UpdateVersionLink(
     } else {
         return false;
     }
-    // 如果是 MVCC 模式，则需要更新版本状态
-    // if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-    //     // 如果是 MVCC 模式，设置版本状态为不在进行中
-    //     if (prev_version.has_value()) {
-    //         prev_version_map[rid.slot_no].in_progress_ = false;
-    //     }
-    // }
     return true;  // 更新成功，返回 true
+}
+
+void TransactionManager::DeleteUpdateVersionLink(Rid rid, Transaction *txn) {
+
+    // 获取对应的版本信息
+    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
+    auto it = version_info_.find(rid.page_no);
+    if (it == version_info_.end()) {
+        return ;
+    }
+    auto &version_info = it->second;
+    std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
+    // 更新版本链接
+    auto &prev_version_map = version_info->prev_version_;
+    auto prev_version_it = prev_version_map.find(rid.slot_no);
+    if (prev_version_it != prev_version_map.end()) {
+        VersionUndoLink version_link = prev_version_it->second;
+        UndoLink undo_link = version_link.prev_;
+        while (undo_link.prev_txn_ == txn->get_transaction_id()) {
+            undo_link = GetUndoLog(undo_link).prev_version_;
+            if(!undo_link.IsValid()) {
+                break;
+            }
+        }
+        if(undo_link.IsValid()) {
+            // 如果撤销链接有效，则更新版本链接
+            prev_version_it->second.prev_ = undo_link;
+        } else {
+            // 如果撤销链接无效，则删除该版本链接
+            prev_version_map.erase(prev_version_it);
+        }
+    }
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
@@ -384,14 +376,15 @@ UndoLog TransactionManager::GetUndoLog(UndoLink link){
         throw RMDBError("Invalid transaction ID: " + std::to_string(link.prev_txn_));
     }
     std::unique_lock<std::mutex> lock(latch_);
+    return GetUndoLogWithoutLock(link);
+}
+
+UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link){
     auto it = TransactionManager::txn_map.find(link.prev_txn_);
-    if (it == TransactionManager::txn_map.end()) {
-        lock.unlock();
+    if(it == TransactionManager::txn_map.end()) {
         throw RMDBError("Transaction not found: " + std::to_string(link.prev_txn_));
     }
     auto txn = it->second;
-    lock.unlock();
-
     // 检查撤销日志索引是否有效
     if (link.prev_log_idx_ < 0 || link.prev_log_idx_ >= txn->GetUndoLogNum()) {
         throw RangeError("Invalid undo log index: " + std::to_string(link.prev_log_idx_));
