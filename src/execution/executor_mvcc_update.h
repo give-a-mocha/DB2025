@@ -67,7 +67,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
 
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
-            if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
+            if(!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
             // 加锁间隙
@@ -130,7 +130,21 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
-            mvcc_update_record(tab_, rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, std::move(is_modify));
+
+            std::vector<Value> values(tab_.cols.size());
+            for(int i = 0; i < (int)tab_.cols.size(); ++i) {
+                if (is_modify[i]) {
+                    values[i].set_col_data(tab_.cols[i].type, new_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
+                    values[i].init_raw(tab_.cols[i].len);
+                }
+            }
+
+            fh_->update_record(rid, new_rec->data, context_);
+            txn_mgr_->add_update_undo_log(context_->txn_, rid, std::move(values), std::move(is_modify));
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *old_rec)
+            );
+            context_->log_mgr_->add_update_log(context_->txn_->get_transaction_id(), *old_rec, *new_rec, rid, tab_.name);
         }
         return nullptr;
     }

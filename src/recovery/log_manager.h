@@ -13,6 +13,7 @@ See the Mulan PSL v2 for more details. */
 #include <iostream>
 #include <mutex>
 #include <vector>
+#include <memory>
 
 #include "common/config.h"
 #include "common/print.hpp"
@@ -357,17 +358,15 @@ class LogBuffer {
 class LogManager {
     friend class RecoveryManager; 
 private:
-    std::atomic<lsn_t> global_lsn_{0};  // 全局lsn，递增，用于为每条记录分发lsn
     std::mutex latch_;                  // 用于对log_buffer_的互斥访问
     LogBuffer log_buffer_;              // 日志缓冲区
-    lsn_t persist_lsn_;                 // 记录已经持久化到磁盘中的最后一条日志的日志号
     DiskManager* disk_manager_;
 public:
     LogManager(DiskManager* disk_manager) { disk_manager_ = disk_manager; }
 
-    lsn_t add_log_to_buffer(LogRecord* log_record);
+    void add_log_to_buffer(LogRecord* log_record);
 
-    lsn_t add_log_to_buffer_without_lock(LogRecord *log_record);
+    void add_log_to_buffer_without_lock(LogRecord *log_record);
 
     void flush_log_to_disk();
 
@@ -375,17 +374,17 @@ public:
 
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
-    lsn_t add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid, const std::string &table_name);
+    void add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid, const std::string &table_name);
 
-    lsn_t add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid, const std::string &table_name);
+    void add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid, const std::string &table_name);
 
-    lsn_t add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid, const std::string &table_name);
+    void add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid, const std::string &table_name);
 
-    lsn_t add_begin_log(txn_id_t txn_id);
+    void add_begin_log(txn_id_t txn_id);
 
-    lsn_t add_commit_log(txn_id_t txn_id);
+    void add_commit_log(txn_id_t txn_id);
 
-    lsn_t add_abort_log(txn_id_t txn_id);
+    void add_abort_log(txn_id_t txn_id);
 
-    std::vector<LogRecord *> read_logs_from_disk(size_t offset);
+    std::vector<std::unique_ptr<LogRecord>> read_logs_from_disk(size_t offset);
 };

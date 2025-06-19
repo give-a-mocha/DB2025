@@ -18,15 +18,6 @@ See the Mulan PSL v2 for more details. */
 #include "transaction/transaction_manager.h"
 #include "common/print.hpp"
 
-auto ReconstructTuple(const std::vector<ColMeta> &cols, const RmRecord &base_tuple, const TupleMeta &base_meta,
-const std::vector<UndoLog> &undo_logs) -> std::optional<RmRecord>;
-
-auto IsWriteWriteConflict(timestamp_t tuple_ts, Transaction *txn) -> bool;
-
-auto message_out(Context *context_, const std::string &output) -> void;
-
-auto message_out(Context *context_, const char *output, size_t output_size) -> void;
-
 std::vector<Value> convert_record_to_values(
 	const std::unique_ptr<RmRecord> &record, 
 	const std::vector<ColMeta> &cols_
@@ -40,34 +31,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
 	const std::vector<ColMeta> &cols_
 );
 
-Rid mvcc_insert_record(
-	const TabMeta &tab_,
-	RmRecord &rec,
-	Context *context_,
-	RmFileHandle *fh_,
-	TransactionManager *txn_mgr_,
-	const std::vector<Value> &valus_
-);
-
-void mvcc_delete_record(
-	const TabMeta &tab_,
-	const Rid &rid,
-	Context *context_,
-	RmFileHandle *fh_,
-	TransactionManager *txn_mgr_
-);
-void mvcc_update_record(
-	const TabMeta &tab_,
-	const Rid &rid,
-	std::unique_ptr<RmRecord> &new_rec,
-	std::unique_ptr<RmRecord> &old_rec,
-	Context *context_,
-	RmFileHandle *fh_,
-	TransactionManager *txn_mgr_,
-	std::vector<bool> is_modify
-);
-
-bool check_conflict(
+bool get_lock_and_check_conflict(
 	Transaction *txn,
 	TransactionManager *txn_mgr,
 	RmFileHandle *fh_,

@@ -21,12 +21,12 @@ See the Mulan PSL v2 for more details. */
  *
  * @thread_safety 通过互斥锁保护并发访问
  */
-lsn_t LogManager::add_log_to_buffer(LogRecord *log_record) {
+void LogManager::add_log_to_buffer(LogRecord *log_record) {
 	std::lock_guard<std::mutex> lock(latch_); // 加锁以确保线程安全
-    return add_log_to_buffer_without_lock(log_record);
+    add_log_to_buffer_without_lock(log_record);
 }
 
-lsn_t LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
+void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
 	switch (log_record->log_type_) {
 		case LogType::BEGIN: {
 			auto begin_log_record_ = dynamic_cast<BeginLogRecord *>(log_record);
@@ -73,7 +73,6 @@ lsn_t LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
 		// 已经锁上
         flush_log_to_disk_without_lock();
     }
-	return 0;
 }
 /**
  * @description: 将日志缓冲区内容刷写到磁盘
@@ -94,31 +93,29 @@ void LogManager::flush_log_to_disk_without_lock() {
 	log_buffer_.offset_ = 0;
 }
 
-lsn_t LogManager::add_insert_log(
+void LogManager::add_insert_log(
 	txn_id_t txn_id, 
 	const RmRecord &insert_value, 
 	const Rid &rid, 
 	const std::string &table_name
 ) {
 	InsertLogRecord *insert_log = new InsertLogRecord(txn_id, insert_value, rid, table_name);
-	lsn_t lsn = add_log_to_buffer(insert_log);
+	add_log_to_buffer(insert_log);
 	delete insert_log;
-	return lsn;
 }
 
-lsn_t LogManager::add_delete_log(
+void LogManager::add_delete_log(
 	txn_id_t txn_id, 
 	const RmRecord &delete_value, 
 	const Rid &rid, 
 	const std::string &table_name
 ) {
 	DeleteLogRecord *delete_log = new DeleteLogRecord(txn_id, delete_value, rid, table_name);
-	lsn_t lsn = add_log_to_buffer(delete_log);
+	add_log_to_buffer(delete_log);
 	delete delete_log;
-	return lsn;
 }
 
-lsn_t LogManager::add_update_log(
+void LogManager::add_update_log(
 	txn_id_t txn_id, 
 	const RmRecord &new_rec,
 	const RmRecord &old_rec, 
@@ -126,83 +123,79 @@ lsn_t LogManager::add_update_log(
 	const std::string &table_name
 ) {
 	UpdateLogRecord *update_log = new UpdateLogRecord(txn_id, new_rec, old_rec, rid, table_name);
-	lsn_t lsn = add_log_to_buffer(update_log);
+	add_log_to_buffer(update_log);
 	delete update_log;
-	return lsn;
 }
 
-lsn_t LogManager::add_begin_log(txn_id_t txn_id) {
+void LogManager::add_begin_log(txn_id_t txn_id) {
 	BeginLogRecord *begin_log = new BeginLogRecord(txn_id);
-	lsn_t lsn = add_log_to_buffer(begin_log);
+	add_log_to_buffer(begin_log);
 	delete begin_log;
-	return lsn;
 }
 
-lsn_t LogManager::add_commit_log(txn_id_t txn_id) {
+void LogManager::add_commit_log(txn_id_t txn_id) {
 	CommitLogRecord *commit_log = new CommitLogRecord(txn_id);
-	lsn_t lsn = add_log_to_buffer(commit_log);
+	add_log_to_buffer(commit_log);
 	delete commit_log;
-	return lsn;
 }
 
-lsn_t LogManager::add_abort_log(txn_id_t txn_id) {
+void LogManager::add_abort_log(txn_id_t txn_id) {
 	AbortLogRecord *abort_log = new AbortLogRecord(txn_id);
-	lsn_t lsn = add_log_to_buffer(abort_log);
+	add_log_to_buffer(abort_log);
 	delete abort_log;
-	return lsn;
 }
 
-std::vector<LogRecord *> LogManager::read_logs_from_disk(size_t offset) {
-    std::vector<LogRecord *> log_records_;
+std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t offset) {
+    std::vector<std::unique_ptr<LogRecord>> log_records_;
     const auto file_size_ = disk_manager_->get_file_size(LOG_FILE_NAME);
     auto buffer = std::make_unique<char[]>(std::max(file_size_, 1));
     disk_manager_->read_log(buffer.get(), file_size_, static_cast<int>(offset));
-    auto *tmp_log_ = new LogRecord();
+    auto tmp_log_ = std::make_unique<LogRecord>();
 
     auto start_offset = offset;
     while (offset < file_size_) {
         tmp_log_->deserialize(buffer.get() + offset - start_offset);
         switch (tmp_log_->log_type_) {
             case LogType::BEGIN: {
-                auto log_record_ = new BeginLogRecord();
+                auto log_record_ = std::make_unique<BeginLogRecord>();
                 log_record_->deserialize(buffer.get() + offset - start_offset);
                 offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(log_record_);
+                log_records_.emplace_back(std::move(log_record_));
                 break;
             }
             case LogType::COMMIT: {
-                auto log_record_ = new CommitLogRecord();
+                auto log_record_ = std::make_unique<CommitLogRecord>();
                 log_record_->deserialize(buffer.get() + offset - start_offset);
                 offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(log_record_);
+                log_records_.emplace_back(std::move(log_record_));
                 break;
             }
             case LogType::ABORT: {
-                auto log_record_ = new AbortLogRecord();
+                auto log_record_ = std::make_unique<AbortLogRecord>();
                 log_record_->deserialize(buffer.get() + offset - start_offset);
                 offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(log_record_);
+                log_records_.emplace_back(std::move(log_record_));
                 break;
             }
             case LogType::DELETE: {
-                auto log_record_ = new DeleteLogRecord();
+                auto log_record_ = std::make_unique<DeleteLogRecord>();
                 log_record_->deserialize(buffer.get() + offset - start_offset);
                 offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(log_record_);
+                log_records_.emplace_back(std::move(log_record_));
                 break;
             }
             case LogType::INSERT: {
-                auto log_record_ = new InsertLogRecord();
+                auto log_record_ = std::make_unique<InsertLogRecord>();
                 log_record_->deserialize(buffer.get() + offset - start_offset);
                 offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(log_record_);
+                log_records_.emplace_back(std::move(log_record_));
                 break;
             }
             case LogType::UPDATE: {
-                auto log_record_ = new UpdateLogRecord();
+                auto log_record_ = std::make_unique<UpdateLogRecord>();
                 log_record_->deserialize(buffer.get() + offset - start_offset);
                 offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(log_record_);
+                log_records_.emplace_back(std::move(log_record_));
                 break;
             }
 			default: {
@@ -211,6 +204,5 @@ std::vector<LogRecord *> LogManager::read_logs_from_disk(size_t offset) {
         }
     }
 
-    delete tmp_log_;
     return log_records_;
 }

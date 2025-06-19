@@ -16,7 +16,7 @@ See the Mulan PSL v2 for more details. */
 
 void RecoveryManager::recovery() {
 	size_t log_start_offset = sm_manager_->db_.get_log_offset();
-	std::vector<LogRecord *> log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
+	auto log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
 	std::unordered_set<txn_id_t> uncommitted_txns;  // 用于记录未提交的事务ID
 	std::unordered_map<std::string, int> tab_page_num;
 	
@@ -43,17 +43,17 @@ void RecoveryManager::recovery() {
 				break;
 			}
 			case LogType::INSERT: {
-				auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
+				auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record.get());
 				process_table_operation(log_record_);
 				break;
 			}
 			case LogType::DELETE: {
-				auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
+				auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record.get());
 				process_table_operation(log_record_);
 				break;
 			}
 			case LogType::UPDATE: {
-				auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
+				auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record.get());
 				process_table_operation(log_record_);
 				break;
 			}
@@ -64,28 +64,28 @@ void RecoveryManager::recovery() {
 	}
 	// 新建页
 	for (const auto &[tab_name, page_number] : tab_page_num){
-        auto fh_ = sm_manager_->fhs_.at(tab_name).get();
-        while (fh_->get_file_hdr().num_pages <= page_number) {
-            auto page_hdr_ = fh_->create_new_page_handle();
-            buffer_pool_manager_->unpin_page(page_hdr_.page->get_page_id(), false);
-        }
-    }
+	       auto fh_ = sm_manager_->fhs_.at(tab_name).get();
+	       while (fh_->get_file_hdr().num_pages <= page_number) {
+	           auto page_hdr_ = fh_->create_new_page_handle();
+	           buffer_pool_manager_->unpin_page(page_hdr_.page->get_page_id(), false);
+	       }
+	   }
 
 	for (const auto &log_record : log_records_) {
 		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
 			continue;
 		}
-		redo(log_record);
+		redo(log_record.get());
 	}
 
 	const int size = log_records_.size();
 	for(int i = size - 1; i >= 0; --i) {
-		auto log_record = log_records_[i];
+		auto &log_record = log_records_[i];
 		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
 			continue;
 		}
 		if (uncommitted_txns.find(log_record->log_tid_) != uncommitted_txns.end()) {
-			undo(log_record);
+			undo(log_record.get());
 		}
 	}
 	flush_to_disk();
@@ -191,9 +191,6 @@ void RecoveryManager::create_static_check_point() {
 
 	std::unique_lock lock_(latch_);
     std::unique_lock lock(log_mgr_->latch_);
-	auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
-	
 	log_mgr_->flush_log_to_disk_without_lock();
-
 	flush_to_disk();
 }

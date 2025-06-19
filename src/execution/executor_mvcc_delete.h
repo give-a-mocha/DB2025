@@ -56,12 +56,19 @@ class MvccDeleteExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         for (auto &rid : rids_) {
-            if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)){
+            if(!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)){
                 continue;
             }
             // 添加间隙锁
             txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
-            mvcc_delete_record(tab_, rid, context_, fh_, txn_mgr_);
+            auto rec = fh_->get_record(rid, context_);
+            // fh_->delete_record(rid, context_);
+            std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
+            txn_mgr_->add_delete_undo_log(context_->txn_, rid, std::move(values));
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec)
+            );
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *rec, rid, tab_.name);
         }
         return nullptr;
     }

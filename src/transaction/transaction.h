@@ -45,10 +45,8 @@ struct UndoLog {
     bool is_deleted_;
     /* 此撤销日志修改的字段 */
     std::vector<bool> modified_fields_;
-    /* 修改后的字段 */
+    /* 修改前的字段 */
     std::vector<Value> tuple_;
-
-    RmRecord *tuple_test_;
     /* 此撤销日志的时间戳 */
     timestamp_t ts_{INVALID_TS};
     /* 撤销日志的前一个版本 */

@@ -207,15 +207,8 @@ void TransactionManager::insert_index_record(TabMeta tab_, RmRecord* rec, Rid ri
 */
 bool TransactionManager::UpdateUndoLink(
     Rid rid,
-    std::optional<UndoLink> prev_link,
-    std::function<bool(std::optional<UndoLink>)> &&check)
-{
-    if(check != nullptr) {
-        // 如果提供了检查函数，则先执行检查
-        if (!check(prev_link)) {
-            return false;  // 检查失败，返回 false
-        }
-    }
+    std::optional<UndoLink> prev_link
+) {
     std::optional<VersionUndoLink> prev_version = VersionUndoLink::FromOptionalUndoLink(prev_link);
     return UpdateVersionLink(rid, prev_version);
 }
@@ -226,15 +219,8 @@ bool TransactionManager::UpdateUndoLink(
  */
 bool TransactionManager::UpdateVersionLink(
     Rid rid,
-    std::optional<VersionUndoLink> prev_version,
-    std::function<bool(std::optional<VersionUndoLink>)> &&check)
-{
-    if(check != nullptr) {
-        // 如果提供了检查函数，则先执行检查
-        if (!check(prev_version)) {
-            return false;  // 检查失败，返回 false
-        }
-    }
+    std::optional<VersionUndoLink> prev_version
+) {
     // 获取对应的版本信息
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     auto it = version_info_.find(rid.page_no);
@@ -400,4 +386,83 @@ void TransactionManager::GarbageCollection(){
     next_txn_id_ = 0;  // 重置事务ID计数器
     next_timestamp_ = 0;  // 重置时间戳计数器
     last_commit_ts_ = 0;  // 重置最近提交时间戳 
+}
+
+/**
+ * @brief 添加插入操作的撤销日志
+ * @param txn 事务指针
+ * @param rid 插入的记录的RID
+ * @param values 插入的记录值
+ */
+void TransactionManager::add_insert_undo_log(
+    Transaction *txn, 
+    Rid rid, 
+    std::vector<Value> values
+) {
+    UndoLog log;
+    log.is_deleted_ = false;
+    log.modified_fields_ = std::vector<bool>(values.size(), true);
+    log.tuple_ = std::move(values);
+    log.ts_ = get_next_timestamp();
+    log.prev_version_ = UndoLink{}; // insert undo log 没有前一个版本
+    auto undo_link = txn->AppendUndoLog(log);
+    UpdateUndoLink(rid, undo_link);
+}
+
+/**
+ * @brief 添加修改操作的撤销日志
+ * @param txn 事务指针
+ * @param rid 要删除的记录的RID
+ * @param values 修改前的记录值
+ * @param modified_fields 修改的字段
+ */
+void TransactionManager::add_update_undo_log(
+    Transaction *txn,
+    Rid rid, 
+    std::vector<Value> values, 
+    std::vector<bool> modified_fields
+) {
+    UndoLog log;
+    log.is_deleted_ = false;
+    log.modified_fields_ = std::move(modified_fields);
+    log.tuple_ = std::move(values);
+    log.ts_ = get_next_timestamp();
+    
+    auto pre = GetUndoLink(rid);
+    if(pre.has_value()) {
+        log.prev_version_ = pre.value();
+    } else {
+        log.prev_version_ = UndoLink{};
+    }
+
+    auto undo_link = txn->AppendUndoLog(log);
+    UpdateUndoLink(rid, undo_link);
+}
+
+/**
+ * @brief 添加删除操作的撤销日志
+ * @param txn 事务指针
+ * @param rid 要删除的记录的RID
+ * @param values 删除前的记录值
+ */
+void TransactionManager::add_delete_undo_log(
+    Transaction *txn, 
+    Rid rid, 
+    std::vector<Value> values
+) {
+    UndoLog log;
+    log.is_deleted_ = true;
+    log.modified_fields_ = std::vector<bool>(values.size(), true);
+    log.tuple_ = std::move(values);
+    log.ts_ = get_next_timestamp();
+    
+    auto pre = GetUndoLink(rid);
+    if(pre.has_value()) {
+        log.prev_version_ = pre.value();
+    } else {
+        log.prev_version_ = UndoLink{};
+    }
+
+    auto undo_link = txn->AppendUndoLog(log);
+    UpdateUndoLink(rid, undo_link);
 }
