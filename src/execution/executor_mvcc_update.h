@@ -134,7 +134,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             std::vector<Value> values(tab_.cols.size());
             for(int i = 0; i < (int)tab_.cols.size(); ++i) {
                 if (is_modify[i]) {
-                    values[i].set_col_data(tab_.cols[i].type, new_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
+                    values[i].set_col_data(tab_.cols[i].type, old_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
                     values[i].init_raw(tab_.cols[i].len);
                 }
             }
