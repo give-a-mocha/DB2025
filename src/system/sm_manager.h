@@ -204,4 +204,9 @@ class SmManager {
      * @param context 执行上下文
      */
     void drop_index(const std::string& tab_name, const std::vector<ColMeta>& col_names, Context* context);
+
+    void set_log_offset(size_t offset) { 
+        db_.log_offset_ = offset;
+        flush_meta();
+    }
 };

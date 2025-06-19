@@ -10,23 +10,190 @@ See the Mulan PSL v2 for more details. */
 
 #include "log_recovery.h"
 
-/**
- * @description: analyze阶段，需要获得脏页表（DPT）和未完成的事务列表（ATT）
- */
-void RecoveryManager::analyze() {
- 
+
+#include "log_recovery.h"
+
+
+void RecoveryManager::recovery() {
+	size_t log_start_offset = sm_manager_->db_.get_log_offset();
+	std::vector<LogRecord *> log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
+	std::unordered_set<txn_id_t> uncommitted_txns;  // 用于记录未提交的事务ID
+	std::unordered_map<std::string, int> tab_page_num;
+	
+	// 辅助lambda函数：处理表操作日志记录（INSERT、DELETE、UPDATE）
+	auto process_table_operation = [&](auto* log_record_) {
+		std::string table_name = std::string(log_record_->table_name_, log_record_->table_name_size_);
+		if (sm_manager_->fhs_.find(table_name) != sm_manager_->fhs_.end()) {
+			tab_page_num[table_name] = std::max(tab_page_num[table_name], log_record_->rid_.page_no);
+		}
+	};
+	
+	for (const auto &log_record : log_records_) {
+		switch (log_record->log_type_) {
+			case LogType::BEGIN: {
+				uncommitted_txns.insert(log_record->log_tid_);
+				break;
+			}
+			case LogType::COMMIT: {
+				uncommitted_txns.erase(log_record->log_tid_);
+				break;
+			}
+			case LogType::ABORT: {
+				uncommitted_txns.erase(log_record->log_tid_);
+				break;
+			}
+			case LogType::INSERT: {
+				auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
+				process_table_operation(log_record_);
+				break;
+			}
+			case LogType::DELETE: {
+				auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
+				process_table_operation(log_record_);
+				break;
+			}
+			case LogType::UPDATE: {
+				auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
+				process_table_operation(log_record_);
+				break;
+			}
+			default: {
+				throw RMDBError("not supported log type");
+			}
+		}
+	}
+	// 新建页
+	for (const auto &[tab_name, page_number] : tab_page_num){
+        auto fh_ = sm_manager_->fhs_.at(tab_name).get();
+        while (fh_->get_file_hdr().num_pages <= page_number) {
+            auto page_hdr_ = fh_->create_new_page_handle();
+            buffer_pool_manager_->unpin_page(page_hdr_.page->get_page_id(), false);
+        }
+    }
+
+	for (const auto &log_record : log_records_) {
+		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
+			continue;
+		}
+		redo(log_record);
+	}
+
+	const int size = log_records_.size();
+	for(int i = size - 1; i >= 0; --i) {
+		auto log_record = log_records_[i];
+		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
+			continue;
+		}
+		if (uncommitted_txns.find(log_record->log_tid_) != uncommitted_txns.end()) {
+			undo(log_record);
+		}
+	}
+	flush_to_disk();
 }
 
+
+void RecoveryManager::flush_to_disk() {
+	for (const auto &[tab_name_, fh_] : sm_manager_->fhs_){
+		auto file_hdr_ = fh_->get_file_hdr();
+		disk_manager_->write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char *)(&file_hdr_), sizeof(file_hdr_));
+		buffer_pool_manager_->flush_all_pages(fh_->GetFd());
+	}
+	char* STATIC_CHECK_POINT_STR = "[[STATIC_CHECK_POINT]]\n\n";
+	disk_manager_->write_log(STATIC_CHECK_POINT_STR, std::strlen(STATIC_CHECK_POINT_STR));
+	sm_manager_->set_log_offset(disk_manager_->get_file_size(LOG_FILE_NAME));
+}
 /**
  * @description: 重做所有未落盘的操作
  */
-void RecoveryManager::redo() {
-
+void RecoveryManager::redo(LogRecord *log_record) {
+	switch (log_record->log_type_) {
+        case LogType::INSERT: {
+            auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
+            std::string table_name = std::string(insert_log_record_->table_name_, insert_log_record_->table_name_size_);
+			if(sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
+				return;
+			}
+			// 在原本位置插入值
+			sm_manager_->fhs_.at(table_name)->insert_record_force(insert_log_record_->rid_, insert_log_record_->insert_value_.data);
+            break;
+        }
+        case LogType::DELETE: {
+            auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
+            std::string table_name = std::string(delete_log_record_->table_name_, delete_log_record_->table_name_size_);
+            if(sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
+				return;
+			}
+			sm_manager_->fhs_.at(table_name)->delete_record(delete_log_record_->rid_, nullptr);
+			break;
+        }
+        case LogType::UPDATE: {
+            auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
+            std::string table_name = std::string(update_log_record_->table_name_, update_log_record_->table_name_size_);
+            if(sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
+				return;
+			}
+			// 在原本位置更新值
+			sm_manager_->fhs_.at(table_name)->update_record(update_log_record_->rid_, update_log_record_->after_value_.data, nullptr);
+			break;
+        }
+		default: {
+			throw RMDBError("not supported log type");
+		}
+    }
 }
 
 /**
  * @description: 回滚未完成的事务
  */
-void RecoveryManager::undo() {
+void RecoveryManager::undo(LogRecord *log_record) {
+	switch (log_record->log_type_) {
+        case LogType::INSERT: {
+            auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
+            std::string table_name = std::string(insert_log_record_->table_name_, insert_log_record_->table_name_size_);
+			if(sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
+				return;
+			}
+			// 在原本位置插入值
+			sm_manager_->fhs_.at(table_name)->delete_record(insert_log_record_->rid_, nullptr);
+            break;
+        }
+        case LogType::DELETE: {
+            auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
+            std::string table_name = std::string(delete_log_record_->table_name_, delete_log_record_->table_name_size_);
+            if(sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
+				return;
+			}
+			sm_manager_->fhs_.at(table_name)->insert_record_force(delete_log_record_->rid_, delete_log_record_->delete_value_.data);
+			break;
+        }
+        case LogType::UPDATE: {
+            auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
+            std::string table_name = std::string(update_log_record_->table_name_, update_log_record_->table_name_size_);
+            if(sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
+				return;
+			}
+			// 在原本位置更新值
+			sm_manager_->fhs_.at(table_name)->update_record(update_log_record_->rid_, update_log_record_->before_value_.data, nullptr);
+			break;
+        }
+		default: {
+			throw RMDBError("not supported log type");
+		}
+    }
+}
 
+void RecoveryManager::create_static_check_point() {
+    // （1）停止接收新事务和正在运行事务
+	// （2）将仍保留在日志缓冲区中的内容写到日志文件中；
+	// （3）在日志文件中写入一个“检查点记录”；
+	// （4）将当前数据库缓冲区中的内容写到数据库中；
+	// （5）把日志文件中检查点记录的地址写到“重新启动文件”中。
+
+	std::unique_lock lock_(latch_);
+    std::unique_lock lock(log_mgr_->latch_);
+	auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
+	
+	log_mgr_->flush_log_to_disk_without_lock();
+
+	flush_to_disk();
 }

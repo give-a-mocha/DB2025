@@ -111,6 +111,7 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."|"+"|"-"|"/"
 "EXPLAIN" { return EXPLAIN; }
 "ENABLE_NESTLOOP" { return ENABLE_NESTLOOP; }
 "ENABLE_SORTMERGE" { return ENABLE_SORTMERGE; }
+"STATIC_CHECKPOINT" { return STATIC_CHECKPOINT; }
 "TRUE" { 
     yylval->sv_bool = true;
     return VALUE_BOOL; 

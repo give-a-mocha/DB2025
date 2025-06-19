@@ -84,11 +84,11 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
                 break;
             }
             case PlanTag::T_CreateIndex: {
-                sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
+                // sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
             case PlanTag::T_DropIndex: {
-                sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
+                // sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
                 break;
             }
             default:
@@ -144,6 +144,9 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
             case PlanTag::T_Transaction_abort: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context, context->log_mgr_);
+                break;
+            } case PlanTag::T_Create_StaticCheckPoint: {
+                recovery_manager_->create_static_check_point();
                 break;
             }
             default:

@@ -181,6 +181,8 @@ class DbMeta {
     std::string name_;                     // 数据库名称
     std::map<std::string, TabMeta> tabs_;  // 数据库中包含的表
 
+    size_t log_offset_ = 0;                 // 日志偏移量 用于故障恢复
+
    public:
     // DbMeta(std::string name) : name_(name) {}
 
@@ -199,12 +201,15 @@ class DbMeta {
         return pos->second;
     }
 
+    size_t get_log_offset() const { return log_offset_; }
+
     // 重载操作符 <<
     friend std::ostream &operator<<(std::ostream &os, const DbMeta &db_meta) {
         os << db_meta.name_ << '\n' << db_meta.tabs_.size() << '\n';
         for (auto &entry : db_meta.tabs_) {
             os << entry.second << '\n';
         }
+        os << db_meta.log_offset_ << '\n';  // 输出日志偏移量
         return os;
     }
 
@@ -216,6 +221,7 @@ class DbMeta {
             is >> tab;
             db_meta.tabs_[tab.name] = tab;
         }
+        is >> db_meta.log_offset_;
         return is;
     }
 };

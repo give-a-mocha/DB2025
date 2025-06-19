@@ -200,9 +200,6 @@ public:
 
 
 private:
-
-    static void record_link_management(LogRecord *log_record, LogManager *log_manager, Transaction *txn);
-
     void delete_index_record(TabMeta tab_,RmRecord* rec, Rid rid, Context *context);
 
     void insert_index_record(TabMeta tab_,RmRecord* rec, Rid rid, Context *context);

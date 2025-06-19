@@ -196,11 +196,9 @@ class Portal {
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if(is_current_read){
-                INFO("当前读");
                 return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
             }
             if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC){
-                INFO("快照读");
                 return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
             }else{
                 if (x->tag == PlanTag::T_SeqScan) {
@@ -304,7 +302,6 @@ class Portal {
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->group_cols_), std::move(x->having_conds_), offset);
         } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
-            INFO("LimitPlan");
             return std::make_unique<ExplainLimitExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables), x->offset_,
                 x->count_, offset);

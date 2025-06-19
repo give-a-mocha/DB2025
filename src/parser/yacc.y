@@ -30,6 +30,7 @@ using namespace ast;
 %token LIMIT OFFSET
 %token EXPLAIN AS
 %token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON SEMI
+%token STATIC_CHECKPOINT
 
 // 复合操作符 - 由多个字符组成的操作符
 %token LEQ NEQ GEQ T_EOF
@@ -195,6 +196,10 @@ ddl:
     |   DROP INDEX tbName '(' colNameList ')'    // 删除索引
     {
         $$ = std::make_shared<DropIndex>($3, $5);
+    }
+    |   CREATE STATIC_CHECKPOINT
+    {
+        $$ = std::make_shared<CreateStaticCheckpoint>();
     }
     ;
 
