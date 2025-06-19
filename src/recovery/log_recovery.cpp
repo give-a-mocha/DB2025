@@ -196,20 +196,4 @@ void RecoveryManager::create_static_check_point() {
 	log_mgr_->flush_log_to_disk_without_lock();
 
 	flush_to_disk();
-
-	std::unordered_set<int> finish_txns_;
-    for (const auto &log_record : log_records_) {
-        if (log_record->log_type_ == LogType::COMMIT) {
-            finish_txns_.insert(log_record->log_tid_);
-        }
-    }
-
-    for (const auto &log_record : log_records_) {
-        if (finish_txns_.find(log_record->log_tid_) == finish_txns_.end()) {
-            log_mgr_->add_log_to_buffer_without_lock(log_record);
-        }
-    }
-
-    log_mgr_->flush_log_to_disk_without_lock();
-	
 }
