@@ -15,13 +15,18 @@
 
 class ThreadPool {
    public:
-    ThreadPool(size_t);
     ~ThreadPool();
 
     template <class F, class... Args>
     auto submit(F&& f, Args&&... args) -> std::future<decltype(f(args...))>;
-    
+
+    static ThreadPool& getInstance() {
+        static ThreadPool instance(std::thread::hardware_concurrency() / 2);
+        return instance;
+    }
+
    private:
+    ThreadPool(size_t);
     std::vector<std::thread> workers;
     std::queue<std::function<void()> > tasks;
     std::mutex queue_mutex;
