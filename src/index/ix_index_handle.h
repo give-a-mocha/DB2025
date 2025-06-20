@@ -325,11 +325,9 @@ class IxIndexHandle {
      * @param key 目标键值
      * @param operation 操作类型（查找/插入/删除）
      * @param transaction 当前事务
-     * @param find_first 是否查找第一个叶节点
-     * @return pair<叶节点句柄, 根节点是否加锁>
+     * @return 叶节点页面指针
      */
-    std::pair<IxNodeHandle *, bool> find_leaf_page(const char *key, Operation operation, Transaction *transaction,
-                                                   bool find_first = false);
+    Page* find_leaf_page(const char *key, Operation operation, Transaction *transaction);
 
     /**
      * @brief 插入键值对
@@ -368,11 +366,9 @@ class IxIndexHandle {
      * @brief 处理节点键值过少的情况
      * @param node 当前节点
      * @param transaction 当前事务
-     * @param root_is_latched 根节点是否加锁
      * @return 是否需要继续处理
      */
-    bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr,
-                                  bool *root_is_latched = nullptr);
+    bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr);
 
     /**
      * @brief 调整根节点
@@ -401,7 +397,7 @@ class IxIndexHandle {
      * @return 是否成功合并
      */
     bool coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index,
-                  Transaction *transaction, bool *root_is_latched);
+                  Transaction *transaction);
 
     /**
      * @brief 查找大于等于指定键的第一个位置
@@ -517,4 +513,9 @@ class IxIndexHandle {
      * @warning 必须确保iid有效
      */
     Rid get_rid(const Iid &iid) const;
+    
+    // 检查该页是否合法
+    bool is_page_safe(IxNodeHandle *node, Operation operation);
+
+    void UnlockAncestors(Transaction *transaction, bool unpin = true);
 };

@@ -36,6 +36,7 @@ class IxScan : public RecScan {
     Iid iid_;                            // 当前扫描位置(初始为lower)
     Iid end_;                            // 扫描终止位置(初始为upper)
     BufferPoolManager *bpm_;             // 缓冲池管理器
+    Page* now;                             
 
    public:
     /**
@@ -46,7 +47,12 @@ class IxScan : public RecScan {
      * @param bpm 缓冲池管理器
      */
     IxScan(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
-        : ih_(ih), iid_(lower), end_(upper), bpm_(bpm) {}
+        : ih_(ih), iid_(lower), end_(upper), bpm_(bpm) {
+            if(!is_end()){
+                now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
+                now->rlatch();  // 获取读锁，确保扫描期间页面不被修改
+            }
+        }
 
     /**
      * @brief 移动到下一条记录

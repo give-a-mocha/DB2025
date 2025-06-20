@@ -89,6 +89,7 @@ void RecoveryManager::recovery() {
 		}
 	}
 	flush_to_disk();
+	log_records_.clear();
 }
 
 

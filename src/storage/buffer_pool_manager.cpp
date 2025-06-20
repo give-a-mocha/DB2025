@@ -79,6 +79,7 @@ void BufferPoolManager::update_page(Page* page, PageId new_page_id, frame_id_t n
 
     // 重置页面数据
     page->reset_memory();
+    page->reset_latch(); // Reset the latch to an unlocked state
 }
 
 /**

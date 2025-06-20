@@ -10,6 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <shared_mutex>
 #include "common/config.h"
 
 /**
@@ -59,6 +60,14 @@ class Page {
 
     bool is_dirty() const { return is_dirty_; }
 
+    void wlatch() { rw_latch_.lock(); }
+
+    void wunlatch() { rw_latch_.unlock(); }
+
+    void rlatch() { rw_latch_.lock_shared(); }
+
+    void runlatch() { rw_latch_.unlock_shared(); }
+
     static constexpr size_t OFFSET_PAGE_START = 0;
     static constexpr size_t OFFSET_LSN = 0;
     static constexpr size_t OFFSET_PAGE_HDR = 4;
@@ -66,6 +75,8 @@ class Page {
     inline lsn_t get_page_lsn() { return *reinterpret_cast<lsn_t *>(get_data() + OFFSET_LSN); }
 
     inline void set_page_lsn(lsn_t page_lsn) { memcpy(get_data() + OFFSET_LSN, &page_lsn, sizeof(lsn_t)); }
+
+    void reset_latch() { new (&rw_latch_) std::shared_mutex(); }
 
    private:
     void reset_memory() { memset(data_, OFFSET_PAGE_START, PAGE_SIZE); }  // 将data_的PAGE_SIZE个字节填充为0
@@ -83,4 +94,7 @@ class Page {
 
     /** The pin count of this page. */
     int pin_count_ = 0;
+
+    /** The read-write latch of this page. */
+    std::shared_mutex rw_latch_;
 };
