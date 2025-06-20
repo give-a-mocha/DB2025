@@ -16,22 +16,30 @@
 class ThreadPool {
    public:
     ~ThreadPool();
+    ThreadPool(const ThreadPool&) = delete;
+    ThreadPool& operator=(const ThreadPool&) = delete;
 
     template <class F, class... Args>
-    auto submit(F&& f, Args&&... args) -> std::future<decltype(f(args...))>;
+    auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
 
     static ThreadPool& getInstance() {
-        static ThreadPool instance(std::thread::hardware_concurrency() / 2);
+        static ThreadPool instance(std::max(4u, std::thread::hardware_concurrency() / 2));
         return instance;
+    }
+
+    const size_t task_count() {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        return tasks.size();
     }
 
    private:
     ThreadPool(size_t);
+
+    bool stop;
     std::vector<std::thread> workers;
-    std::queue<std::function<void()> > tasks;
+    std::queue<std::function<void()>> tasks;
     std::mutex queue_mutex;
     std::condition_variable condition;
-    bool stop;
 };
 
 inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
@@ -54,11 +62,13 @@ inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
 }
 
 template <class F, class... Args>
-auto ThreadPool::submit(F&& f, Args&&... args) -> std::future<decltype(f(args...))> {
-    auto task = std::make_shared<std::packaged_task<decltype(f(args...))()> >(
-        std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+auto ThreadPool::submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
+    using return_type = std::invoke_result_t<F, Args...>;
 
-    std::future<decltype(f(args...))> res = task->get_future();
+    auto task =
+        std::make_shared<std::packaged_task<return_type()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+
+    std::future<return_type> res = task->get_future();
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
         if (stop) throw std::runtime_error("submit on stopped ThreadPool");
