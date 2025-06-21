@@ -265,7 +265,6 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
     if (operation == Operation::FIND){
         root_latch_.lock();
     }
-    ERROR("1");
     PageId page_id = {fd_, file_hdr_->root_page_};
     Page* page = buffer_pool_manager_->fetch_page(page_id);
     auto node = new IxNodeHandle(file_hdr_, page);
@@ -273,18 +272,14 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
         page->rlatch();
         root_latch_.unlock();  // 查找操作，释放根节点锁
     } else {
-        ERROR("1.1");
         page->wlatch();
-        ERROR("1.2");
         if(!is_page_safe(node, operation)){
             transaction->append_index_latch_page_set(nullptr);
         } else {
             root_latch_.unlock();
         }
     }
-    ERROR("2");
     while (!node->is_leaf_page()) {
-        ERROR("1111111");
         // 如果是非叶子结点，则继续向下查找
         page_id = {fd_, node->internal_lookup(key)};
         Page* child_page = buffer_pool_manager_->fetch_page(page_id);
@@ -546,7 +541,6 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
     }
 
     Page* leaf_page = find_leaf_page(key, Operation::DELETE, transaction);
-    ERROR("????????????????");
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     if (leaf_node->get_size() == leaf_node->remove(key)) {
         // 没有这个键

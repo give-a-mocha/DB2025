@@ -9,6 +9,7 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "buffer_pool_manager.h"
+#include "common/TraceStack.hpp"
 
 /**
  * @description: 查找可以被替换的缓冲池页面
@@ -22,6 +23,7 @@ See the Mulan PSL v2 for more details. */
  * @note 该函数在调用时需要持有缓冲池的互斥锁
  */
 bool BufferPoolManager::find_victim_page(frame_id_t* frame_id) {
+    TRACE_FUNCTION
     // Todo:
     // !1 使用BufferPoolManager::free_list_判断缓冲池是否已满需要淘汰页面
     // !1.1 未满获得frame
@@ -59,6 +61,7 @@ bool BufferPoolManager::find_victim_page(frame_id_t* frame_id) {
  * @note 调用者必须确保传入参数的有效性
  */
 void BufferPoolManager::update_page(Page* page, PageId new_page_id, frame_id_t new_frame_id) {
+    TRACE_FUNCTION
     // Todo:
     // !1 如果是脏页，写回磁盘，并且把dirty置为false
     // !2 更新page table
@@ -90,6 +93,7 @@ void BufferPoolManager::update_page(Page* page, PageId new_page_id, frame_id_t n
  * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolManager::fetch_page(PageId page_id) {
+    TRACE_FUNCTION
     // Todo:
     //  !1.     从page_table_中搜寻目标页
     //  !1.1
@@ -152,6 +156,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 bool BufferPoolManager::unpin_page(PageId page_id, bool is_dirty) {
+    TRACE_FUNCTION
     // Todo:
     // !0. lock latch
     // !1. 尝试在page_table_中搜寻page_id对应的页P
@@ -200,6 +205,7 @@ bool BufferPoolManager::unpin_page(PageId page_id, bool is_dirty) {
  * @param {PageId} page_id 目标页的page_id，不能为INVALID_PAGE_ID
  */
 bool BufferPoolManager::flush_page(PageId page_id) {
+    TRACE_FUNCTION
     // Todo:
     // !0. lock latch
     // !1. 查找页表,尝试获取目标页P
@@ -236,6 +242,7 @@ bool BufferPoolManager::flush_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolManager::new_page(PageId* page_id) {
+    TRACE_FUNCTION
     // Todo:
     // !1.   获得一个可用的frame，若无法获得则返回nullptr
     // !2.   在fd对应的文件分配一个新的page_id
@@ -270,6 +277,7 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
  * @param {PageId} page_id 目标页
  */
 bool BufferPoolManager::delete_page(PageId page_id) {
+    TRACE_FUNCTION
     // 1.   在page_table_中查找目标页，若不存在返回true
     // 2.   若目标页的pin_count不为0，则返回false
     // 3.
@@ -324,6 +332,7 @@ bool BufferPoolManager::delete_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolManager::flush_all_pages(int fd) {
+    TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
     // 遍历页表
@@ -345,6 +354,7 @@ void BufferPoolManager::flush_all_pages(int fd) {
  * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolManager::delete_all_pages(int fd) {
+    TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
     // 收集需要删除的页面ID

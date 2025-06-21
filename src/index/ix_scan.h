@@ -82,4 +82,12 @@ class IxScan : public RecScan {
      * @note 用于外部获取扫描器位置信息
      */
     const Iid &iid() const { return iid_; }
+
+    void unlatch() {
+        if (now != nullptr) {
+            now->runlatch();  // 释放读锁
+            bpm_->unpin_page(now->get_page_id(), false);  // 解除页面固定状态
+            now = nullptr;  // 清空当前页面指针
+        }
+    }
 };

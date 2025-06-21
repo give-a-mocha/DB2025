@@ -35,7 +35,6 @@ void IxScan::next() {
         bpm_->unpin_page(node->get_page_id(), false);
         now = next_page;  // 更新当前页面为下一个叶节点
     }
-    
     delete node;  // 释放内存
 }
 
