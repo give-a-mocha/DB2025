@@ -141,7 +141,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             sm_manager_->delete_index(tab_name_, *old_rec, context_);
             if(!sm_manager_->insert_index(tab_name_, *new_rec, rid, context_)) {
                 sm_manager_->insert_index_without_rollback(tab_name_, *old_rec, rid, context_);
-                fh_->delete_record(rid, context_);
+                fh_->update_record(rid, old_rec->data, context_);
                 txn_mgr_->abort(context_, context_->log_mgr_);
                 throw RMDBError("Failed to update index for " + tab_name_);
             }
