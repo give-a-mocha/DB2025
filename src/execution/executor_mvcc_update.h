@@ -67,9 +67,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
 
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
-            if(!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
-                continue;
-            }
+            get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid);
             // 加锁间隙
             txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
             // 获取旧记录并创建新记录
@@ -140,6 +138,13 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
 
             fh_->update_record(rid, new_rec->data, context_);
+            sm_manager_->delete_index(tab_name_, *old_rec, context_);
+            if(!sm_manager_->insert_index(tab_name_, *new_rec, rid, context_)) {
+                sm_manager_->insert_index_without_rollback(tab_name_, *old_rec, rid, context_);
+                fh_->delete_record(rid, context_);
+                txn_mgr_->abort(context_, context_->log_mgr_);
+                throw RMDBError("Failed to update index for " + tab_name_);
+            }
             txn_mgr_->add_update_undo_log(context_->txn_, rid, std::move(values), std::move(is_modify));
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *old_rec)

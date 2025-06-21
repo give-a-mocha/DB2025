@@ -201,10 +201,4 @@ public:
     void add_update_undo_log(Transaction *txn, Rid rid, std::vector<Value> values, std::vector<bool> modified_fields);
 
     void add_delete_undo_log(Transaction *txn, Rid rid, std::vector<Value> values);
-
-
-private:
-    void delete_index_record(TabMeta tab_,RmRecord* rec, Rid rid, Context *context);
-
-    void insert_index_record(TabMeta tab_,RmRecord* rec, Rid rid, Context *context);
 };

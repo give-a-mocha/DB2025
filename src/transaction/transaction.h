@@ -195,6 +195,7 @@ public:
     inline auto clear() -> void {
         write_set_->clear();               // 清空事务的写集合
         lock_set_->clear();                // 清空事务的锁集合
+        lock_gap_set_->clear();            // 清空事务的间隙锁集合
         index_latch_page_set_->clear();    // 清空索引加锁页面集合
         index_deleted_page_set_->clear();  // 清空索引删除页面集合
     }

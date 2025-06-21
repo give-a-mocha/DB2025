@@ -110,6 +110,12 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     for (const LockDataId& lock : lock_set_copy) {
         lock_manager_->unlock(txn, lock);
     }
+    
+    auto lock_gap_set = txn->get_lock_gap_set();
+    auto lock_gap_set_copy = *lock_gap_set; // 复制间隙锁集合以避免迭代时修改
+    for (const int& tab_fd : lock_gap_set_copy) {
+        lock_manager_->unlock_gap(txn, tab_fd);
+    }
 
     // 清空事务相关的集合
     txn->clear();
@@ -146,17 +152,21 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         const auto rid = (*iter)->GetRid();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if(write_type == WType::INSERT_TUPLE) {
+            auto rec = (*iter)->GetRecord();
             handle->delete_record(rid, context);
+            sm_manager_->delete_index(table_name, rec, context);
             log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
         } else if(write_type == WType::UPDATE_TUPLE) {
             auto new_rec = handle->get_record(rid, context);
             auto old_rec = (*iter)->GetRecord();
             handle->update_record(rid, old_rec.data, context);
+            sm_manager_->delete_index(table_name, *new_rec, context);
+            sm_manager_->insert_index(table_name, old_rec, rid, context);
             log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
         } else if(write_type == WType::DELETE_TUPLE) {
-            auto rec = handle->get_record(rid, context);
-            handle->insert_record_force(rid, rec->data);
-            log_manager->add_insert_log(context->txn_->get_transaction_id(), *rec, rid, table_name);
+            auto rec = (*iter)->GetRecord();
+            handle->insert_record_force(rid, rec.data);
+            log_manager->add_insert_log(context->txn_->get_transaction_id(), rec, rid, table_name);
         }
         // 删除版本链记录
         DeleteUpdateVersionLink(rid, context->txn_);
@@ -167,39 +177,18 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     for (const LockDataId& lock : lock_set_copy) {
         lock_manager_->unlock(txn, lock);
     }
+
+    auto lock_gap_set = txn->get_lock_gap_set();
+    auto lock_gap_set_copy = *lock_gap_set; // 复制间隙锁集合以避免迭代时修改
+    for (const int& tab_fd : lock_gap_set_copy) {
+        lock_manager_->unlock_gap(txn, tab_fd);
+    }
+
     txn->clear();
     txn->set_state(TransactionState::ABORTED);
 
     log_manager->add_abort_log(txn->get_transaction_id());
 }
-
-
-void TransactionManager::delete_index_record(TabMeta tab_, RmRecord* rec, Rid rid, Context *context){
-    for(const auto& index : tab_.indexes) {
-        auto ix_ = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(index.tab_name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
-            memcpy(key.get() + offset, rec->data + index.cols[i].offset, index.cols[i].len);
-            offset += index.cols[i].len;
-        }
-        ix_->delete_entry(key.get(), context->txn_);
-    }
-}
-
-void TransactionManager::insert_index_record(TabMeta tab_, RmRecord* rec, Rid rid, Context *context){
-    for(const auto& index : tab_.indexes) {
-        auto ix_ = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(index.tab_name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t i = 0; i < static_cast<size_t>(index.col_num); ++i) {
-            memcpy(key.get() + offset, rec->data + index.cols[i].offset, index.cols[i].len);
-            offset += index.cols[i].len;
-        }
-        ix_->insert_entry(key.get(), rid, context->txn_);
-    }
-}
-
 
 /**
 * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。

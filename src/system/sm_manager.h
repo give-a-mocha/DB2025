@@ -209,4 +209,10 @@ class SmManager {
         db_.log_offset_ = offset;
         flush_meta();
     }
+
+    bool insert_index(const std::string& tab_name, RmRecord &rec, Rid rid, Context* context_);
+
+    bool insert_index_without_rollback(const std::string& tab_name, RmRecord &rec, Rid rid, Context* context_);
+
+    bool delete_index(const std::string& tab_name, RmRecord &rec, Context* context_);
 };

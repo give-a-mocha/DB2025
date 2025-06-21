@@ -29,10 +29,11 @@ void IxScan::next() {
         // go to next leaf
         iid_.slot_no = 0;
         iid_.page_no = node->get_next_leaf();
+        Page* next_page = bpm_->fetch_page({ih_->fd_, iid_.page_no});
+        next_page->rlatch();
         now->runlatch();
         bpm_->unpin_page(node->get_page_id(), false);
-        now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
-        now->rlatch();
+        now = next_page;  // 更新当前页面为下一个叶节点
     }
     
     delete node;  // 释放内存

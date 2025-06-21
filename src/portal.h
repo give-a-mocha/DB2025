@@ -41,6 +41,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_mvcc_delete.h"
 #include "execution/executor_mvcc_insert.h"
 #include "execution/executor_mvcc_seq_scan.h"
+#include "execution/executor_mvcc_index_scan.h"
 
 typedef enum portalTag {
     PORTAL_Invalid_Query = 0,
@@ -99,14 +100,9 @@ class Portal {
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
                     }
-                    std::unique_ptr<AbstractExecutor> root = nullptr;
-                    if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                        root = std::make_unique<MvccUpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_,
+                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_,
                                                                     x->conds_, rids, context, txn_mgr);
-                    } else {
-                        root = std::make_unique<UpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_,
-                                                                x->conds_, rids, context);
-                    }
+                    
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
@@ -117,23 +113,15 @@ class Portal {
                         rids.push_back(scan->rid());
                     }
 
-                    std::unique_ptr<AbstractExecutor> root = nullptr;
-                    if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                        root = std::make_unique<MvccDeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context, txn_mgr);
-                    } else {
-                        root = std::make_unique<DeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context);
-                    }
+                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context, txn_mgr);
+                    
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
 
                 case PlanTag::T_Insert: {
-                    std::unique_ptr<AbstractExecutor> root = nullptr;
-                    if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                        root = std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);
-                    } else {
-                        root = std::make_unique<InsertExecutor>(sm_manager_, x->tab_name_, x->values_, context);
-                    }
+                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);
+                    
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
@@ -195,19 +183,17 @@ class Portal {
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
-            if(is_current_read){
-                return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
-            }
-            if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC){
-                return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
-            }else{
-                if (x->tag == PlanTag::T_SeqScan) {
-                    return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
-                } else {
-                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_,
-                                                               context);
+            if (x->tag == PlanTag::T_SeqScan) {
+                if(is_current_read) return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
+                else return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
+            } else {
+                if(is_current_read) {
+                    return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context, txn_mgr);
+                }else {
+                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context);
                 }
             }
+            
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
             std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr,is_current_read);
             std::unique_ptr<AbstractExecutor> right = convert_plan_executor(x->right_, context, txn_mgr,is_current_read);

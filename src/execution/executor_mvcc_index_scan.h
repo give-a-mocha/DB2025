@@ -19,7 +19,7 @@ See the Mulan PSL v2 for more details. */
 /**
  * @brief 索引扫描执行器，负责实现基于索引的高效记录访问
  */
-class IndexScanExecutor : public AbstractExecutor {
+class MvccIndexScanExecutor : public AbstractExecutor {
    private:
     /**
      * @brief 表的基本信息
@@ -64,6 +64,8 @@ class IndexScanExecutor : public AbstractExecutor {
      */
     SmManager *sm_manager_;  // 系统管理器
 
+    TransactionManager *txn_mgr_;
+
    public:
     /**
      * @brief 构造函数
@@ -76,9 +78,10 @@ class IndexScanExecutor : public AbstractExecutor {
      * @param index_col_names 索引涉及的列名
      * @param context 执行上下文
      */
-    IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
-                      std::vector<std::string> index_col_names, Context *context) {
+    MvccIndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
+                      std::vector<std::string> index_col_names, Context *context, TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
+        txn_mgr_ = txn_mgr;
         context_ = context;
         tab_name_ = std::move(tab_name);
         tab_ = sm_manager_->db_.get_table(tab_name_);
@@ -198,8 +201,8 @@ class IndexScanExecutor : public AbstractExecutor {
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
-            auto [rec, is_delete] = fh_->get_record_with_delete_tag(rid_, context_);
-            if (!is_delete && eval_conds(cols_, fed_conds_, rec.get())) {
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
             scan_->next();
@@ -220,8 +223,8 @@ class IndexScanExecutor : public AbstractExecutor {
         // 移动到下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto [rec, is_delete] = fh_->get_record_with_delete_tag(rid_, context_);
-            if (!is_delete && eval_conds(cols_, fed_conds_, rec.get())) {
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
             scan_->next();
@@ -239,7 +242,7 @@ class IndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override { return fh_->get_record(rid_, context_); }
+    std::unique_ptr<RmRecord> Next() override { return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_); }
 
     /**
      * @brief 获取记录的物理长度

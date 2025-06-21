@@ -517,5 +517,5 @@ class IxIndexHandle {
     // 检查该页是否合法
     bool is_page_safe(IxNodeHandle *node, Operation operation);
 
-    void UnlockAncestors(Transaction *transaction, bool unpin = true);
+    void UnlockAncestors(Transaction *transaction, bool is_dirty = false);
 };
