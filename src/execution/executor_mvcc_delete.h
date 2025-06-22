@@ -55,11 +55,12 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @return nullptr，因为DELETE不产生结果集
      */
     std::unique_ptr<RmRecord> Next() override {
+        // 添加间隙锁
+        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (auto &rid : rids_) {
             get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid);
-            // 添加间隙锁
-            txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
-            auto rec = fh_->get_record(rid, context_);
+            auto [rec, is_delete] = fh_->get_record_with_delete_tag(rid, context_);
+            if(is_delete) continue;
             fh_->delete_record_tag(rid, context_);
             std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
             txn_mgr_->add_delete_undo_log(context_->txn_, rid, std::move(values));

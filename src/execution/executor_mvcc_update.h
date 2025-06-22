@@ -64,14 +64,14 @@ class MvccUpdateExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
-
+        // 加锁间隙
+        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
             get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid);
-            // 加锁间隙
-            txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
             // 获取旧记录并创建新记录
-            auto old_rec = fh_->get_record(rid, context_);
+            auto [old_rec, is_delete] = fh_->get_record_with_delete_tag(rid, context_);
+            if(is_delete) continue;
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 
