@@ -184,13 +184,13 @@ class Portal {
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if (x->tag == PlanTag::T_SeqScan) {
-                if(is_current_read) return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
-                else return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
+                if(is_current_read) return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
+                else return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
             } else {
                 if(is_current_read) {
-                    return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context, txn_mgr);
-                }else {
                     return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context);
+                }else {
+                    return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context, txn_mgr);
                 }
             }
             
