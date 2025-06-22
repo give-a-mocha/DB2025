@@ -86,7 +86,8 @@ void RecoveryManager::recovery() {
 			undo(log_record.get());
 		}
 	}
-
+	Transaction* txn = new Transaction(INVALID_TXN_ID, IsolationLevel::SERIALIZABLE);
+	Context* context = new Context(nullptr, nullptr, txn);
 	for (const auto& [tab_name, tab_meta] : sm_manager_->db_.tabs_) {
         std::vector<IndexMeta> indexes;
         indexes.reserve(tab_meta.indexes.size());
@@ -94,18 +95,20 @@ void RecoveryManager::recovery() {
             indexes.emplace_back(index_);
         }
         for (const auto &index_ : indexes) {
-            sm_manager_->drop_index(index_.tab_name, index_.cols, nullptr);
+            sm_manager_->drop_index(index_.tab_name, index_.cols, context);
             std::vector<std::string> col_names_;
             col_names_.reserve(index_.cols.size());
             for (const auto &col : index_.cols) {
                 col_names_.emplace_back(col.name);
             }
-            sm_manager_->create_index(index_.tab_name, col_names_, nullptr);
+            sm_manager_->create_index(index_.tab_name, col_names_, context);
         }
     }
 
 	flush_to_disk();
 	log_records_.clear();
+	delete context;
+	delete txn;
 }
 
 
