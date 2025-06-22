@@ -136,9 +136,8 @@ void SmManager::open_db(const std::string& db_name) {
     for (auto& [table_name, table_info] : db_.tabs_) {
         fhs_.emplace(table_name, rm_manager_->open_file(table_name));
         for (auto& index : table_info.indexes) {
-            // !索引暂未实现，只是作为占位
             auto&& index_name = ix_manager_->get_index_name(table_name, index.cols);
-            ihs_.emplace(index_name, ix_manager_->open_index(index_name, index.cols));
+            ihs_.emplace(index_name, ix_manager_->open_index(table_name, index.cols));
         }
     }
 }

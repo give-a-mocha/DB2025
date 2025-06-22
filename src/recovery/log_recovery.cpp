@@ -9,9 +9,7 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "log_recovery.h"
-
-
-#include "log_recovery.h"
+#include "common/print.hpp"
 
 
 void RecoveryManager::recovery() {
