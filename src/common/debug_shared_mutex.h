@@ -1,11 +1,10 @@
 #pragma once
 
 #include <shared_mutex>
-#include <atomic>
 #include <thread>
-#include <sstream>
-#include <iostream>
-#include <iomanip>
+#include <atomic>
+#include "common/print.hpp"
+#include "common/Format.h"
 #define DEBUG_LOCKS  // 启用调试模式
 
 /**
@@ -32,7 +31,7 @@ public:
         std::thread::id current_thread = std::this_thread::get_id();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[LOCK] Thread " << current_thread << " trying to acquire exclusive lock on " << name_ << std::endl;
+        INFO("[LOCK] Thread {} trying to acquire exclusive lock on {}", current_thread, name_);
         print_state();
         #endif
         
@@ -41,7 +40,7 @@ public:
         exclusive_holder_ = current_thread;
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[LOCK] Thread " << current_thread << " acquired exclusive lock on " << name_ << std::endl;
+        INFO("[LOCK] Thread {} acquired exclusive lock on {}", current_thread, name_);
         #endif
     }
     
@@ -49,7 +48,7 @@ public:
         std::thread::id current_thread = std::this_thread::get_id();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[UNLOCK] Thread " << current_thread << " releasing exclusive lock on " << name_ << std::endl;
+        INFO("[UNLOCK] Thread {} releasing exclusive lock on {}", current_thread, name_);
         #endif
         
         exclusive_held_ = false;
@@ -57,7 +56,7 @@ public:
         mutex_.unlock();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[UNLOCK] Thread " << current_thread << " released exclusive lock on " << name_ << std::endl;
+        INFO("[UNLOCK] Thread {} released exclusive lock on {}", current_thread, name_);
         #endif
     }
     
@@ -65,7 +64,7 @@ public:
         std::thread::id current_thread = std::this_thread::get_id();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[TRY_LOCK] Thread " << current_thread << " trying to acquire exclusive lock on " << name_ << std::endl;
+        INFO("[TRY_LOCK] Thread {} trying to acquire exclusive lock on {}", current_thread, name_);
         #endif
         
         if (mutex_.try_lock()) {
@@ -73,13 +72,13 @@ public:
             exclusive_holder_ = current_thread;
             
             #ifdef DEBUG_LOCKS
-            std::cout << "[TRY_LOCK] Thread " << current_thread << " acquired exclusive lock on " << name_ << std::endl;
+            INFO("[TRY_LOCK] Thread {} acquired exclusive lock on {}", current_thread, name_);
             #endif
             return true;
         }
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[TRY_LOCK] Thread " << current_thread << " failed to acquire exclusive lock on " << name_ << std::endl;
+        INFO("[TRY_LOCK] Thread {} failed to acquire exclusive lock on {}", current_thread, name_);
         #endif
         return false;
     }
@@ -89,7 +88,7 @@ public:
         std::thread::id current_thread = std::this_thread::get_id();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[LOCK_SHARED] Thread " << current_thread << " trying to acquire shared lock on " << name_ << std::endl;
+        INFO("[LOCK_SHARED] Thread {} trying to acquire shared lock on {}", current_thread, name_);
         print_state();
         #endif
         
@@ -97,8 +96,8 @@ public:
         shared_count_++;
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[LOCK_SHARED] Thread " << current_thread << " acquired shared lock on " << name_ 
-                  << " (count: " << shared_count_.load() << ")" << std::endl;
+        INFO("[LOCK_SHARED] Thread {} acquired shared lock on {} (count: {})", 
+             current_thread, name_, shared_count_.load());
         #endif
     }
     
@@ -106,16 +105,16 @@ public:
         std::thread::id current_thread = std::this_thread::get_id();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[UNLOCK_SHARED] Thread " << current_thread << " releasing shared lock on " << name_ 
-                  << " (count before: " << shared_count_.load() << ")" << std::endl;
+        INFO("[UNLOCK_SHARED] Thread {} releasing shared lock on {} (count before: {})", 
+             current_thread, name_, shared_count_.load());
         #endif
         
         shared_count_--;
         mutex_.unlock_shared();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[UNLOCK_SHARED] Thread " << current_thread << " released shared lock on " << name_ 
-                  << " (count: " << shared_count_.load() << ")" << std::endl;
+        INFO("[UNLOCK_SHARED] Thread {} released shared lock on {} (count: {})", 
+             current_thread, name_, shared_count_.load());
         #endif
     }
     
@@ -123,57 +122,52 @@ public:
         std::thread::id current_thread = std::this_thread::get_id();
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[TRY_LOCK_SHARED] Thread " << current_thread << " trying to acquire shared lock on " << name_ << std::endl;
+        INFO("[TRY_LOCK_SHARED] Thread {} trying to acquire shared lock on {}", current_thread, name_);
         #endif
         
         if (mutex_.try_lock_shared()) {
             shared_count_++;
             
             #ifdef DEBUG_LOCKS
-            std::cout << "[TRY_LOCK_SHARED] Thread " << current_thread << " acquired shared lock on " << name_ 
-                      << " (count: " << shared_count_.load() << ")" << std::endl;
+            INFO("[TRY_LOCK_SHARED] Thread {} acquired shared lock on {} (count: {})", 
+                 current_thread, name_, shared_count_.load());
             #endif
             return true;
         }
         
         #ifdef DEBUG_LOCKS
-        std::cout << "[TRY_LOCK_SHARED] Thread " << current_thread << " failed to acquire shared lock on " << name_ << std::endl;
+        INFO("[TRY_LOCK_SHARED] Thread {} failed to acquire shared lock on {}", current_thread, name_);
         #endif
         return false;
     }
     
     // 状态查询和输出
     void print_state() const {
-        std::cout << "[STATE] Mutex " << name_ << ": ";
+        print("[STATE] Mutex {}: ", name_);
         
         if (exclusive_held_) {
-            std::cout << "EXCLUSIVE (holder: " << exclusive_holder_.load() << ")";
+            println("EXCLUSIVE (holder: {})", exclusive_holder_.load());
         } else {
             int shared = shared_count_.load();
             if (shared > 0) {
-                std::cout << "SHARED (count: " << shared << ")";
+                println("SHARED (count: {})", shared);
             } else {
-                std::cout << "UNLOCKED";
+                println("UNLOCKED");
             }
         }
-        std::cout << std::endl;
     }
     
     std::string get_state_string() const {
-        std::ostringstream oss;
-        oss << "Mutex[" << name_ << "]: ";
-        
         if (exclusive_held_) {
-            oss << "EXCLUSIVE(holder:" << exclusive_holder_.load() << ")";
+            return util::format("Mutex[{}]: EXCLUSIVE(holder:{})", name_, exclusive_holder_.load());
         } else {
             int shared = shared_count_.load();
             if (shared > 0) {
-                oss << "SHARED(count:" << shared << ")";
+                return util::format("Mutex[{}]: SHARED(count:{})", name_, shared);
             } else {
-                oss << "UNLOCKED";
+                return util::format("Mutex[{}]: UNLOCKED", name_);
             }
         }
-        return oss.str();
     }
     
     // 统计信息
@@ -187,7 +181,7 @@ public:
 #ifdef DEBUG_LOCKS
     #define DEBUG_MUTEX_STATE(mutex) do { (mutex).print_state(); } while(0)
     #define DEBUG_MUTEX_INFO(mutex, msg) do { \
-        std::cout << "[DEBUG] " << msg << " - " << (mutex).get_state_string() << std::endl; \
+        INFO("[DEBUG] {} - {}", msg, (mutex).get_state_string()); \
     } while(0)
 #else
     #define DEBUG_MUTEX_STATE(mutex) do {} while(0)
