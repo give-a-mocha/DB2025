@@ -28,7 +28,7 @@ std::vector<Value> convert_record_to_values(
         value.init_raw(col.len); // 确保每个Value都有原始数据缓冲区
         values.push_back(value);
     }
-    return std::move(values);
+    return values;
 }
 
 /**

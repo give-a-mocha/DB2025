@@ -425,6 +425,27 @@ class IxIndexHandle {
      */
     Iid leaf_begin() const;
 
+    //===== 调试函数 =====
+
+    /**
+     * @brief 调试函数：以树形结构打印B+树
+     * @details 递归遍历B+树的所有节点，以树形结构显示页号和键的个数
+     */
+    void debug_print_tree();
+
+    /**
+     * @brief 递归打印节点信息
+     * @param page_no 节点页号
+     * @param depth 当前节点深度，用于控制缩进
+     */
+    void debug_print_node(page_id_t page_no, int depth);
+
+    /**
+     * @brief 打印叶子节点链表
+     * @details 从第一个叶子节点开始，沿着链表打印所有叶子节点的连接关系
+     */
+    void debug_print_leaf_chain();
+
    private:
     //===== 树结构维护函数 =====
 

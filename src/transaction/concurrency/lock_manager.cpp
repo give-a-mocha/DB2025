@@ -404,13 +404,13 @@ std::vector<Condition> LockManager::get_gap_condition(int tab_fd) {
     std::vector<Condition> gap_conditions;
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
-        return std::move(gap_conditions);
+        return gap_conditions;
     }
     GapLockRequestQueue& request_queue = table_queue_it->second;
     for(const auto& gap_request : request_queue.request_queue_) {
         gap_conditions.insert(gap_conditions.end(), gap_request.conds.begin(), gap_request.conds.end());
     }
-    return std::move(gap_conditions);
+    return gap_conditions;
 }
 
 bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {

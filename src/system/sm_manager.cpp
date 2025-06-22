@@ -423,7 +423,6 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
         auto [record, is_delete] = fh_->get_record_with_delete_tag(rmScan.rid(), context);
-
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -579,7 +578,7 @@ bool SmManager::delete_index(const std::string& tab_name, RmRecord &rec, Context
             offset += index.cols[j].len;
         }
         // 删除索引项
-        auto res = ih->delete_entry(key.get(), context_->txn_);
+        ih->delete_entry(key.get(), context_->txn_);
     }
     return true;
 }

@@ -121,6 +121,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
         }
         // replacer_->pin(frame_id);  // 固定该页
         page->pin_count_++;
+        // INFO("fetch page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
         return page;
     }
 
@@ -137,6 +138,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
     page->pin_count_ = 1;  // 固定该页
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
+    // INFO("fetch page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     return page;
 }
 
@@ -185,7 +187,7 @@ bool BufferPoolManager::unpin_page(PageId page_id, bool is_dirty) {
 
     // 减少pin_count
     page->pin_count_--;
-
+    // INFO("Unpinning page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     // 如果pin_count降为0,在replacer中取消固定
     if (page->pin_count_ == 0) {
         replacer_->unpin(frame_id);
@@ -264,6 +266,7 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
     page_id->page_no = disk_manager_->allocate_page(page_id->fd);
     update_page(page, *page_id, frame_id);
     page->pin_count_ = 1;  // 固定该页
+    // INFO("new page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
 

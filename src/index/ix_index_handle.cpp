@@ -262,6 +262,7 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
     // 1. 获取根节点
     // 2. 从根节点开始不断向下查找目标key
     // 3. 找到包含该key值的叶子结点停止查找，并返回叶子节点
+    // WARN("START find_leaf_page");
     if (operation == Operation::FIND){
         root_latch_.lock();
     }
@@ -279,6 +280,7 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
             root_latch_.unlock();
         }
     }
+    // INFO("Page : {}", page->get_page_id().page_no);
     while (!node->is_leaf_page()) {
         // 如果是非叶子结点，则继续向下查找
         page_id = {fd_, node->internal_lookup(key)};
@@ -298,6 +300,7 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
         delete node;  // 释放上一个节点内存
         node = child_node;  // 更新当前节点为子节点
         page = child_page;  // 更新当前页面为子页面
+        // INFO("Page : {}", page->get_page_id().page_no);
     }
     delete node;
     return page;
@@ -419,6 +422,7 @@ void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, 
         new_root->insert_pair(1, key, Rid{new_node->get_page_no(), -1});
 
         old_node->page_hdr->parent = new_root->get_page_no();
+        new_node->page_hdr->parent = new_root->get_page_no();
         // 更新root page
         update_root_page_no(new_root->get_page_no());
         buffer_pool_manager_->unpin_page(new_root->get_page_id(), true);
@@ -1052,4 +1056,94 @@ void IxIndexHandle::UnlockAncestors(Transaction *transaction, bool unpin) {
         }
     }
     pages->clear();  // 清空已解锁的页面集合
+}
+
+/**
+ * @brief 调试函数：以树形结构打印B+树
+ * @details 递归遍历B+树的所有节点，以树形结构显示页号和键的个数
+ */
+void IxIndexHandle::debug_print_tree() {
+    TRACE_FUNCTION
+    INFO("\n=== B+ Tree Structure Debug ===\n");
+    if (is_empty()) {
+        INFO("Tree is empty!\n");
+        return;
+    }
+    
+    // 打印树的基本信息
+    INFO("Root page: {}", file_hdr_->root_page_);
+    INFO("Last leaf: {}", file_hdr_->last_leaf_);
+    INFO("Total pages: {}", file_hdr_->num_pages_);
+    INFO("Key length: {}\n", file_hdr_->col_tot_len_);
+    
+    // 从根节点开始递归打印
+    debug_print_node(file_hdr_->root_page_, 0);
+    
+    INFO("\n=== End of B+ Tree Structure Debug ===\n");
+    debug_print_leaf_chain();
+    INFO("====================================\n");
+}
+
+/**
+ * @brief 递归打印节点信息
+ * @param page_no 节点页号
+ * @param depth 当前节点深度，用于控制缩进
+ */
+void IxIndexHandle::debug_print_node(page_id_t page_no, int depth) {
+    TRACE_FUNCTION
+    if (page_no == IX_NO_PAGE || page_no == INVALID_PAGE_ID) {
+        return;
+    }
+    
+    std::string res = std::string(depth * 2, ' ');  // 根据深度生成缩进字符串
+    
+    IxNodeHandle* node = fetch_node(page_no);
+    
+    // 打印节点基本信息
+    res += "Page[" + std::to_string(page_no) + "] ";
+    res += (node->is_leaf_page() ? "LEAF " : "INTERNAL ");
+    res += "Keys:" + std::to_string(node->get_size()) + "/" + std::to_string(node->get_max_size()) + " ";
+    res += "Parent:" + std::to_string(node->get_parent_page_no());
+    
+    if (node->is_leaf_page()) {
+        res += " Prev:" + std::to_string(node->get_prev_leaf()) + " Next:" + std::to_string(node->get_next_leaf());
+    }
+    INFO(res);
+    
+    // 如果是内部节点，递归打印子节点
+    if (!node->is_leaf_page()) {
+        for (int i = 0; i < node->get_size(); i++) {
+            page_id_t child_page = node->value_at(i);
+            debug_print_node(child_page, depth + 1);
+        }
+    }
+    
+    buffer_pool_manager_->unpin_page(node->get_page_id(), false);
+    delete node;
+}
+
+/**
+ * @brief 打印叶子节点链表
+ * @details 从第一个叶子节点开始，沿着链表打印所有叶子节点的连接关系
+ */
+void IxIndexHandle::debug_print_leaf_chain() {
+    TRACE_FUNCTION
+    if (is_empty()) {
+        INFO("Leaf chain is empty.\n");
+        return;
+    }
+    std::string res = "Leaf chain: ";
+    auto now = fetch_node(file_hdr_->root_page_);
+    while (!now->is_leaf_page()) {
+        auto next_page = now->value_at(0);
+        now = fetch_node(next_page);
+    }
+    while(now->get_page_no() != file_hdr_->last_leaf_){
+        res += "[" + std::to_string(now->get_page_no()) + "] ";
+        auto next_page = now->get_next_leaf();
+        now = fetch_node(next_page);
+    }
+    res += "[" + std::to_string(now->get_page_no()) + "]";
+    res += "\n";
+    INFO(res);
 }

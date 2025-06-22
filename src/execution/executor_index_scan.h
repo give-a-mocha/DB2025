@@ -198,8 +198,8 @@ class IndexScanExecutor : public AbstractExecutor {
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
-            auto [rec, is_delete] = fh_->get_record_with_delete_tag(rid_, context_);
-            if (!is_delete && eval_conds(cols_, fed_conds_, rec.get())) {
+            auto rec = fh_->get_record(rid_, context_);
+            if (eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
             scan_->next();
