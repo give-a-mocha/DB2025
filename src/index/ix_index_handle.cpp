@@ -1044,7 +1044,7 @@ bool IxIndexHandle::is_page_safe(IxNodeHandle *node, Operation operation) {
     }
 }
 
-void IxIndexHandle::UnlockAncestors(Transaction *transaction, bool unpin) {
+void IxIndexHandle::UnlockAncestors(Transaction *transaction) {
     TRACE_FUNCTION
     auto pages = transaction->get_index_latch_page_set();
     for (auto &page : *pages) {
@@ -1052,7 +1052,7 @@ void IxIndexHandle::UnlockAncestors(Transaction *transaction, bool unpin) {
             root_latch_.unlock();
         } else {
             page->wunlatch();
-            if(unpin) buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+            buffer_pool_manager_->unpin_page(page->get_page_id(), false);
         }
     }
     pages->clear();  // 清空已解锁的页面集合
