@@ -192,6 +192,20 @@ void RecoveryManager::create_static_check_point() {
 
 	std::unique_lock lock_(latch_);
     std::unique_lock lock(log_mgr_->latch_);
+	auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
 	log_mgr_->flush_log_to_disk_without_lock();
 	flush_to_disk();
+	//在静态检查点之前的，未提交事务，应该添加
+	std::unordered_set<txn_id_t> committed_txns;
+	for (const auto &log_record : log_records_) {
+        if (log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
+			committed_txns.insert(log_record->	log_tid_);
+		}
+    }
+	for (const auto &log_record : log_records_) {
+        if (committed_txns.find(log_record->log_tid_) == committed_txns.end()) {
+            log_mgr_->add_log_to_buffer_without_lock(log_record.get());
+        }
+    }
+	log_mgr_->flush_log_to_disk_without_lock();
 }

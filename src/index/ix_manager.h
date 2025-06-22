@@ -261,7 +261,7 @@ class IxManager {
      * @note 这是一个底层操作，通常通过destroy_index调用
      * @warning 确保没有其他事务正在使用该索引
      */
-    void drop_index(const IxIndexHandle *ih) {
+    void close_index_without_flush(const IxIndexHandle *ih) {
         buffer_pool_manager_->delete_all_pages(ih->fd_);
         disk_manager_->close_file(ih->fd_);
     }
