@@ -19,8 +19,8 @@ def generate_name(w_id):
         return '34245418'
     else:
         # 其他值生成随机8位数字字符串
-        base = '12345'
-        suffix = f"{w_id:03d}"  # 3位数字，不足补零
+        base = '1234'
+        suffix = f"{w_id:04d}"  # 3位数字，不足补零
         return base + suffix
 
 def generate_sql_file():

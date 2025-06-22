@@ -191,7 +191,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
 
     // 检查record是否存在
-    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no) || Bitmap::is_set(page_handle.delete_bitmap, rid.slot_no)) {
+    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
