@@ -173,7 +173,11 @@ public:
      */
     bool UpdateVersionLink(Rid rid, std::optional<VersionUndoLink> prev_version);
 
-    void DeleteUpdateVersionLink(Rid rid, Transaction *txn);
+    /**
+     * @brief 删除txn的撤销链接
+     * @return 返回当前的最后一个撤销链接。
+     */
+    UndoLink DeleteUpdateVersionLink(Rid rid, Transaction *txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
     std::optional<UndoLink> GetUndoLink(Rid rid);
 
