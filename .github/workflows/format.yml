@@ -1,0 +1,27 @@
+name: Format C++ Code
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Run clang-format
+        run: find src -name "*.h" -o -name "*.hpp" -o -name "*.cpp" | xargs clang-format -i --style=file
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v6
+        with:
+          commit_message: "style: format code with clang-format"
+          file_pattern: src/**/*.h src/**/*.hpp src/**/*.cpp
