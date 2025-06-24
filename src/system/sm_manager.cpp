@@ -185,7 +185,7 @@ void SmManager::close_db() {
 
     // 3. 最后刷新并保存元数据
     flush_meta();
-    
+
     db_.name_.clear();
     db_.tabs_.clear();
     fhs_.clear();

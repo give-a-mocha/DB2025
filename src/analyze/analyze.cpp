@@ -228,7 +228,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
-        if (!sm_manager_->db_.is_table(x->tab_name->tab_name)) {           // 检查表是否存在
+        if (!sm_manager_->db_.is_table(x->tab_name->tab_name)) {  // 检查表是否存在
             throw TableNotFoundError(x->tab_name->tab_name);
         }
         query->tables.push_back(x->tab_name->tab_name);
@@ -241,10 +241,10 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 处理每个SET赋值
         for (auto &sv_set_clause : x->set_clauses) {
             SetClause set_clause;
-            set_clause.lhs.tab_name = x->tab_name->tab_name;         // 设置左侧列的表名
-            set_clause.lhs.tab_alias = x->tab_name->alias;           // 设置左侧列的别名
-            set_clause.lhs.col_name = sv_set_clause->col_name;      // 设置左侧列名
-            
+            set_clause.lhs.tab_name = x->tab_name->tab_name;    // 设置左侧列的表名
+            set_clause.lhs.tab_alias = x->tab_name->alias;      // 设置左侧列的别名
+            set_clause.lhs.col_name = sv_set_clause->col_name;  // 设置左侧列名
+
             auto rhs_term = AnalyzeExprTerm(sv_set_clause->val, all_cols, tab_refs);
             if (rhs_term->term_type == TermType::VALUE) {
                 set_clause.rhs_type = SetRhsType::SET_RHS_VALUE;
@@ -252,17 +252,17 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             } else if (rhs_term->term_type == TermType::EXPR) {
                 set_clause.rhs_type = SetRhsType::SET_RHS_EXPR;
                 set_clause.rhs_expr = rhs_term->expr;
-            } else if (rhs_term->term_type == TermType::COLUMN){ // TermType::COLUMN
+            } else if (rhs_term->term_type == TermType::COLUMN) {  // TermType::COLUMN
                 set_clause.rhs_type = SetRhsType::SET_RHS_COL;
                 set_clause.rhs_col = rhs_term->col;  // 设置右侧列引用
-            } else{
+            } else {
                 throw RMDBError("Unsupported right-hand side type in UPDATE statement");
             }
-            query->set_clauses.push_back(std::move(set_clause)); // 使用 move 提高效率
+            query->set_clauses.push_back(std::move(set_clause));  // 使用 move 提高效率
         }
 
         // 处理WHERE条件
-        get_clause_alias(all_cols,x->conds, query->conds, tab_refs);
+        get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
         check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性
 
         // 检查每个SET子句的有效性和类型兼容性
@@ -273,13 +273,14 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
                 auto col = tab.get_col(set_clause.lhs.col_name);
                 // 允许数值类型之间的转换(INT与FLOAT)
-                bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
-                                  (set_clause.rhs_val.type == ColType::TYPE_INT || set_clause.rhs_val.type == ColType::TYPE_FLOAT);
+                bool is_numeric =
+                    (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
+                    (set_clause.rhs_val.type == ColType::TYPE_INT || set_clause.rhs_val.type == ColType::TYPE_FLOAT);
                 if (col->type != set_clause.rhs_val.type && !is_numeric) {
                     throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
                 }
                 set_clause.rhs_val.init_raw(col->len);  // 初始化值的原始数据
-            } else if(set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
+            } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                 // 检查右侧列是否存在
                 set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
                 // 类型兼容校验：允许 INT↔FLOAT，其他必须完全一致
@@ -301,7 +302,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 set_clause.rhs_expr = std::move(temp->expr);
                 TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
                 auto col = tab.get_col(set_clause.lhs.col_name);
-                if(col->type == ColType::TYPE_STRING) {
+                if (col->type == ColType::TYPE_STRING) {
                     throw IncompatibleTypeError(coltype2str(col->type), coltype2str(ColType::TYPE_FLOAT));
                 }
             }
@@ -309,11 +310,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {  // 处理DELETE查询
         // 添加要删除数据的表名
         query->tables.push_back(x->tab_name);
-        std::vector<ColMeta> all_cols;  // 存储相关表的列元数据
-        get_all_cols(query->tables, all_cols);  // 获取所有相关表的列
+        std::vector<ColMeta> all_cols;                                      // 存储相关表的列元数据
+        get_all_cols(query->tables, all_cols);                              // 获取所有相关表的列
         std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
         // 处理WHERE条件
-        get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
+        get_clause_alias(all_cols, x->conds, query->conds, tab_refs);         // 获取WHERE条件并处理别名
         check_clause({x->tab_name}, query->conds);                            // 检查WHERE条件的有效性
     } else if (auto x = std::dynamic_pointer_cast<ast::InsertStmt>(parse)) {  // 处理INSERT查询
         // 处理INSERT的VALUES值
@@ -512,12 +513,12 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
             cond.rhs_val = rhs_term->val;
         } else if (rhs_term->term_type == TermType::COLUMN) {
             cond.rhs_type = ConditionRhsType::RHS_COLUMN;
-            cond.rhs_col = rhs_term->col; // 已经由 AnalyzeExprTerm 处理过别名和检查
+            cond.rhs_col = rhs_term->col;  // 已经由 AnalyzeExprTerm 处理过别名和检查
         } else if (rhs_term->term_type == TermType::EXPR) {
             cond.rhs_type = ConditionRhsType::RHS_EXPR;
             cond.rhs_expr = rhs_term->expr;
         } else {
-             throw InternalError("Unsupported expression term type in condition analysis");
+            throw InternalError("Unsupported expression term type in condition analysis");
         }
 
         conds.push_back(cond);  // 添加条件到结果集
@@ -628,7 +629,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             } else {
                 rhs_type = ColType::TYPE_INT;
             }
-        } else { // rhs_type == ConditionRhsType::RHS_EXPR
+        } else {  // rhs_type == ConditionRhsType::RHS_EXPR
             // 检查表达式内部是否都是数值类型
             // TODO: 暂时表达式涉及的列只能是左边表中的列
             std::vector<ColMeta> ltable_cols;
@@ -637,7 +638,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
             CheckArithExprType(cond.rhs_expr->rhs, ltable_cols);
             // 假设算术表达式的结果总是数值类型 (例如 FLOAT 用于比较)
             // 更精确的类型推断可以后续添加 (例如 INT + INT = INT, INT + FLOAT = FLOAT)
-            rhs_type = ColType::TYPE_FLOAT; // Assume float for comparison simplicity
+            rhs_type = ColType::TYPE_FLOAT;  // Assume float for comparison simplicity
         }
 
         // 允许数值类型之间的比较(INT与FLOAT)
@@ -650,8 +651,6 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         }
     }
 }
-
-
 
 /**
  * @brief 将语法树中的值对象转换为系统内部的Value对象
@@ -829,8 +828,8 @@ ArithOp Analyze::convert_sv_arith_op(ast::SvArithOp op) {
  * @return 转换后的 ExprTerm 对象
  */
 std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Expr> &ast_expr,
-                                                  const std::vector<ColMeta> &all_cols,
-                                                  const std::vector<TabRef> &tab_refs) {
+                                                   const std::vector<ColMeta> &all_cols,
+                                                   const std::vector<TabRef> &tab_refs) {
     TRACE_FUNCTION
 
     if (!ast_expr) {
@@ -840,16 +839,14 @@ std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Ex
     if (auto sv_val = std::dynamic_pointer_cast<ast::Value>(ast_expr)) {
         Value common_val = convert_sv_value(sv_val);
         return std::make_shared<ExprTerm>(common_val);
-    }
-    else if (auto sv_col = std::dynamic_pointer_cast<ast::Col>(ast_expr)) {
+    } else if (auto sv_col = std::dynamic_pointer_cast<ast::Col>(ast_expr)) {
         TabCol common_col = {"", sv_col->col_name, sv_col->tab_name};
         common_col.set_col_alias(sv_col->alias);
         common_col.set_agg_type(sv_col->aggregate_type);
         convert_tabname(all_cols, common_col, tab_refs);
         check_column(all_cols, common_col);
         return std::make_shared<ExprTerm>(common_col);
-    }
-    else if (auto sv_arith_expr = std::dynamic_pointer_cast<ast::ArithExpr>(ast_expr)) {
+    } else if (auto sv_arith_expr = std::dynamic_pointer_cast<ast::ArithExpr>(ast_expr)) {
         auto lhs_term = AnalyzeExprTerm(sv_arith_expr->lhs, all_cols, tab_refs);
         auto rhs_term = AnalyzeExprTerm(sv_arith_expr->rhs, all_cols, tab_refs);
         ArithOp common_op = convert_sv_arith_op(sv_arith_expr->op);
@@ -867,14 +864,14 @@ std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Ex
  * @param all_cols 所有相关表的列元数据
  * @throw IncompatibleTypeError 如果发现非数值类型
  */
-void Analyze::CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta>& all_cols) {
+void Analyze::CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta> &all_cols) {
     if (!term) {
         throw InternalError("Null expression term encountered during type checking");
     }
 
     switch (term->term_type) {
         case TermType::VALUE:
-            if(term->val.type == ColType::TYPE_STRING) {
+            if (term->val.type == ColType::TYPE_STRING) {
                 throw IncompatibleTypeError("Arithmetic expression", coltype2str(term->val.type));
             }
             term->val.init_raw();
@@ -883,25 +880,25 @@ void Analyze::CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vect
             // 如果是列检查是不是在全部列中，
             // TODO: 可能需要更加详细的检查，比如防止出现别的表的列
             bool found = false;
-            for (const auto& col_meta : all_cols) {
+            for (const auto &col_meta : all_cols) {
                 // Need to compare based on resolved table name, not alias
                 if (col_meta.tab_name == term->col.tab_name && col_meta.name == term->col.col_name) {
-                     if (col_meta.type != ColType::TYPE_INT && col_meta.type != ColType::TYPE_FLOAT) {
-                         throw IncompatibleTypeError("Arithmetic expression", coltype2str(col_meta.type));
-                     }
-                     found = true;
-                     break; // Found the column
+                    if (col_meta.type != ColType::TYPE_INT && col_meta.type != ColType::TYPE_FLOAT) {
+                        throw IncompatibleTypeError("Arithmetic expression", coltype2str(col_meta.type));
+                    }
+                    found = true;
+                    break;  // Found the column
                 }
             }
             if (!found) {
-                 // This should ideally not happen if check_column was called before, but as a safeguard:
-                 throw ColumnNotFoundError(term->col.to_string());
+                // This should ideally not happen if check_column was called before, but as a safeguard:
+                throw ColumnNotFoundError(term->col.to_string());
             }
             break;
         }
         case TermType::EXPR:
             if (!term->expr) {
-                 throw InternalError("Null nested expression encountered during type checking");
+                throw InternalError("Null nested expression encountered during type checking");
             }
             // Recursively check left and right operands
             CheckArithExprType(term->expr->lhs, all_cols);

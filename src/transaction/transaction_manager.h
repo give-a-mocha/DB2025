@@ -59,9 +59,8 @@ struct VersionUndoLink {
     }
 };
 
-
 class TransactionManager {
-public:
+   public:
     // 全局事务表，存放事务ID与事务对象的映射关系
     static std::unordered_map<txn_id_t, Transaction *> txn_map;
     // 保护事务表的读写锁
@@ -84,7 +83,8 @@ public:
     std::shared_mutex version_info_mutex_;
     /** 存储表堆中每个元组的先前版本。 */
     std::unordered_map<page_id_t, std::shared_ptr<PageVersionInfo>> version_info_;
-private:
+
+   private:
     // 事务使用的并发控制算法，目前只需要考虑2PL
     ConcurrencyMode concurrency_mode_;
 
@@ -107,7 +107,7 @@ private:
     /// 存储所有正在运行事务的读取时间戳，以便于垃圾回收，仅用于MVCC
     Watermark running_txns_{0};
 
-public:
+   public:
     explicit TransactionManager(LockManager *lock_manager, SmManager *sm_manager,
                                 ConcurrencyMode concurrency_mode = ConcurrencyMode::TWO_PHASE_LOCKING);
 
@@ -124,15 +124,11 @@ public:
     void set_concurrency_mode(ConcurrencyMode concurrency_mode) { concurrency_mode_ = concurrency_mode; }
 
     LockManager *get_lock_manager() { return lock_manager_; }
-    
-    //!Masttf DO
-    timestamp_t get_next_txn_id() {
-        return next_txn_id_.fetch_add(1);
-    }
-    //!Masttf DO
-    timestamp_t get_next_timestamp() {
-        return next_timestamp_.fetch_add(1);
-    }
+
+    //! Masttf DO
+    timestamp_t get_next_txn_id() { return next_txn_id_.fetch_add(1); }
+    //! Masttf DO
+    timestamp_t get_next_timestamp() { return next_timestamp_.fetch_add(1); }
 
     TransactionState get_txn_state(txn_id_t txn_id) {
         std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
@@ -146,7 +142,7 @@ public:
      * @description: 获取事务ID为txn_id的事务对象
      * @return {Transaction*} 事务对象的指针
      * @param {txn_id_t} txn_id 事务ID
-     */  
+     */
     Transaction *get_transaction(txn_id_t txn_id) {
         if (txn_id == INVALID_TXN_ID) return nullptr;
         std::unique_lock<std::mutex> lock(latch_);
@@ -162,9 +158,9 @@ public:
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
 
     /**
-    * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
-    * 在更新之前，将调用 `check` 函数以确保有效性。
-    */
+     * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+     * 在更新之前，将调用 `check` 函数以确保有效性。
+     */
     bool UpdateUndoLink(Rid rid, std::optional<UndoLink> prev_link,
                         std::function<bool(std::optional<UndoLink>)> &&check = nullptr);
 
@@ -198,9 +194,8 @@ public:
     /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
     void GarbageCollection();
 
+   private:
+    void delete_index_record(TabMeta tab_, RmRecord *rec, Rid rid, Context *context);
 
-private:
-    void delete_index_record(TabMeta tab_,RmRecord* rec, Rid rid, Context *context);
-
-    void insert_index_record(TabMeta tab_,RmRecord* rec, Rid rid, Context *context);
+    void insert_index_record(TabMeta tab_, RmRecord *rec, Rid rid, Context *context);
 };

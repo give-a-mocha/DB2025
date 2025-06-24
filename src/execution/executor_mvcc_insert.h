@@ -12,10 +12,10 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <vector>
 
+#include "execution/execution_common.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
-#include "execution/execution_common.h"
 #include "index/ix.h"
 #include "system/sm.h"
 
@@ -24,13 +24,13 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccInsertExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                // 表的元数据
-    std::vector<Value> values_;  // 待插入的值列表
-    RmFileHandle *fh_;           // 表的数据文件句柄
-    std::string tab_name_;       // 表名
-    Rid rid_;                    // 插入记录的位置(插入成功后赋值)
-    SmManager *sm_manager_;      // 系统管理器指针
-    TransactionManager *txn_mgr_;// 事务管理器指针
+    TabMeta tab_;                  // 表的元数据
+    std::vector<Value> values_;    // 待插入的值列表
+    RmFileHandle *fh_;             // 表的数据文件句柄
+    std::string tab_name_;         // 表名
+    Rid rid_;                      // 插入记录的位置(插入成功后赋值)
+    SmManager *sm_manager_;        // 系统管理器指针
+    TransactionManager *txn_mgr_;  // 事务管理器指针
 
    public:
     /**
@@ -41,7 +41,8 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @param context 执行上下文
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
      */
-    MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context, TransactionManager *txn_mgr) {
+    MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context,
+                       TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_ = sm_manager_->db_.get_table(tab_name);
         values_ = values;
@@ -89,10 +90,10 @@ class MvccInsertExecutor : public AbstractExecutor {
         // 获取全局条件
         std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd());
 
-        if(!conds.empty() && eval_conds(tab_.cols, conds, &rec)){
+        if (!conds.empty() && eval_conds(tab_.cols, conds, &rec)) {
             throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
-        rid_ = mvcc_insert_record(tab_, rec, context_, fh_, txn_mgr_, values_);   
+        rid_ = mvcc_insert_record(tab_, rec, context_, fh_, txn_mgr_, values_);
         return nullptr;
     }
 

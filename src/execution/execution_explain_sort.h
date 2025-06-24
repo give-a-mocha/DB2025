@@ -28,15 +28,15 @@ See the Mulan PSL v2 for more details. */
 class ExplainSortExecutor : public AbstractExecutor {
    private:
     struct SortColumn {
-        TabCol col;   // 列元数据
+        TabCol col;    // 列元数据
         bool is_desc;  // 是否降序
 
         SortColumn(const TabCol& c, bool desc) : col(c), is_desc(desc) {}
     };
 
-    std::unique_ptr<AbstractExecutor> prev_;                // 前序执行器
-    std::vector<SortColumn> sort_cols_;                     // 排序列信息
-    int offset_;                                            // 输出的缩进偏移量
+    std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
+    std::vector<SortColumn> sort_cols_;       // 排序列信息
+    int offset_;                              // 输出的缩进偏移量
    public:
     /**
      * @brief 构造函数
@@ -45,7 +45,7 @@ class ExplainSortExecutor : public AbstractExecutor {
      * @param is_desc 是否降序排序
      */
     ExplainSortExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
-                 const std::vector<bool>& is_desc, int offset) {
+                        const std::vector<bool>& is_desc, int offset) {
         prev_ = std::move(prev);
         // 获取所有排序列的元数据
         sort_cols_.reserve(sel_cols.size());
@@ -54,7 +54,6 @@ class ExplainSortExecutor : public AbstractExecutor {
         }
         offset_ = offset;
     }
-
 
     /**
      * @brief 返回当前排序位置的元组
@@ -69,7 +68,7 @@ class ExplainSortExecutor : public AbstractExecutor {
             res += sort_cols_[i].col.to_string();
             if (sort_cols_[i].is_desc) {
                 res += " DESC";
-            } else{
+            } else {
                 res += " ASC";
             }
         }
@@ -86,14 +85,11 @@ class ExplainSortExecutor : public AbstractExecutor {
         return nullptr;
     }
 
-    
-
     /**
      * @brief 获取当前记录的RID
      * @return 抽象执行器的RID引用
      */
     Rid& rid() override { return _abstract_rid; }
-
 
     /**
      * @brief 获取执行器类型名称

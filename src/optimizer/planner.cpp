@@ -17,6 +17,7 @@
 
 #include "planner.h"
 
+#include <climits>
 #include <memory>
 #include <unordered_set>
 
@@ -30,7 +31,6 @@
 #include "execution/executor_update.h"
 #include "index/ix.h"
 #include "record_printer.h"
-#include <climits>
 
 // 实现最左匹配原则的索引匹配规则
 /**
@@ -118,7 +118,8 @@ std::vector<Condition> pop_conds(std::vector<Condition> &conds, std::string tab_
     std::vector<Condition> temp;
     for (auto &it : conds) {
         if (it.lhs_col.tab_name.compare(tab_name) == 0 &&
-            (it.rhs_type == ConditionRhsType::RHS_VALUE || it.rhs_type == ConditionRhsType::RHS_EXPR || it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
+            (it.rhs_type == ConditionRhsType::RHS_VALUE || it.rhs_type == ConditionRhsType::RHS_EXPR ||
+             it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0)) {
             solved_conds.emplace_back(std::move(it));
         } else {
             temp.emplace_back(std::move(it));
@@ -400,9 +401,8 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
 
     // 检查是否所有选定列都没有聚合类型
-    if (std::all_of(x->cols.begin(), x->cols.end(), [](const auto &sel) {
-            return sel->aggregate_type == ast::SvAggregateType::NONE;
-        })) {
+    if (std::all_of(x->cols.begin(), x->cols.end(),
+                    [](const auto &sel) { return sel->aggregate_type == ast::SvAggregateType::NONE; })) {
         return plan;
     }
     std::vector<AggregateType> agg_types;
@@ -442,8 +442,8 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
     bool is_star = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse)->cols.empty();
     bool is_count_star = false;
-    for(const auto &col : sel_cols) {
-        if(col.agg_type == AggregateType::COUNT && col.col_name == "*") {
+    for (const auto &col : sel_cols) {
+        if (col.agg_type == AggregateType::COUNT && col.col_name == "*") {
             // 如果是count(*)，则不做投影下推
             is_count_star = true;
             break;
@@ -559,8 +559,8 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 
         if (index_exist == false) {  // 该表没有索引
             index_col_names.clear();
-            table_scan_executors =
-                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name->tab_name, query->conds, index_col_names);
+            table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name->tab_name,
+                                                              query->conds, index_col_names);
         } else {  // 存在索引
             table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, x->tab_name->tab_name,
                                                               query->conds, index_col_names);
@@ -647,7 +647,6 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
     }
     query->jointree.clear();
 
-
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
     for (size_t i = 0; i < tables.size(); i++) {
@@ -709,12 +708,10 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
  * @brief 构建左深树连接计划
  * 这里使用贪心算法，选择基数最小的表开始连接
  */
-std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
-    std::list<std::shared_ptr<Plan>> &table_plans,
-    std::list<Condition> &join_conditions,
-    std::list<JoinNode> &semi_join,
-    std::list<std::shared_ptr<Plan>> &semi_join_plans
-) {
+std::shared_ptr<Plan> Planner::build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans,
+                                                         std::list<Condition> &join_conditions,
+                                                         std::list<JoinNode> &semi_join,
+                                                         std::list<std::shared_ptr<Plan>> &semi_join_plans) {
     // 开始构建左深树
     std::shared_ptr<Plan> result = nullptr;
     std::unordered_set<std::string> joined_tables;
@@ -766,12 +763,10 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(
     return result;
 }
 
-std::shared_ptr<Plan> Planner::add_semi_join(
-    std::shared_ptr<Plan> result,
-    std::unordered_set<std::string> &joined_tables,
-    std::list<JoinNode> &semi_join,
-    std::list<std::shared_ptr<Plan>> &semi_join_plans
-) {
+std::shared_ptr<Plan> Planner::add_semi_join(std::shared_ptr<Plan> result,
+                                             std::unordered_set<std::string> &joined_tables,
+                                             std::list<JoinNode> &semi_join,
+                                             std::list<std::shared_ptr<Plan>> &semi_join_plans) {
     if (semi_join.empty()) {
         return result;
     }
@@ -865,13 +860,10 @@ std::shared_ptr<Plan> Planner::add_join(std::shared_ptr<Plan> result, std::unord
 }
 
 // 复杂度O(N)
-std::shared_ptr<Plan> Planner::join_tables(
-    std::shared_ptr<Plan> result,
-    const std::string &current_table,
-    std::shared_ptr<Plan> current_scan,
-    std::unordered_set<std::string> &joined_tables,
-    std::list<Condition> &join_conditions, JoinType join_type
-) {
+std::shared_ptr<Plan> Planner::join_tables(std::shared_ptr<Plan> result, const std::string &current_table,
+                                           std::shared_ptr<Plan> current_scan,
+                                           std::unordered_set<std::string> &joined_tables,
+                                           std::list<Condition> &join_conditions, JoinType join_type) {
     std::vector<Condition> applicable_conds;
     auto it = join_conditions.begin();
     while (it != join_conditions.end()) {
@@ -914,11 +906,8 @@ std::shared_ptr<Plan> Planner::join_tables(
  * @param all_cols 所有涉及的列
  * @return 优化后的执行计划
  */
-std::shared_ptr<Plan> Planner::build_projection_plan(
-    std::shared_ptr<Plan> plan, 
-    std::vector<TabCol> &need_cols,
-    std::vector<TabCol> &all_cols
-) {
+std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols,
+                                                     std::vector<TabCol> &all_cols) {
     size_t siz = need_cols.size();
     all_cols.clear();
     if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
@@ -994,7 +983,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan(
         x->subplan_ = build_projection_plan(std::move(x->subplan_), need_cols, all_cols);
         return x;
     } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
-        for(const auto &col : x->group_cols_) {
+        for (const auto &col : x->group_cols_) {
             if (std::find(need_cols.begin(), need_cols.end(), col) == need_cols.end()) {
                 need_cols.emplace_back(col);
             }

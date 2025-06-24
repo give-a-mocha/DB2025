@@ -32,10 +32,10 @@ See the Mulan PSL v2 for more details. */
  * - 完善并发控制机制
  */
 class IxScan : public RecScan {
-    const IxIndexHandle *ih_;            // 索引句柄指针
-    Iid iid_;                            // 当前扫描位置(初始为lower)
-    Iid end_;                            // 扫描终止位置(初始为upper)
-    BufferPoolManager *bpm_;             // 缓冲池管理器
+    const IxIndexHandle *ih_;  // 索引句柄指针
+    Iid iid_;                  // 当前扫描位置(初始为lower)
+    Iid end_;                  // 扫描终止位置(初始为upper)
+    BufferPoolManager *bpm_;   // 缓冲池管理器
 
    public:
     /**

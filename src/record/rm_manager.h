@@ -38,7 +38,7 @@
  */
 class RmManager {
    private:
-    DiskManager *disk_manager_;           // 磁盘管理器，负责文件操作
+    DiskManager *disk_manager_;               // 磁盘管理器，负责文件操作
     BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，负责页面缓存
 
    public:

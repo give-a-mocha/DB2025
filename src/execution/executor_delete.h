@@ -37,7 +37,7 @@ class DeleteExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     DeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                    std::vector<Rid> rids, Context *context) {
+                   std::vector<Rid> rids, Context *context) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         tab_ = sm_manager_->db_.get_table(tab_name);
@@ -56,10 +56,8 @@ class DeleteExecutor : public AbstractExecutor {
         // 遍历所有索引
         for (auto &index : tab_.indexes) {
             // 获取索引句柄
-            auto ih = sm_manager_->ihs_.at(
-                sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)
-            ).get();
-            
+            auto ih = sm_manager_->ihs_.at(sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols)).get();
+
             // 构造索引键值
             auto key = std::make_unique<char[]>(index.col_tot_len);
             int offset = 0;
@@ -67,7 +65,7 @@ class DeleteExecutor : public AbstractExecutor {
                 memcpy(key.get() + offset, rec->data + index.cols[i].offset, index.cols[i].len);
                 offset += index.cols[i].len;
             }
-            
+
             // 从索引中删除条目
             ih->delete_entry(key.get(), context_->txn_);
         }
@@ -88,8 +86,7 @@ class DeleteExecutor : public AbstractExecutor {
             // 从表中删除记录
             fh_->delete_record(rid, context_);
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_name_, rid, *rec)
-            );
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_name_, rid, *rec));
         }
         return nullptr;
     }

@@ -21,13 +21,13 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     std::unique_ptr<AbstractExecutor> right_;  // 右子树执行器
     size_t len_;                               // 连接结果记录长度
     std::vector<ColMeta> cols_;                // 结果集列元数据
-    std::vector<ColMeta> tot_cols_;  // 左表列元数据
+    std::vector<ColMeta> tot_cols_;            // 左表列元数据
     std::vector<Condition> fed_conds_;         // 连接条件列表
     bool _is_end;                              // 扫描结束标志
 
    public:
     NestedLoopSemiJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
-                           std::vector<Condition> conds) {
+                               std::vector<Condition> conds) {
         left_ = std::move(left);
         right_ = std::move(right);
         len_ = left_->tupleLen();
@@ -45,7 +45,7 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     void beginTuple() override {
         left_->beginTuple();
         right_->beginTuple();
-        //左表是空或者右表是空直接设置结束标记
+        // 左表是空或者右表是空直接设置结束标记
         if (left_->is_end() || right_->is_end()) {
             _is_end = true;
             return;
@@ -76,17 +76,13 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
         return rec;
     }
 
-
     size_t tupleLen() const override { return len_; }
 
-
     const std::vector<ColMeta> &cols() const override { return cols_; }
-
 
     Rid &rid() override { return _abstract_rid; }
 
    private:
-    
     void find_record() {
         while (!is_end()) {
             if (right_->is_end()) {
@@ -115,7 +111,6 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
         }
         _is_end = true;
     }
-
 
     std::string getType() override { return "NestedLoopSemiJoinExecutor"; }
 };

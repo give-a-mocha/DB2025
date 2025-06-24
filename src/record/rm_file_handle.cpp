@@ -124,7 +124,6 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
-
 void RmFileHandle::insert_record_force(const Rid& rid, char* buf) {
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
@@ -168,7 +167,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     // 3. 更新页面头部信息(减少记录数)
     // 4. 如果页面从满变为非满，需要将其加入空闲页面链表
     // 5. 更新文件头的记录总数
-    
+
     // if (context != nullptr) {
     //     context->lock_mgr_->lock_exclusive_on_record(context->txn_, rid, fd_);
     // }
@@ -234,7 +233,6 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
     memcpy(slot, buf, file_hdr_.record_size);
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
-    
 }
 
 /**

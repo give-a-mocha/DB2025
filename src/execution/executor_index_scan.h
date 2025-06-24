@@ -99,7 +99,8 @@ class IndexScanExecutor : public AbstractExecutor {
         for (auto &cond : conds_) {
             if (cond.lhs_col.tab_name != tab_name_) {
                 // lhs is on other table, now rhs must be on this table
-                assert(!(cond.rhs_type==ConditionRhsType::RHS_EXPR) && !(cond.rhs_type==ConditionRhsType::RHS_VALUE) && cond.rhs_col.tab_name == tab_name_);
+                assert(!(cond.rhs_type == ConditionRhsType::RHS_EXPR) &&
+                       !(cond.rhs_type == ConditionRhsType::RHS_VALUE) && cond.rhs_col.tab_name == tab_name_);
                 // swap lhs and rhs
                 std::swap(cond.lhs_col, cond.rhs_col);
                 cond.op = swap_op(cond.op);

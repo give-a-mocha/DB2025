@@ -12,13 +12,13 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <vector>
 
+#include "execution/execution.h"
+#include "execution/execution_common.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
-#include "execution/execution_common.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "execution/execution.h"
 
 /**
  * @brief 更新执行器，负责实现UPDATE语句的功能
@@ -45,7 +45,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     MvccUpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                   std::vector<Condition> conds, std::vector<Rid> rids, Context *context, TransactionManager *txn_mgr) {
+                       std::vector<Condition> conds, std::vector<Rid> rids, Context *context,
+                       TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = std::move(set_clauses);
@@ -64,10 +65,9 @@ class MvccUpdateExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
-
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
-            if(!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
+            if (!check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
             // 加锁间隙
@@ -81,11 +81,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
             for (const auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
                 is_modify[col - tab_.cols.begin()] = true;  // 标记列已被修改
-                Value value; // 将 value 的声明提前
+                Value value;                                // 将 value 的声明提前
 
                 // 根据 rhs_type 获取值
                 if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
-                    value = set_clause.rhs_val; // 直接使用 rhs_val
+                    value = set_clause.rhs_val;  // 直接使用 rhs_val
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
                     // 创建一个临时的 ExprTerm 来包装 ArithExpr
                     ExprTerm temp_expr_term(set_clause.rhs_expr);
@@ -95,20 +95,21 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                     // 从旧记录中获取列的值
                     // 找到对应的列元数据
-                    const ColMeta* rhs_col_meta = nullptr;
-                    for(const auto& meta : tab_.cols) {
+                    const ColMeta *rhs_col_meta = nullptr;
+                    for (const auto &meta : tab_.cols) {
                         if (meta.tab_name == set_clause.rhs_col.tab_name && meta.name == set_clause.rhs_col.col_name) {
                             rhs_col_meta = &meta;
                             break;
                         }
                     }
                     if (!rhs_col_meta) {
-                         throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
+                        throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." +
+                                        set_clause.rhs_col.col_name);
                     }
                     value = GetColumnValue(*old_rec, *rhs_col_meta);
 
                 } else {
-                     throw RMDBError("Unsupported SetRhsType");
+                    throw RMDBError("Unsupported SetRhsType");
                 }
 
                 // 确保 value 有 raw 数据，但避免不必要的重置
@@ -120,14 +121,14 @@ class MvccUpdateExecutor : public AbstractExecutor {
                         value.set_int(static_cast<int>(value.float_val));
                     } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
                         value.set_float(static_cast<float>(value.int_val));
-                    } else if (col->type != value.type) { // 添加一个检查，防止相同类型也抛出错误
+                    } else if (col->type != value.type) {  // 添加一个检查，防止相同类型也抛出错误
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }
 
-                value.raw.reset(); // 确保 raw 数据被重置
-                value.init_raw(col->len); // 确保 raw 数据被初始化
-                
+                value.raw.reset();         // 确保 raw 数据被重置
+                value.init_raw(col->len);  // 确保 raw 数据被初始化
+
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
             mvcc_update_record(tab_, rids_[i], new_rec, old_rec, context_, fh_, txn_mgr_, std::move(is_modify));

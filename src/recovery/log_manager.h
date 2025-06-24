@@ -20,32 +20,17 @@ See the Mulan PSL v2 for more details. */
 #include "record/rm_defs.h"
 
 /* 日志记录对应操作的类型 */
-enum LogType : int {
-    UPDATE = 0,
-    INSERT,
-    DELETE,
-    BEGIN,
-    COMMIT,
-    ABORT
-};
+enum LogType : int { UPDATE = 0, INSERT, DELETE, BEGIN, COMMIT, ABORT };
 
-static std::string LogTypeStr[] = {
-    "UPDATE",
-    "INSERT",
-    "DELETE",
-    "BEGIN",
-    "COMMIT",
-    "ABORT"
-};
-
+static std::string LogTypeStr[] = {"UPDATE", "INSERT", "DELETE", "BEGIN", "COMMIT", "ABORT"};
 
 class LogRecord {
-public:
-    LogType log_type_;         /* 日志对应操作的类型 */
-    lsn_t lsn_;                /* 当前日志的lsn */
-    uint32_t log_tot_len_;     /* 整个日志记录的长度 */
-    txn_id_t log_tid_;         /* 创建当前日志的事务ID */
-    lsn_t prev_lsn_;           /* 事务创建的前一条日志记录的lsn，用于undo */
+   public:
+    LogType log_type_;     /* 日志对应操作的类型 */
+    lsn_t lsn_;            /* 当前日志的lsn */
+    uint32_t log_tot_len_; /* 整个日志记录的长度 */
+    txn_id_t log_tid_;     /* 创建当前日志的事务ID */
+    lsn_t prev_lsn_;       /* 事务创建的前一条日志记录的lsn，用于undo */
 
     LogRecord() {
         lsn_ = INVALID_LSN;
@@ -67,7 +52,7 @@ public:
     }
 
     template <typename T>
-    void serialize_data(char* dest, int &offset, const T* data, const int data_size = sizeof(T)) const {
+    void serialize_data(char* dest, int& offset, const T* data, const int data_size = sizeof(T)) const {
         memcpy(dest + offset, data, data_size);
         offset += data_size;
     }
@@ -79,7 +64,7 @@ public:
         lsn_ = *reinterpret_cast<const lsn_t*>(src + OFFSET_LSN);                     // 读取日志序列号
         log_tot_len_ = *reinterpret_cast<const uint32_t*>(src + OFFSET_LOG_TOT_LEN);  // 读取日志总长度
         log_tid_ = *reinterpret_cast<const txn_id_t*>(src + OFFSET_LOG_TID);          // 读取事务ID
-        prev_lsn_ = *reinterpret_cast<const lsn_t*>(src + OFFSET_PREV_LSN);           // 读取前一条日志的序列号
+        prev_lsn_ = *reinterpret_cast<const lsn_t*>(src + OFFSET_PREV_LSN);  // 读取前一条日志的序列号
     }
 
     template <typename... Args>
@@ -98,7 +83,6 @@ public:
         logINFO("prev_lsn: {}", prev_lsn_);               // 打印前一条日志的序列号
     }
 };
-
 
 class BeginLogRecord : public LogRecord {
    public:
@@ -135,7 +119,7 @@ class CommitLogRecord : public LogRecord {
 
 /**
  * TODO: abort操作的日志记录
-*/
+ */
 class AbortLogRecord : public LogRecord {
    public:
     AbortLogRecord() : LogRecord() { log_type_ = LogType::ABORT; }
@@ -149,7 +133,7 @@ class AbortLogRecord : public LogRecord {
 };
 
 class InsertLogRecord : public LogRecord {
-public:
+   public:
     RmRecord insert_value_;   // 插入的记录
     Rid rid_;                 // 记录插入的位置
     char* table_name_;        // 插入记录的表名称
@@ -210,9 +194,9 @@ public:
 
 /**
  * TODO: delete操作的日志记录
-*/
+ */
 class DeleteLogRecord : public LogRecord {
-public:
+   public:
     RmRecord delete_value_;   // 删除的记录
     Rid rid_;                 // 记录删除的位置
     char* table_name_;        // 删除记录的表名称
@@ -271,9 +255,9 @@ public:
 
 /**
  * TODO: update操作的日志记录
-*/
+ */
 class UpdateLogRecord : public LogRecord {
-public:
+   public:
     RmRecord before_value_;   // 更新前的记录
     RmRecord after_value_;    // 更新后的记录
     Rid rid_;                 // 记录插入的位置
@@ -355,19 +339,21 @@ class LogBuffer {
 
 /* 日志管理器，负责把日志写入日志缓冲区，以及把日志缓冲区中的内容写入磁盘中 */
 class LogManager {
-    friend class RecoveryManager; 
-private:
+    friend class RecoveryManager;
+
+   private:
     std::atomic<lsn_t> global_lsn_{0};  // 全局lsn，递增，用于为每条记录分发lsn
     std::mutex latch_;                  // 用于对log_buffer_的互斥访问
     LogBuffer log_buffer_;              // 日志缓冲区
     lsn_t persist_lsn_;                 // 记录已经持久化到磁盘中的最后一条日志的日志号
     DiskManager* disk_manager_;
-public:
+
+   public:
     LogManager(DiskManager* disk_manager) { disk_manager_ = disk_manager; }
 
     lsn_t add_log_to_buffer(LogRecord* log_record);
 
-    lsn_t add_log_to_buffer_without_lock(LogRecord *log_record);
+    lsn_t add_log_to_buffer_without_lock(LogRecord* log_record);
 
     void flush_log_to_disk();
 
@@ -375,11 +361,12 @@ public:
 
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
-    lsn_t add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid, const std::string &table_name);
+    lsn_t add_insert_log(txn_id_t txn_id, const RmRecord& insert_value, const Rid& rid, const std::string& table_name);
 
-    lsn_t add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid, const std::string &table_name);
+    lsn_t add_delete_log(txn_id_t txn_id, const RmRecord& delete_value, const Rid& rid, const std::string& table_name);
 
-    lsn_t add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid, const std::string &table_name);
+    lsn_t add_update_log(txn_id_t txn_id, const RmRecord& new_rec, const RmRecord& old_rec, const Rid& rid,
+                         const std::string& table_name);
 
     lsn_t add_begin_log(txn_id_t txn_id);
 
@@ -387,5 +374,5 @@ public:
 
     lsn_t add_abort_log(txn_id_t txn_id);
 
-    std::vector<LogRecord *> read_logs_from_disk(size_t offset);
+    std::vector<LogRecord*> read_logs_from_disk(size_t offset);
 };

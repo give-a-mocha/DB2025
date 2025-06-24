@@ -41,7 +41,7 @@ class LRUReplacer : public Replacer {
 
    private:
     std::mutex latch_;  // 互斥锁，保护并发访问
-    
+
     /**
      * @brief 存储未固定页面的双向链表
      *
@@ -60,6 +60,6 @@ class LRUReplacer : public Replacer {
      * 3. 避免在链表中的线性查找
      */
     std::unordered_map<frame_id_t, std::list<frame_id_t>::iterator> LRUhash_;
-    
+
     size_t max_size_;  // 最大容量，与缓冲池容量相同
 };

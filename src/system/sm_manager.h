@@ -51,14 +51,14 @@ class SmManager {
     /**
      * @brief 系统管理器的主要成员变量
      */
-    DbMeta db_;                   // 当前打开的数据库的元数据，包含数据库名称和所有表的定义
-    
+    DbMeta db_;  // 当前打开的数据库的元数据，包含数据库名称和所有表的定义
+
     std::unordered_map<std::string, std::unique_ptr<RmFileHandle>> fhs_;
     // 表文件句柄映射表
     // 键：表名
     // 值：对应的记录文件句柄
     // 用途：管理当前数据库中每张表的数据文件访问
-    
+
     std::unordered_map<std::string, std::unique_ptr<IxIndexHandle>> ihs_;
     // 索引文件句柄映射表
     // 键：索引名（格式：表名_列名）
@@ -205,7 +205,7 @@ class SmManager {
      */
     void drop_index(const std::string& tab_name, const std::vector<ColMeta>& col_names, Context* context);
 
-    void set_log_offset(size_t offset) { 
+    void set_log_offset(size_t offset) {
         db_.log_offset_ = offset;
         flush_meta();
     }

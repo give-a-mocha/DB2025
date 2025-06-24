@@ -46,9 +46,9 @@
 #include "optimizer/plan.h"
 #include "optimizer/planner.h"
 #include "record/rm.h"
+#include "recovery/log_recovery.h"
 #include "system/sm.h"
 #include "transaction/transaction_manager.h"
-#include "recovery/log_recovery.h"
 
 class Planner;
 

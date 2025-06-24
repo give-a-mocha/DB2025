@@ -11,13 +11,13 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <condition_variable>
+#include <list>
 #include <mutex>
 #include <unordered_map>
-#include <list>
 
+#include "common/common.h"
 #include "transaction/transaction.h"
 #include "transaction/txn_defs.h"
-#include "common/common.h"
 
 static const std::string GroupLockModeStr[10] = {"NON_LOCK", "IS", "IX", "S", "X", "SIX"};
 
@@ -30,17 +30,17 @@ class LockManager {
 
     /* 事务的加锁申请 */
     class LockRequest {
-    public:
-       txn_id_t txn_id_;     // 申请加锁的事务ID
-       LockMode lock_mode_;  // 事务申请加锁的类型
-       bool granted_;        // 该事务是否已经被赋予锁
-       
-       LockRequest(txn_id_t txn_id, LockMode lock_mode) : txn_id_(txn_id), lock_mode_(lock_mode), granted_(false) {}
+       public:
+        txn_id_t txn_id_;     // 申请加锁的事务ID
+        LockMode lock_mode_;  // 事务申请加锁的类型
+        bool granted_;        // 该事务是否已经被赋予锁
+
+        LockRequest(txn_id_t txn_id, LockMode lock_mode) : txn_id_(txn_id), lock_mode_(lock_mode), granted_(false) {}
     };
 
     /* 数据项上的加锁队列 */
     class LockRequestQueue {
-    public:
+       public:
         // 加锁队列
         std::list<LockRequest> request_queue_;
         // 条件变量，用于唤醒正在等待加锁的申请，在no-wait策略下无需使用
@@ -53,20 +53,20 @@ class LockManager {
 
     /* 数据表上的间隙锁队列 */
     class GapLockRequestQueue {
-    public:
+       public:
         // 间隙锁加锁队列
         std::list<GapLockRequest> request_queue_;
     };
-    
-private:
+
+   private:
     // 用于锁表的并发
     std::mutex latch_;
     // 全局锁表
     std::unordered_map<LockDataId, LockRequestQueue> lock_table_;
     // 全局间隙锁表, key 为 fd_
     std::unordered_map<int, GapLockRequestQueue> gap_lock_table_;
-    
-public:
+
+   public:
     LockManager() {}
 
     ~LockManager() {}
