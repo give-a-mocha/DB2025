@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 jobs:
   format:
@@ -24,4 +29,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v6
         with:
           commit_message: "style: format code with clang-format"
-          file_pattern: src/**/*.h src/**/*.hpp src/**/*.cpp
+          branch: ${{ github.head_ref }}
