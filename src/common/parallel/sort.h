@@ -43,21 +43,15 @@ void parallel_sort_impl(RandomIt first, RandomIt last, int depth) {
 
     // 选择枢轴元素的索引，而不是拷贝元素本身
     auto pivot_iter = first + distance / 2;
-    
-    // 使用引用来避免拷贝
-    auto middle1 = std::partition(first, last, [&pivot_iter](const auto& elem) { 
-        return elem < *pivot_iter; 
-    });
 
-    auto middle2 = std::partition(middle1, last, [&pivot_iter](const auto& elem) { 
-        return !(*pivot_iter < elem); 
-    });
+    // 使用引用来避免拷贝
+    auto middle1 = std::partition(first, last, [&pivot_iter](const auto& elem) { return elem < *pivot_iter; });
+
+    auto middle2 = std::partition(middle1, last, [&pivot_iter](const auto& elem) { return !(*pivot_iter < elem); });
 
     // 异步排序左子数组
     auto& pool = ThreadPool::getInstance();
-    auto future = pool.submit([first, middle1, depth]() { 
-        parallel_sort_impl(first, middle1, depth - 1); 
-    });
+    auto future = pool.submit([first, middle1, depth]() { parallel_sort_impl(first, middle1, depth - 1); });
 
     // 在当前线程排序右子数组
     parallel_sort_impl(middle2, last, depth - 1);
@@ -78,21 +72,17 @@ void parallel_sort_impl(RandomIt first, RandomIt last, int depth, Compare comp) 
 
     // 选择枢轴元素的索引，而不是拷贝元素本身
     auto pivot_iter = first + distance / 2;
-    
-    // 使用引用来避免拷贝，并使用自定义比较器
-    auto middle1 = std::partition(first, last, [&pivot_iter, &comp](const auto& elem) { 
-        return comp(elem, *pivot_iter); 
-    });
 
-    auto middle2 = std::partition(middle1, last, [&pivot_iter, &comp](const auto& elem) { 
-        return !comp(*pivot_iter, elem); 
-    });
+    // 使用引用来避免拷贝，并使用自定义比较器
+    auto middle1 =
+        std::partition(first, last, [&pivot_iter, &comp](const auto& elem) { return comp(elem, *pivot_iter); });
+
+    auto middle2 =
+        std::partition(middle1, last, [&pivot_iter, &comp](const auto& elem) { return !comp(*pivot_iter, elem); });
 
     // 异步排序左子数组
     auto& pool = ThreadPool::getInstance();
-    auto future = pool.submit([first, middle1, depth, comp]() { 
-        parallel_sort_impl(first, middle1, depth - 1, comp); 
-    });
+    auto future = pool.submit([first, middle1, depth, comp]() { parallel_sort_impl(first, middle1, depth - 1, comp); });
 
     // 在当前线程排序右子数组
     parallel_sort_impl(middle2, last, depth - 1, comp);

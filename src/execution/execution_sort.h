@@ -15,12 +15,12 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/parallel/sort.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "common/parallel/sort.h"
 
 /**
  * @brief 排序执行器，负责实现ORDER BY的排序功能
