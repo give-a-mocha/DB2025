@@ -184,7 +184,7 @@ void SmManager::close_db() {
 
     // 3. 最后刷新并保存元数据
     flush_meta();
-    
+
     db_.name_.clear();
     db_.tabs_.clear();
     fhs_.clear();
@@ -421,7 +421,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 6. 扫描表中所有记录，构建B+树索引
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
-        auto [record, is_delete] = fh_->get_record_with_delete_tag(rmScan.rid(), context);
+        auto record = fh_->get_record(rmScan.rid(), context);
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -508,14 +508,14 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-bool SmManager::insert_index(const std::string& tab_name, RmRecord &rec, Rid rid, Context* context_) {
+bool SmManager::insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Context* context_) {
     TabMeta& tab_ = db_.get_table(tab_name);
     std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
     inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
 
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto &index = tab_.indexes[i];
+        auto& index = tab_.indexes[i];
         // 获取索引句柄
         auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
 
@@ -532,7 +532,7 @@ bool SmManager::insert_index(const std::string& tab_name, RmRecord &rec, Rid rid
         if (res == INVALID_PAGE_ID) {
             // 插入失败，回滚已插入的索引
             for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
-                auto &rollback_index = tab_.indexes[rollback_i];
+                auto& rollback_index = tab_.indexes[rollback_i];
                 auto rollback_ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
                 rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
             }
@@ -543,11 +543,11 @@ bool SmManager::insert_index(const std::string& tab_name, RmRecord &rec, Rid rid
     return true;
 }
 
-bool SmManager::insert_index_without_rollback(const std::string& tab_name, RmRecord &rec, Rid rid, Context* context_) {
+bool SmManager::insert_index_without_rollback(const std::string& tab_name, RmRecord& rec, Rid rid, Context* context_) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto &index = tab_.indexes[i];
+        auto& index = tab_.indexes[i];
         auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
@@ -557,18 +557,18 @@ bool SmManager::insert_index_without_rollback(const std::string& tab_name, RmRec
         }
         // 插入索引项
         auto res = ih->insert_entry(key.get(), rid, context_->txn_);
-        if(res == INVALID_PAGE_ID) {
+        if (res == INVALID_PAGE_ID) {
             return false;
         }
     }
     return true;
 }
 
-bool SmManager::delete_index(const std::string& tab_name, RmRecord &rec, Context* context_) {
+bool SmManager::delete_index(const std::string& tab_name, RmRecord& rec, Context* context_) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto &index = tab_.indexes[i];
+        auto& index = tab_.indexes[i];
         auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;

@@ -60,7 +60,11 @@ class MvccDeleteExecutor : public AbstractExecutor {
         for (auto &rid : rids_) {
             get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid);
             auto [rec, is_delete] = fh_->get_record_with_delete_tag(rid, context_);
-            if(is_delete) continue;
+            if(is_delete){
+                LockDataId lock_data_id = LockDataId(fh_->GetFd(), rid, LockDataType::RECORD);
+                txn_mgr_->get_lock_manager()->unlock(context_->txn_, lock_data_id);
+                continue;
+            }
             fh_->delete_record_tag(rid, context_);
             std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
             txn_mgr_->add_delete_undo_log(context_->txn_, rid, std::move(values));
