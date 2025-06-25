@@ -157,6 +157,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             sm_manager_->delete_index(table_name, rec, context);
             log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
         } else if(write_type == WType::UPDATE_TUPLE) {
+            //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
             auto new_rec = handle->get_record(rid, context);
             auto old_rec = (*iter)->GetRecord();
             handle->update_record(rid, old_rec.data, context);
@@ -186,7 +187,10 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
 
     txn->clear();
     txn->set_state(TransactionState::ABORTED);
-
+    txn->ClearUndoLogs();
+    // 从全局事务表中删除
+    std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
+    txn_map.erase(txn->get_transaction_id());  
     log_manager->add_abort_log(txn->get_transaction_id());
 }
 
@@ -348,35 +352,7 @@ timestamp_t TransactionManager::GetWatermark(){
 }
 /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
 void TransactionManager::GarbageCollection(){
-    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
-    for (auto it = version_info_.begin(); it != version_info_.end();) {
-        auto& page_version_info = it->second;
-        std::unique_lock<std::shared_mutex> version_lock(page_version_info->mutex_);
-        
-        // 遍历每个槽的版本链接
-        for (auto version_it = page_version_info->prev_version_.begin();
-             version_it != page_version_info->prev_version_.end();) {
-            if (!version_it->second.in_progress_) {
-                // 如果版本不在进行中，则可以安全删除
-                version_it = page_version_info->prev_version_.erase(version_it);
-            } else {
-                ++version_it;  // 否则继续下一个版本
-            }
-        }
-
-        // 如果该页面没有任何版本链接，则删除该页面的版本信息
-        if (page_version_info->prev_version_.empty()) {
-            it = version_info_.erase(it);
-        } else {
-            ++it;  // 否则继续下一个页面
-        }
-    }
-    lock.unlock();
-
-    txn_map.clear();  // 清空全局事务表
-    next_txn_id_ = 0;  // 重置事务ID计数器
-    next_timestamp_ = 0;  // 重置时间戳计数器
-    last_commit_ts_ = 0;  // 重置最近提交时间戳 
+    
 }
 
 /**

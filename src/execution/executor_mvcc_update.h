@@ -138,19 +138,32 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 }
             }
 
-            fh_->update_record(rid, new_rec->data, context_);
-            sm_manager_->delete_index(tab_name_, *old_rec, context_);
-            if(!sm_manager_->insert_index(tab_name_, *new_rec, rid, context_)) {
-                sm_manager_->insert_index_without_rollback(tab_name_, *old_rec, rid, context_);
-                fh_->update_record(rid, old_rec->data, context_);
-                txn_mgr_->abort(context_, context_->log_mgr_);
-                throw RMDBError("Failed to update index for " + tab_name_);
-            }
-            txn_mgr_->add_update_undo_log(context_->txn_, rid, std::move(values), std::move(is_modify));
+            //update = delete + insert
+
+            // fh_->delete_record(rid, context_);
+            std::vector<Value> values = convert_record_to_values(old_rec, tab_.cols);
+            txn_mgr_->add_delete_undo_log(context_->txn_, rid, std::move(values));
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *old_rec)
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec)
             );
-            context_->log_mgr_->add_update_log(context_->txn_->get_transaction_id(), *old_rec, *new_rec, rid, tab_.name);
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);
+
+
+            // 获取全局条件
+            std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
+            if(!conds.empty() && eval_conds(tab_.cols, conds, new_rec.get())){
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
+            auto rid_ = fh_->insert_record(new_rec->data, context_);
+            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
+            std::vector<Value> values_ = convert_record_to_values(new_rec, tab_.cols);
+            txn_mgr_->add_insert_undo_log(context_->txn_, rid_, std::move(values_));
+            context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, new_rec));
+            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, rid_, tab_.name);
+            if (!sm_manager_->insert_index(tab_name_, *new_rec, rid_, context_)) {
+                txn_mgr_->abort(context_, context_->log_mgr_);
+                throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
+            }
         }
         return nullptr;
     }

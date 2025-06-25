@@ -186,6 +186,11 @@ public:
         return undo_logs_[log_id];
     }
 
+    inline auto ClearUndoLogs() -> void {
+        std::scoped_lock<std::mutex> lck(latch_);
+        undo_logs_.clear();  // 清空事务的撤销日志
+    }
+
     /** @return 撤销日志的数量 */
     inline auto GetUndoLogNum() -> size_t {
         std::scoped_lock<std::mutex> lck(latch_);
