@@ -22,25 +22,22 @@ class ThreadPool {
     template <class F, class... Args>
     auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
 
-    static ThreadPool& getInstance() {
-        static ThreadPool instance(std::max(4u, std::thread::hardware_concurrency() / 2));
-        return instance;
-    }
-
-    const size_t task_count() {
-        std::unique_lock<std::mutex> lock(queue_mutex);
-        return tasks.size();
-    }
+    static ThreadPool& getInstance();
+    size_t task_count();
+    size_t thread_count() const;
 
    private:
     ThreadPool(size_t);
 
     bool stop;
+    static size_t thread_num_;
     std::vector<std::thread> workers;
     std::queue<std::function<void()>> tasks;
     std::mutex queue_mutex;
     std::condition_variable condition;
 };
+
+inline size_t ThreadPool::thread_num_ = std::max(4u, std::thread::hardware_concurrency() / 2);
 
 inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
     for (size_t i = 0; i < threads; ++i)
@@ -77,6 +74,18 @@ auto ThreadPool::submit(F&& f, Args&&... args) -> std::future<std::invoke_result
     condition.notify_one();
     return res;
 }
+
+inline ThreadPool& ThreadPool::getInstance() {
+    static ThreadPool instance(thread_num_);
+    return instance;
+}
+
+inline size_t ThreadPool::task_count() {
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    return tasks.size();
+}
+
+inline size_t ThreadPool::thread_count() const { return thread_num_; }
 
 inline ThreadPool::~ThreadPool() {
     {

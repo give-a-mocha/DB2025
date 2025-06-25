@@ -20,6 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/parallel/sort.h"
 
 /**
  * @brief 排序执行器，负责实现ORDER BY的排序功能
@@ -73,7 +74,7 @@ class SortExecutor : public AbstractExecutor {
         }
 
         // 使用std::sort排序
-        std::sort(
+        parallel::sort(
             sorted_tuples_.begin(), sorted_tuples_.end(),
             [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) { return this->cmp(a, b); });
     }
