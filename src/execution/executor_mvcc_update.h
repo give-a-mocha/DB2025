@@ -68,14 +68,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
-            get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid);
-            // 获取旧记录并创建新记录
-            auto [old_rec, is_delete] = fh_->get_record_with_delete_tag(rid, context_);
-            if(is_delete){
-                LockDataId lock_data_id = LockDataId(fh_->GetFd(), rid, LockDataType::RECORD);
-                txn_mgr_->get_lock_manager()->unlock(context_->txn_, lock_data_id);
+            if(!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
+            // 获取旧记录并创建新记录
+            auto old_rec = fh_->get_record(rid, context_);
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 

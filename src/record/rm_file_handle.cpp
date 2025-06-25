@@ -43,17 +43,6 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
     return record;
 }
 
-std::pair<std::unique_ptr<RmRecord>, bool> RmFileHandle::get_record_with_delete_tag(const Rid& rid, Context* context) const {
-    RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-    
-    char* slot = page_handle.get_slot(rid.slot_no);
-    auto record = std::make_unique<RmRecord>(file_hdr_.record_size, slot);
-    
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
-    
-    return std::make_pair(std::move(record), Bitmap::is_set(page_handle.delete_bitmap, rid.slot_no));
-}
-
 /**
  * @description: 在当前表中插入一条新记录
  *
@@ -94,8 +83,6 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
 
     // 设置bitmap和更新记录数
     Bitmap::set(page_handle.bitmap, slot_no);
-    // 初始就是未删除
-    // Bitmap::reset(page_handle.delete_bitmap, slot_no); // 确保删除位图被复位
     page_handle.page_hdr->num_records++;
     file_hdr_.record_num++;
     // 如果页面已满,更新空闲页面链表
@@ -151,7 +138,6 @@ void RmFileHandle::insert_record_force(const Rid& rid, char* buf) {
         Bitmap::set(page_handle.bitmap, rid.slot_no);
         page_handle.page_hdr->num_records++;
     }
-    Bitmap::reset(page_handle.delete_bitmap, rid.slot_no); // 确保删除位图被复位
     file_hdr_.record_num++;
     if (page_handle.page_hdr->num_records == page_handle.file_hdr->num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
@@ -198,7 +184,6 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     
     // 复位bitmap
     Bitmap::reset(page_handle.bitmap, rid.slot_no);
-    Bitmap::reset(page_handle.delete_bitmap, rid.slot_no);
     page_handle.page_hdr->num_records--;
     file_hdr_.record_num--;
 
@@ -207,19 +192,6 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
         release_page_handle(page_handle);
     }
 
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
-}
-
-void RmFileHandle::delete_record_tag(const Rid& rid, Context* context) {
-    // 获取页面句柄
-    RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-    // 检查record是否存在
-    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no) || Bitmap::is_set(page_handle.delete_bitmap, rid.slot_no)) {
-        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
-        throw RecordNotFoundError(rid.page_no, rid.slot_no);
-    }
-    // 标记为删除
-    Bitmap::set(page_handle.delete_bitmap, rid.slot_no);
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
@@ -253,7 +225,7 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
 
     // 检查record是否存在
-    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no) || Bitmap::is_set(page_handle.delete_bitmap, rid.slot_no)) {
+    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
@@ -308,7 +280,6 @@ RmPageHandle RmFileHandle::create_new_page_handle() {
 
     // 初始化bitmap
     Bitmap::init(page_handle.bitmap, file_hdr_.bitmap_size);
-    Bitmap::init(page_handle.delete_bitmap, file_hdr_.bitmap_size);
 
     // 更新文件头信息
     file_hdr_.num_pages++;

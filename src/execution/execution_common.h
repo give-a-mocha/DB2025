@@ -31,7 +31,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
 	const std::vector<ColMeta> &cols_
 );
 
-void get_lock_and_check_conflict(
+bool get_lock_and_check_conflict(
 	Transaction *txn,
 	TransactionManager *txn_mgr,
 	RmFileHandle *fh_,

@@ -47,7 +47,6 @@ struct RmPageHandle {
     Page *page;                 // 底层页面对象，负责实际的数据存储
     RmPageHdr *page_hdr;        // 页面头部信息，指向页面数据的第一部分，存储页面级别的元数据
     char *bitmap;               // 页面的位图区域，用于跟踪槽位的使用情况
-    char *delete_bitmap;         // 删除位图区域，用于标记已删除的记录
     char *slots;                // 实际记录存储区域，每个槽位存储一条记录
 
     /**
@@ -70,10 +69,8 @@ struct RmPageHandle {
         page_hdr = reinterpret_cast<RmPageHdr *>(page->get_data() + page->OFFSET_PAGE_HDR);
         // 2. 初始化位图指针（跳过页面头部结构）
         bitmap = page->get_data() + sizeof(RmPageHdr) + page->OFFSET_PAGE_HDR;
-        delete_bitmap = bitmap + file_hdr->bitmap_size; // 删除位图区域紧跟位图之后
-        
         // 3. 初始化记录槽位指针（跳过位图区域）
-        slots = bitmap + file_hdr->bitmap_size * 2;
+        slots = bitmap + file_hdr->bitmap_size;
     }
 
     // 返回指定slot_no的slot存储收地址
@@ -160,15 +157,6 @@ class RmFileHandle {
     std::unique_ptr<RmRecord> get_record(const Rid &rid, Context *context) const;
 
     /**
-     * @brief 获取指定记录
-     * @param rid 记录ID
-     * @param context 事务上下文，包含事务信息和锁管理器
-     * @return 返回记录对象的智能指针，是否被删除的标记
-     * @throw RecordNotFoundError 如果记录不存在
-     * @note 返回的是记录的副本，对其修改不会影响原始数据
-     */
-    std::pair<std::unique_ptr<RmRecord>, bool> get_record_with_delete_tag(const Rid& rid, Context* context) const;
-    /**
      * @brief 插入新记录
      * @param buf 记录数据缓冲区
      * @param context 事务上下文，包含事务信息和锁管理器
@@ -193,13 +181,6 @@ class RmFileHandle {
      * @param context 事务上下文
      */
     void delete_record(const Rid &rid, Context *context);
-
-    /**
-     * @brief 给记录打上删除标记
-     * @param rid 要删除的记录ID
-     * @param context 事务上下文
-     */
-    void delete_record_tag(const Rid& rid, Context* context);
 
     /**
      * @brief 更新记录 

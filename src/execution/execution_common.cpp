@@ -34,7 +34,7 @@ std::vector<Value> convert_record_to_values(
 /**
  * @brief 检查事务是否与记录发生冲突, 获取锁
  */
-void get_lock_and_check_conflict(
+bool get_lock_and_check_conflict(
     Transaction *txn,
     TransactionManager *txn_mgr,
     RmFileHandle *fh,
@@ -54,7 +54,16 @@ void get_lock_and_check_conflict(
         if(txn_mgr->get_txn_state(pre_txn) == TransactionState::COMMITTED && undo_log.ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
+
+        // 如果是已提交且删除的记录，直接跳过
+        if(undo_log.is_deleted_){
+            LockDataId lock_data_id(fh->GetFd(), rid, LockDataType::RECORD);
+            txn_mgr->get_lock_manager()->unlock(txn, lock_data_id);
+            return false;
+        }
     }
+
+    return true;
 }
 
 std::unique_ptr<RmRecord> mvcc_get_record(
