@@ -15,15 +15,15 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  */
 
+#include <atomic>
+#include <cstdio>
+
 #include <netinet/in.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>
-
-#include <atomic>
-#include <cstdio>
 
 #include "analyze/analyze.h"
 #include "common/TraceStack.hpp"
@@ -261,7 +261,7 @@ void start_server() {
 
     int sockfd_server;
     int fd_temp;
-    struct sockaddr_in s_addr_in {};
+    struct sockaddr_in s_addr_in{};
 
     // 初始化连接
     sockfd_server = socket(AF_INET, SOCK_STREAM, 0);  // ipv4,TCP
@@ -290,7 +290,7 @@ void start_server() {
         std::cout << "Waiting for new connection..." << std::endl;
         pthread_t thread_id;
 
-        struct sockaddr_in s_addr_client {};
+        struct sockaddr_in s_addr_client{};
         int client_length = sizeof(s_addr_client);
         if (setjmp(jmpbuf)) {
             std::cout << "Break from Server Listen Loop\n";
