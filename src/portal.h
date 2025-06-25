@@ -18,12 +18,12 @@ See the Mulan PSL v2 for more details. */
 #include "common/print.hpp"
 #include "execution/execution_aggregate.h"
 #include "execution/execution_explain_filter.h"
+#include "execution/execution_explain_group.h"
 #include "execution/execution_explain_join.h"
+#include "execution/execution_explain_limit.h"
 #include "execution/execution_explain_project.h"
 #include "execution/execution_explain_scan.h"
 #include "execution/execution_explain_sort.h"
-#include "execution/execution_explain_limit.h"
-#include "execution/execution_explain_group.h"
 #include "execution/execution_group.h"
 #include "execution/execution_sort.h"
 #include "execution/executor_abstract.h"
@@ -31,16 +31,16 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_index_scan.h"
 #include "execution/executor_insert.h"
 #include "execution/executor_limit.h"
+#include "execution/executor_mvcc_delete.h"
+#include "execution/executor_mvcc_insert.h"
+#include "execution/executor_mvcc_seq_scan.h"
+#include "execution/executor_mvcc_update.h"
 #include "execution/executor_nestedloop_join.h"
 #include "execution/executor_nestedloop_semi_join.h"
 #include "execution/executor_projection.h"
 #include "execution/executor_seq_scan.h"
 #include "execution/executor_update.h"
 #include "optimizer/plan.h"
-#include "execution/executor_mvcc_update.h"
-#include "execution/executor_mvcc_delete.h"
-#include "execution/executor_mvcc_insert.h"
-#include "execution/executor_mvcc_seq_scan.h"
 
 typedef enum portalTag {
     PORTAL_Invalid_Query = 0,
@@ -100,12 +100,12 @@ class Portal {
                         rids.push_back(scan->rid());
                     }
                     std::unique_ptr<AbstractExecutor> root = nullptr;
-                    if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+                    if (txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
                         root = std::make_unique<MvccUpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_,
                                                                     x->conds_, rids, context, txn_mgr);
                     } else {
-                        root = std::make_unique<UpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_,
-                                                                x->conds_, rids, context);
+                        root = std::make_unique<UpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_, x->conds_,
+                                                                rids, context);
                     }
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -118,8 +118,9 @@ class Portal {
                     }
 
                     std::unique_ptr<AbstractExecutor> root = nullptr;
-                    if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                        root = std::make_unique<MvccDeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context, txn_mgr);
+                    if (txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+                        root = std::make_unique<MvccDeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context,
+                                                                    txn_mgr);
                     } else {
                         root = std::make_unique<DeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context);
                     }
@@ -129,8 +130,9 @@ class Portal {
 
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root = nullptr;
-                    if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
-                        root = std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);
+                    if (txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
+                        root = std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context,
+                                                                    txn_mgr);
                     } else {
                         root = std::make_unique<InsertExecutor>(sm_manager_, x->tab_name_, x->values_, context);
                     }
@@ -189,28 +191,30 @@ class Portal {
     // 清空资源
     void drop() {}
 
-    std::unique_ptr<AbstractExecutor> convert_plan_executor(std::shared_ptr<Plan> plan, Context *context, 
+    std::unique_ptr<AbstractExecutor> convert_plan_executor(std::shared_ptr<Plan> plan, Context *context,
                                                             TransactionManager *txn_mgr, bool is_current_read) {
         TRACE_FUNCTION
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
-            return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
+            return std::make_unique<ProjectionExecutor>(
+                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
-            if(is_current_read){
+            if (is_current_read) {
                 return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
             }
-            if(txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC){
+            if (txn_mgr->get_concurrency_mode() == ConcurrencyMode::MVCC) {
                 return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
-            }else{
+            } else {
                 if (x->tag == PlanTag::T_SeqScan) {
                     return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
                 } else {
-                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_,
-                                                               context);
+                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
+                                                               x->index_col_names_, context);
                 }
             }
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
-            std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr,is_current_read);
-            std::unique_ptr<AbstractExecutor> right = convert_plan_executor(x->right_, context, txn_mgr,is_current_read);
+            std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr, is_current_read);
+            std::unique_ptr<AbstractExecutor> right =
+                convert_plan_executor(x->right_, context, txn_mgr, is_current_read);
             if (x->type == JoinType::SEMI_JOIN) {
                 return std::make_unique<NestedLoopSemiJoinExecutor>(std::move(left), std::move(right),
                                                                     std::move(x->conds_));
@@ -219,16 +223,18 @@ class Portal {
                                                                 std::move(x->conds_));
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-            return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_,
-                                                   x->is_desc_);
+            return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read),
+                                                  x->sel_cols_, x->is_desc_);
         } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
-            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_,
-                                                       x->agg_types_);
+            return std::make_unique<AggregateExecutor>(
+                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_, x->agg_types_);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
-            return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_,
-                                                   x->group_cols_, x->having_conds_);
+            return std::make_unique<GroupExecutor>(
+                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_, x->group_cols_,
+                x->having_conds_);
         } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
-            return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->offset_, x->count_);
+            return std::make_unique<LimitExecutor>(
+                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->offset_, x->count_);
         }
         return nullptr;
     }
@@ -295,7 +301,7 @@ class Portal {
             return std::make_unique<ExplainSortExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->sel_cols_), std::move(x->is_desc_), offset);
-        } else if(auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
+        } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
             return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
             return std::make_unique<ExplainGroupExecutor>(
@@ -305,7 +311,7 @@ class Portal {
             return std::make_unique<ExplainLimitExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables), x->offset_,
                 x->count_, offset);
-        } else{
+        } else {
             assert(0);
         }
         return nullptr;
