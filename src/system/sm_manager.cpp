@@ -433,8 +433,12 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
         // 将键值对插入B+树
         // 键：索引列值的组合
         // 值：记录的RID
-        auto res = ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
-
+        page_id_t res = INVALID_PAGE_ID;  // 初始化结果为无效页ID
+        if (context == nullptr) {
+            res = ih_->insert_entry_without_lock(key, rmScan.rid());
+        } else {
+            res = ih_->insert_entry(key, rmScan.rid(), context->txn_);
+        }
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (res == INVALID_PAGE_ID) {
             drop_index(tab_name, col_names, context);

@@ -320,6 +320,7 @@ class IxIndexHandle {
      */
     bool get_value(const char *key, std::vector<Rid> *result, Transaction *transaction);
 
+    bool get_value_without_lock(const char *key, std::vector<Rid> *result);
     /**
      * @brief 查找包含指定键的叶节点
      * @param key 目标键值
@@ -329,6 +330,11 @@ class IxIndexHandle {
      */
     Page* find_leaf_page(const char *key, Operation operation, Transaction *transaction);
 
+    Page* find_leaf_page_without_lock(const char *key, Operation operation);
+
+    void create_new_root(const char *key, const Rid &value);
+
+    bool insert_into_leaf(const char *key, const Rid &value, IxNodeHandle *leaf_node);
     /**
      * @brief 插入键值对
      * @param key 键值
@@ -338,6 +344,7 @@ class IxIndexHandle {
      */
     page_id_t insert_entry(const char *key, const Rid &value, Transaction *transaction);
 
+    page_id_t insert_entry_without_lock(const char *key, const Rid &value);
     /**
      * @brief 分裂节点
      * @param node 需要分裂的节点
@@ -352,7 +359,7 @@ class IxIndexHandle {
      * @param new_node 新节点
      * @param transaction 当前事务
      */
-    void insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node, Transaction *transaction);
+    void insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node);
 
     /**
      * @brief 删除键值对
