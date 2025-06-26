@@ -189,8 +189,8 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     txn->set_state(TransactionState::ABORTED);
     txn->ClearUndoLogs();
     // 从全局事务表中删除
-    std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-    txn_map.erase(txn->get_transaction_id());  
+    // std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
+    // txn_map.erase(txn->get_transaction_id());  
     log_manager->add_abort_log(txn->get_transaction_id());
 }
 
