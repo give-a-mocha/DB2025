@@ -340,10 +340,11 @@ class LogBuffer {
 
 /* 日志管理器，负责把日志写入日志缓冲区，以及把日志缓冲区中的内容写入磁盘中 */
 class LogManager {
-    friend class RecoveryManager; 
-private:
-    std::mutex latch_;                  // 用于对log_buffer_的互斥访问
-    LogBuffer log_buffer_;              // 日志缓冲区
+    friend class RecoveryManager;
+
+   private:
+    std::mutex latch_;      // 用于对log_buffer_的互斥访问
+    LogBuffer log_buffer_;  // 日志缓冲区
     DiskManager* disk_manager_;
 
    public:
@@ -351,7 +352,7 @@ private:
 
     void add_log_to_buffer(LogRecord* log_record);
 
-    void add_log_to_buffer_without_lock(LogRecord *log_record);
+    void add_log_to_buffer_without_lock(LogRecord* log_record);
 
     void flush_log_to_disk();
 
@@ -359,11 +360,12 @@ private:
 
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
-    void add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid, const std::string &table_name);
+    void add_insert_log(txn_id_t txn_id, const RmRecord& insert_value, const Rid& rid, const std::string& table_name);
 
-    void add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid, const std::string &table_name);
+    void add_delete_log(txn_id_t txn_id, const RmRecord& delete_value, const Rid& rid, const std::string& table_name);
 
-    void add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid, const std::string &table_name);
+    void add_update_log(txn_id_t txn_id, const RmRecord& new_rec, const RmRecord& old_rec, const Rid& rid,
+                        const std::string& table_name);
 
     void add_begin_log(txn_id_t txn_id);
 

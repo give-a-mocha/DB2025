@@ -328,9 +328,9 @@ class IxIndexHandle {
      * @param transaction 当前事务
      * @return 叶节点页面指针
      */
-    Page* find_leaf_page(const char *key, Operation operation, Transaction *transaction);
+    Page *find_leaf_page(const char *key, Operation operation, Transaction *transaction);
 
-    Page* find_leaf_page_without_lock(const char *key, Operation operation);
+    Page *find_leaf_page_without_lock(const char *key, Operation operation);
 
     void create_new_root(const char *key, const Rid &value);
 
@@ -543,7 +543,7 @@ class IxIndexHandle {
      * @warning 必须确保iid有效
      */
     Rid get_rid(const Iid &iid) const;
-    
+
     // 检查该页是否合法
     bool is_page_safe(IxNodeHandle *node, Operation operation);
 

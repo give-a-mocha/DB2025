@@ -16,13 +16,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "system/sm.h"
 
-std::vector<Value> convert_record_to_values(
-    const std::unique_ptr<RmRecord> &record, 
-    const std::vector<ColMeta> &cols_
-) {
+std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &record,
+                                            const std::vector<ColMeta> &cols_) {
     TRACE_FUNCTION
     std::vector<Value> values;
-    values.reserve(cols_.size()); // 预分配空间以提高性能
+    values.reserve(cols_.size());  // 预分配空间以提高性能
     for (const auto &col : cols_) {
         Value value;
         value.set_col_data(col.type, record->data + col.offset, col.len);
@@ -35,12 +33,7 @@ std::vector<Value> convert_record_to_values(
 /**
  * @brief 检查事务是否与记录发生冲突, 获取锁
  */
-bool get_lock_and_check_conflict(
-    Transaction *txn,
-    TransactionManager *txn_mgr,
-    RmFileHandle *fh,
-    const Rid &rid
-) {
+bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
     // 检查是否有未提交事务修改
     bool ok = txn_mgr->get_lock_manager()->lock_exclusive_on_record(txn, rid, fh->GetFd());
     if (ok == false) {
@@ -106,20 +99,14 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
     return rec;
 }
 
-bool mvcc_insert_index(
-    const TabMeta& tab_, 
-    RmRecord& rec, 
-    Rid rid, 
-    Context* context_, 
-    TransactionManager* txn_mgr,
-    SmManager* sm_manager
-) {
+bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *context_, TransactionManager *txn_mgr,
+                       SmManager *sm_manager) {
     RmFileHandle *fh_ = sm_manager->fhs_.at(tab_.name).get();
     std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
     inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
+        auto &index = tab_.indexes[i];
         auto ih = sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
@@ -143,13 +130,15 @@ bool mvcc_insert_index(
         if (res == INVALID_PAGE_ID) {
             // 插入索引失败，可能是因为索引已存在
             for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
-                auto& rollback_index = tab_.indexes[rollback_i];
-                auto rollback_ih = sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
+                auto &rollback_index = tab_.indexes[rollback_i];
+                auto rollback_ih =
+                    sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols))
+                        .get();
                 rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
             }
             return false;
         }
-        inserted_keys.emplace_back(std::move(key)); // 保存已插入的键值
+        inserted_keys.emplace_back(std::move(key));  // 保存已插入的键值
     }
     return true;
 }

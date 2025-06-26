@@ -22,18 +22,18 @@ See the Mulan PSL v2 for more details. */
  * @thread_safety 通过互斥锁保护并发访问
  */
 void LogManager::add_log_to_buffer(LogRecord *log_record) {
-	std::lock_guard<std::mutex> lock(latch_); // 加锁以确保线程安全
+    std::lock_guard<std::mutex> lock(latch_);  // 加锁以确保线程安全
     add_log_to_buffer_without_lock(log_record);
 }
 
 void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
-	switch (log_record->log_type_) {
-		case LogType::BEGIN: {
-			auto begin_log_record_ = dynamic_cast<BeginLogRecord *>(log_record);
-			begin_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-			log_buffer_.offset_ += begin_log_record_->log_tot_len_;
-			break;
-		}
+    switch (log_record->log_type_) {
+        case LogType::BEGIN: {
+            auto begin_log_record_ = dynamic_cast<BeginLogRecord *>(log_record);
+            begin_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
+            log_buffer_.offset_ += begin_log_record_->log_tot_len_;
+            break;
+        }
         case LogType::COMMIT: {
             auto commit_log_record_ = dynamic_cast<CommitLogRecord *>(log_record);
             commit_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
@@ -93,56 +93,43 @@ void LogManager::flush_log_to_disk_without_lock() {
     log_buffer_.offset_ = 0;
 }
 
-void LogManager::add_insert_log(
-	txn_id_t txn_id, 
-	const RmRecord &insert_value, 
-	const Rid &rid, 
-	const std::string &table_name
-) {
-	InsertLogRecord *insert_log = new InsertLogRecord(txn_id, insert_value, rid, table_name);
-	add_log_to_buffer(insert_log);
-	delete insert_log;
+void LogManager::add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid,
+                                const std::string &table_name) {
+    InsertLogRecord *insert_log = new InsertLogRecord(txn_id, insert_value, rid, table_name);
+    add_log_to_buffer(insert_log);
+    delete insert_log;
 }
 
-void LogManager::add_delete_log(
-	txn_id_t txn_id, 
-	const RmRecord &delete_value, 
-	const Rid &rid, 
-	const std::string &table_name
-) {
-	DeleteLogRecord *delete_log = new DeleteLogRecord(txn_id, delete_value, rid, table_name);
-	add_log_to_buffer(delete_log);
-	delete delete_log;
+void LogManager::add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid,
+                                const std::string &table_name) {
+    DeleteLogRecord *delete_log = new DeleteLogRecord(txn_id, delete_value, rid, table_name);
+    add_log_to_buffer(delete_log);
+    delete delete_log;
 }
 
-void LogManager::add_update_log(
-	txn_id_t txn_id, 
-	const RmRecord &new_rec,
-	const RmRecord &old_rec, 
-	const Rid &rid, 
-	const std::string &table_name
-) {
-	UpdateLogRecord *update_log = new UpdateLogRecord(txn_id, new_rec, old_rec, rid, table_name);
-	add_log_to_buffer(update_log);
-	delete update_log;
+void LogManager::add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid,
+                                const std::string &table_name) {
+    UpdateLogRecord *update_log = new UpdateLogRecord(txn_id, new_rec, old_rec, rid, table_name);
+    add_log_to_buffer(update_log);
+    delete update_log;
 }
 
 void LogManager::add_begin_log(txn_id_t txn_id) {
-	BeginLogRecord *begin_log = new BeginLogRecord(txn_id);
-	add_log_to_buffer(begin_log);
-	delete begin_log;
+    BeginLogRecord *begin_log = new BeginLogRecord(txn_id);
+    add_log_to_buffer(begin_log);
+    delete begin_log;
 }
 
 void LogManager::add_commit_log(txn_id_t txn_id) {
-	CommitLogRecord *commit_log = new CommitLogRecord(txn_id);
-	add_log_to_buffer(commit_log);
-	delete commit_log;
+    CommitLogRecord *commit_log = new CommitLogRecord(txn_id);
+    add_log_to_buffer(commit_log);
+    delete commit_log;
 }
 
 void LogManager::add_abort_log(txn_id_t txn_id) {
-	AbortLogRecord *abort_log = new AbortLogRecord(txn_id);
-	add_log_to_buffer(abort_log);
-	delete abort_log;
+    AbortLogRecord *abort_log = new AbortLogRecord(txn_id);
+    add_log_to_buffer(abort_log);
+    delete abort_log;
 }
 
 std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t offset) {

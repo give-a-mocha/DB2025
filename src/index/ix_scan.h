@@ -32,11 +32,11 @@ See the Mulan PSL v2 for more details. */
  * - 完善并发控制机制
  */
 class IxScan : public RecScan {
-    const IxIndexHandle *ih_;            // 索引句柄指针
-    Iid iid_;                            // 当前扫描位置(初始为lower)
-    Iid end_;                            // 扫描终止位置(初始为upper)
-    BufferPoolManager *bpm_;             // 缓冲池管理器
-    Page* now;                             
+    const IxIndexHandle *ih_;  // 索引句柄指针
+    Iid iid_;                  // 当前扫描位置(初始为lower)
+    Iid end_;                  // 扫描终止位置(初始为upper)
+    BufferPoolManager *bpm_;   // 缓冲池管理器
+    Page *now;
 
    public:
     /**
@@ -48,11 +48,11 @@ class IxScan : public RecScan {
      */
     IxScan(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
         : ih_(ih), iid_(lower), end_(upper), bpm_(bpm) {
-            if(!is_end()){
-                now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
-                now->rlatch();  // 获取读锁，确保扫描期间页面不被修改
-            }
+        if (!is_end()) {
+            now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
+            now->rlatch();  // 获取读锁，确保扫描期间页面不被修改
         }
+    }
 
     /**
      * @brief 移动到下一条记录
@@ -85,9 +85,9 @@ class IxScan : public RecScan {
 
     void unlatch() {
         if (now != nullptr) {
-            now->runlatch();  // 释放读锁
+            now->runlatch();                              // 释放读锁
             bpm_->unpin_page(now->get_page_id(), false);  // 解除页面固定状态
-            now = nullptr;  // 清空当前页面指针
+            now = nullptr;                                // 清空当前页面指针
         }
     }
 };

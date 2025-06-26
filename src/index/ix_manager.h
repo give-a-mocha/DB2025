@@ -98,10 +98,8 @@ class IxManager {
         auto ix_name = get_index_name(filename, index_cols);
         return exists_with_index_name(ix_name);
     }
-    
-    bool exists_with_index_name(const std::string &ix_name) {
-        return disk_manager_->is_file(ix_name);
-    }
+
+    bool exists_with_index_name(const std::string &ix_name) { return disk_manager_->is_file(ix_name); }
     /**
      * @brief 创建索引文件
      * @param filename 表名
@@ -214,12 +212,10 @@ class IxManager {
 
     void destroy_index(const std::string &filename, const std::vector<std::string> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
-        destroy_index_with_index_name(ix_name);    
+        destroy_index_with_index_name(ix_name);
     }
-    
-    void destroy_index_with_index_name(const std::string &ix_name) { 
-        disk_manager_->destroy_file(ix_name); 
-    }
+
+    void destroy_index_with_index_name(const std::string &ix_name) { disk_manager_->destroy_file(ix_name); }
 
     /**
      * @brief 打开索引文件并创建索引句柄

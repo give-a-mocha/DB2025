@@ -61,23 +61,23 @@ class Page {
 
     bool is_dirty() const { return is_dirty_; }
 
-    void wlatch() { 
+    void wlatch() {
         rw_latch_.lock();
         // rw_latch_debug_->lock();
     }
 
     void wunlatch() {
-        rw_latch_.unlock(); 
+        rw_latch_.unlock();
         // rw_latch_debug_->unlock();
     }
 
     void rlatch() {
-        rw_latch_.lock_shared(); 
+        rw_latch_.lock_shared();
         // rw_latch_debug_->lock_shared();
     }
 
     void runlatch() {
-        rw_latch_.unlock_shared(); 
+        rw_latch_.unlock_shared();
         // rw_latch_debug_->unlock_shared();
     }
 
@@ -89,8 +89,8 @@ class Page {
 
     inline void set_page_lsn(lsn_t page_lsn) { memcpy(get_data() + OFFSET_LSN, &page_lsn, sizeof(lsn_t)); }
 
-    void reset_latch() { 
-        rw_latch_.~shared_mutex();  // 销毁旧的锁
+    void reset_latch() {
+        rw_latch_.~shared_mutex();             // 销毁旧的锁
         new (&rw_latch_) std::shared_mutex();  // 重新构造新的锁
         // 重新初始化调试锁
         // rw_latch_debug_ = std::make_unique<DebugSharedMutex>("page_" + std::to_string(id_.page_no));

@@ -55,7 +55,7 @@ class IndexScanExecutor : public AbstractExecutor {
      * @brief 扫描状态维护
      * @note 控制扫描进度
      */
-    Rid rid_;                        // 当前记录ID
+    Rid rid_;                       // 当前记录ID
     std::unique_ptr<IxScan> scan_;  // 扫描迭代器
 
     /**
@@ -227,7 +227,7 @@ class IndexScanExecutor : public AbstractExecutor {
             }
             scan_->next();
         }
-        if(scan_->is_end()) {
+        if (scan_->is_end()) {
             scan_->unlatch();
         }
     }

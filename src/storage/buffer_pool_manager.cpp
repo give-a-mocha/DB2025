@@ -81,10 +81,10 @@ void BufferPoolManager::update_page(Page* page, PageId new_page_id, frame_id_t n
     page_table_.emplace(new_page_id, new_frame_id);
 
     // 重置页面数据
-    page->pin_count_ = 0;  // 重置pin_count
+    page->pin_count_ = 0;     // 重置pin_count
     page->is_dirty_ = false;  // 重置脏页标志
     page->reset_memory();
-    page->reset_latch(); // Reset the latch to an unlocked state
+    page->reset_latch();  // Reset the latch to an unlocked state
 }
 
 /**

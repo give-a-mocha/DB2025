@@ -58,7 +58,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
         // 添加间隙锁
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (auto &rid : rids_) {
-            if (!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid))  {
+            if (!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
             auto rec = fh_->get_record(rid, context_);
@@ -66,8 +66,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
             std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
             txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid, std::move(values));
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec)
-            );
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec));
             context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *rec, rid, tab_.name);
         }
         return nullptr;

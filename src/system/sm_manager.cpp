@@ -395,7 +395,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 1. 获取表的元数据并验证
     TabMeta& tab = db_.get_table(tab_name);
 
-    auto &&index_name = ix_manager_->get_index_name(tab_name, col_names);
+    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
 
     // 2. 检查索引是否已存在
     if (ix_manager_->exists_with_index_name(index_name)) {
@@ -412,8 +412,8 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     }
 
     // 4. 创建和打开索引文件
-    auto fh_ = fhs_[tab_name].get();                     // 获取表的文件句柄
-    ix_manager_->create_index(tab_name, cols);           // 创建索引文件
+    auto fh_ = fhs_[tab_name].get();                                 // 获取表的文件句柄
+    ix_manager_->create_index(tab_name, cols);                       // 创建索引文件
     auto ih_ = ix_manager_->open_index_with_index_name(index_name);  // 打开索引文件
 
     // 5. 为索引键分配缓冲区
@@ -473,7 +473,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
  */
 void SmManager::drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
     //! DO
-    auto &&index_name = ix_manager_->get_index_name(tab_name, col_names);
+    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
     if (!ix_manager_->exists_with_index_name(index_name)) {
         throw IndexNotFoundError(tab_name, col_names);
     }

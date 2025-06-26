@@ -11,82 +11,83 @@ See the Mulan PSL v2 for more details. */
 #include "log_recovery.h"
 #include "common/print.hpp"
 
-
 void RecoveryManager::recovery() {
-	size_t log_start_offset = sm_manager_->db_.get_log_offset();
-	auto log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
-	std::unordered_set<txn_id_t> uncommitted_txns;  // 用于记录未提交的事务ID
-	std::unordered_map<std::string, int> tab_page_num;
-	
-	// 辅助lambda函数：处理表操作日志记录（INSERT、DELETE、UPDATE）
-	auto process_table_operation = [&](auto* log_record_) {
-		std::string table_name = std::string(log_record_->table_name_, log_record_->table_name_size_);
-		if (sm_manager_->fhs_.find(table_name) != sm_manager_->fhs_.end()) {
-			tab_page_num[table_name] = std::max(tab_page_num[table_name], log_record_->rid_.page_no);
-		}
-	};
-	
-	for (const auto &log_record : log_records_) {
-		switch (log_record->log_type_) {
-			case LogType::BEGIN: {
-				uncommitted_txns.insert(log_record->log_tid_);
-				break;
-			}
-			case LogType::COMMIT: {
-				uncommitted_txns.erase(log_record->log_tid_);
-				break;
-			}
-			case LogType::ABORT: {
-				uncommitted_txns.erase(log_record->log_tid_);
-				break;
-			}
-			case LogType::INSERT: {
-				auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record.get());
-				process_table_operation(log_record_);
-				break;
-			}
-			case LogType::DELETE: {
-				auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record.get());
-				process_table_operation(log_record_);
-				break;
-			}
-			case LogType::UPDATE: {
-				auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record.get());
-				process_table_operation(log_record_);
-				break;
-			}
-			default: {
-				throw RMDBError("not supported log type");
-			}
-		}
-	}
-	// 新建页
-	for (const auto &[tab_name, page_number] : tab_page_num){
-	       auto fh_ = sm_manager_->fhs_.at(tab_name).get();
-	       while (fh_->get_file_hdr().num_pages <= page_number) {
-	           auto page_hdr_ = fh_->create_new_page_handle();
-	           buffer_pool_manager_->unpin_page(page_hdr_.page->get_page_id(), false);
-	       }
-	   }
+    size_t log_start_offset = sm_manager_->db_.get_log_offset();
+    auto log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
+    std::unordered_set<txn_id_t> uncommitted_txns;  // 用于记录未提交的事务ID
+    std::unordered_map<std::string, int> tab_page_num;
 
-	for (const auto &log_record : log_records_) {
-		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
-			continue;
-		}
-		redo(log_record.get());
-	}
+    // 辅助lambda函数：处理表操作日志记录（INSERT、DELETE、UPDATE）
+    auto process_table_operation = [&](auto *log_record_) {
+        std::string table_name = std::string(log_record_->table_name_, log_record_->table_name_size_);
+        if (sm_manager_->fhs_.find(table_name) != sm_manager_->fhs_.end()) {
+            tab_page_num[table_name] = std::max(tab_page_num[table_name], log_record_->rid_.page_no);
+        }
+    };
 
-	const int size = log_records_.size();
-	for(int i = size - 1; i >= 0; --i) {
-		auto &log_record = log_records_[i];
-		if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
-			continue;
-		}
-		if (uncommitted_txns.find(log_record->log_tid_) != uncommitted_txns.end()) {
-			undo(log_record.get());
-		}
-	}
-	for (const auto& [tab_name, tab_meta] : sm_manager_->db_.tabs_) {
+    for (const auto &log_record : log_records_) {
+        switch (log_record->log_type_) {
+            case LogType::BEGIN: {
+                uncommitted_txns.insert(log_record->log_tid_);
+                break;
+            }
+            case LogType::COMMIT: {
+                uncommitted_txns.erase(log_record->log_tid_);
+                break;
+            }
+            case LogType::ABORT: {
+                uncommitted_txns.erase(log_record->log_tid_);
+                break;
+            }
+            case LogType::INSERT: {
+                auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record.get());
+                process_table_operation(log_record_);
+                break;
+            }
+            case LogType::DELETE: {
+                auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record.get());
+                process_table_operation(log_record_);
+                break;
+            }
+            case LogType::UPDATE: {
+                auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record.get());
+                process_table_operation(log_record_);
+                break;
+            }
+            default: {
+                throw RMDBError("not supported log type");
+            }
+        }
+    }
+    // 新建页
+    for (const auto &[tab_name, page_number] : tab_page_num) {
+        auto fh_ = sm_manager_->fhs_.at(tab_name).get();
+        while (fh_->get_file_hdr().num_pages <= page_number) {
+            auto page_hdr_ = fh_->create_new_page_handle();
+            buffer_pool_manager_->unpin_page(page_hdr_.page->get_page_id(), false);
+        }
+    }
+
+    for (const auto &log_record : log_records_) {
+        if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT ||
+            log_record->log_type_ == LogType::ABORT) {
+            continue;
+        }
+        redo(log_record.get());
+    }
+
+    const int size = log_records_.size();
+    for (int i = size - 1; i >= 0; --i) {
+        auto &log_record = log_records_[i];
+        if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT ||
+            log_record->log_type_ == LogType::ABORT) {
+            continue;
+        }
+        if (uncommitted_txns.find(log_record->log_tid_) != uncommitted_txns.end()) {
+            undo(log_record.get());
+        }
+    }
+    for (const auto &[tab_name, tab_meta] : sm_manager_->db_.tabs_) {
         std::vector<IndexMeta> indexes;
         indexes.reserve(tab_meta.indexes.size());
         for (auto &index_ : tab_meta.indexes) {
@@ -103,8 +104,8 @@ void RecoveryManager::recovery() {
         }
     }
 
-	flush_to_disk();
-	log_records_.clear();
+    flush_to_disk();
+    log_records_.clear();
 }
 
 void RecoveryManager::flush_to_disk() {
@@ -210,20 +211,20 @@ void RecoveryManager::create_static_check_point() {
 
     std::unique_lock lock_(latch_);
     std::unique_lock lock(log_mgr_->latch_);
-	auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
-	log_mgr_->flush_log_to_disk_without_lock();
-	flush_to_disk();
-	//在静态检查点之前的，未提交事务，应该添加
-	std::unordered_set<txn_id_t> committed_txns;
-	for (const auto &log_record : log_records_) {
+    auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
+    log_mgr_->flush_log_to_disk_without_lock();
+    flush_to_disk();
+    // 在静态检查点之前的，未提交事务，应该添加
+    std::unordered_set<txn_id_t> committed_txns;
+    for (const auto &log_record : log_records_) {
         if (log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
-			committed_txns.insert(log_record->	log_tid_);
-		}
+            committed_txns.insert(log_record->log_tid_);
+        }
     }
-	for (const auto &log_record : log_records_) {
+    for (const auto &log_record : log_records_) {
         if (committed_txns.find(log_record->log_tid_) == committed_txns.end()) {
             log_mgr_->add_log_to_buffer_without_lock(log_record.get());
         }
     }
-	log_mgr_->flush_log_to_disk_without_lock();
+    log_mgr_->flush_log_to_disk_without_lock();
 }

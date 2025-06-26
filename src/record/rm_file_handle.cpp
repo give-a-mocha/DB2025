@@ -180,7 +180,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
         buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
-    
+
     // 复位bitmap
     Bitmap::reset(page_handle.bitmap, rid.slot_no);
     page_handle.page_hdr->num_records--;

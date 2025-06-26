@@ -55,7 +55,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @brief 扫描状态维护
      * @note 控制扫描进度
      */
-    Rid rid_;                        // 当前记录ID
+    Rid rid_;                       // 当前记录ID
     std::unique_ptr<IxScan> scan_;  // 扫描迭代器
 
     /**
@@ -79,7 +79,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     MvccIndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
-                      std::vector<std::string> index_col_names, Context *context, TransactionManager *txn_mgr) {
+                          std::vector<std::string> index_col_names, Context *context, TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         txn_mgr_ = txn_mgr;
         context_ = context;
@@ -102,7 +102,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         for (auto &cond : conds_) {
             if (cond.lhs_col.tab_name != tab_name_) {
                 // lhs is on other table, now rhs must be on this table
-                assert(!(cond.rhs_type==ConditionRhsType::RHS_EXPR) && !(cond.rhs_type==ConditionRhsType::RHS_VALUE) && cond.rhs_col.tab_name == tab_name_);
+                assert(!(cond.rhs_type == ConditionRhsType::RHS_EXPR) &&
+                       !(cond.rhs_type == ConditionRhsType::RHS_VALUE) && cond.rhs_col.tab_name == tab_name_);
                 // swap lhs and rhs
                 std::swap(cond.lhs_col, cond.rhs_col);
                 cond.op = swap_op(cond.op);
@@ -229,7 +230,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             }
             scan_->next();
         }
-        if(scan_->is_end()) {
+        if (scan_->is_end()) {
             scan_->unlatch();
         }
     }

@@ -100,9 +100,9 @@ class Portal {
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
                     }
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_,
-                                                                    x->conds_, rids, context, txn_mgr);
-                    
+                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
+                        sm_manager_, x->tab_name_, x->set_clauses_, x->conds_, rids, context, txn_mgr);
+
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
@@ -113,15 +113,17 @@ class Portal {
                         rids.push_back(scan->rid());
                     }
 
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context, txn_mgr);
-                    
+                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(
+                        sm_manager_, x->tab_name_, x->conds_, rids, context, txn_mgr);
+
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
 
                 case PlanTag::T_Insert: {
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);
-                    
+                    std::unique_ptr<AbstractExecutor> root =
+                        std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);
+
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
@@ -185,16 +187,21 @@ class Portal {
                 convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if (x->tag == PlanTag::T_SeqScan) {
-                if(is_current_read) return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
-                else return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
+                if (is_current_read)
+                    return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
+                else
+                    return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context,
+                                                                 txn_mgr);
             } else {
-                if(is_current_read) {
-                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context);
-                }else {
-                    return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_, x->index_col_names_, context, txn_mgr);
+                if (is_current_read) {
+                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
+                                                               x->index_col_names_, context);
+                } else {
+                    return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
+                                                                   x->index_col_names_, context, txn_mgr);
                 }
             }
-            
+
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
             std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr, is_current_read);
             std::unique_ptr<AbstractExecutor> right =

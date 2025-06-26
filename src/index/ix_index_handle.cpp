@@ -256,25 +256,25 @@ IxIndexHandle::IxIndexHandle(DiskManager *disk_manager, BufferPoolManager *buffe
  * @note need to Unlatch and unpin the leaf node outside!
  * 注意：用了FindLeafPage之后一定要unlatch叶结点，否则下次latch该结点会堵塞！
  */
-Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transaction *transaction) {
+Page *IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transaction *transaction) {
     TRACE_FUNCTION
     // Todo:
     // 1. 获取根节点
     // 2. 从根节点开始不断向下查找目标key
     // 3. 找到包含该key值的叶子结点停止查找，并返回叶子节点
     // WARN("START find_leaf_page");
-    if (operation == Operation::FIND){
+    if (operation == Operation::FIND) {
         root_latch_.lock();
     }
     PageId page_id = {fd_, file_hdr_->root_page_};
-    Page* page = buffer_pool_manager_->fetch_page(page_id);
+    Page *page = buffer_pool_manager_->fetch_page(page_id);
     auto node = new IxNodeHandle(file_hdr_, page);
-    if(operation == Operation::FIND){
+    if (operation == Operation::FIND) {
         page->rlatch();
         root_latch_.unlock();  // 查找操作，释放根节点锁
     } else {
         page->wlatch();
-        if(!is_page_safe(node, operation)){
+        if (!is_page_safe(node, operation)) {
             transaction->append_index_latch_page_set(nullptr);
         } else {
             root_latch_.unlock();
@@ -284,20 +284,20 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
     while (!node->is_leaf_page()) {
         // 如果是非叶子结点，则继续向下查找
         page_id = {fd_, node->internal_lookup(key)};
-        Page* child_page = buffer_pool_manager_->fetch_page(page_id);
+        Page *child_page = buffer_pool_manager_->fetch_page(page_id);
         auto child_node = new IxNodeHandle(file_hdr_, child_page);
-        if(operation == Operation::FIND) {
+        if (operation == Operation::FIND) {
             child_page->rlatch();
             page->runlatch();
             buffer_pool_manager_->unpin_page(page->get_page_id(), false);
         } else {
             child_page->wlatch();
             transaction->append_index_latch_page_set(page);
-            if(is_page_safe(child_node, operation)){
+            if (is_page_safe(child_node, operation)) {
                 UnlockAncestors(transaction);
             }
         }
-        delete node;  // 释放上一个节点内存
+        delete node;        // 释放上一个节点内存
         node = child_node;  // 更新当前节点为子节点
         page = child_page;  // 更新当前页面为子页面
         // INFO("Page : {}", page->get_page_id().page_no);
@@ -306,18 +306,18 @@ Page* IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
     return page;
 }
 
-Page* IxIndexHandle::find_leaf_page_without_lock(const char *key, Operation operation) {
+Page *IxIndexHandle::find_leaf_page_without_lock(const char *key, Operation operation) {
     TRACE_FUNCTION
     PageId page_id = {fd_, file_hdr_->root_page_};
-    Page* page = buffer_pool_manager_->fetch_page(page_id);
+    Page *page = buffer_pool_manager_->fetch_page(page_id);
     auto node = new IxNodeHandle(file_hdr_, page);
     while (!node->is_leaf_page()) {
         // 如果是非叶子结点，则继续向下查找
         page_id = {fd_, node->internal_lookup(key)};
-        Page* child_page = buffer_pool_manager_->fetch_page(page_id);
+        Page *child_page = buffer_pool_manager_->fetch_page(page_id);
         auto child_node = new IxNodeHandle(file_hdr_, child_page);
         buffer_pool_manager_->unpin_page(page->get_page_id(), false);
-        delete node;  // 释放上一个节点内存
+        delete node;        // 释放上一个节点内存
         node = child_node;  // 更新当前节点为子节点
         page = child_page;  // 更新当前页面为子页面
     }
@@ -349,7 +349,7 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
         return false;  // 如果索引为空，直接返回false
     }
     root_latch_.unlock();  // 查找操作，释放根节点锁
-    Page* leaf_page = find_leaf_page(key, Operation::FIND, transaction);
+    Page *leaf_page = find_leaf_page(key, Operation::FIND, transaction);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     Rid *rid;
     bool ok = leaf_node->leaf_lookup(key, &rid);
@@ -365,7 +365,7 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
 bool IxIndexHandle::get_value_without_lock(const char *key, std::vector<Rid> *result) {
     TRACE_FUNCTION
 
-    Page* leaf_page = find_leaf_page_without_lock(key, Operation::FIND);
+    Page *leaf_page = find_leaf_page_without_lock(key, Operation::FIND);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     Rid *rid;
     bool ok = leaf_node->leaf_lookup(key, &rid);
@@ -626,7 +626,7 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
         return false;  // 如果索引为空，直接返回false
     }
 
-    Page* leaf_page = find_leaf_page(key, Operation::DELETE, transaction);
+    Page *leaf_page = find_leaf_page(key, Operation::DELETE, transaction);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     if (leaf_node->get_size() == leaf_node->remove(key)) {
         // 没有这个键
@@ -683,7 +683,7 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *tr
     if (rank > 0) {
         // 如果rank > 0，说明node结点有前驱结点,尝试和前驱结点进行重分配
         page_id_t neighbor_page_id = parent_node->value_at(rank - 1);
-        Page* neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
+        Page *neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
         IxNodeHandle *neighbor_node = new IxNodeHandle(file_hdr_, neighbor_page);
         if (neighbor_node->get_size() + node->get_size() >= node->get_min_size() * 2) {
             // 如果可以重分配，则调用redistribute函数
@@ -702,7 +702,7 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *tr
     if (rank != parent_node->get_size() - 1) {
         // 如果rank != parent_node->get_size() - 1，说明node结点有后继结点,尝试和后继结点进行重分配
         page_id_t neighbor_page_id = parent_node->value_at(rank + 1);
-        Page* neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
+        Page *neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
         IxNodeHandle *neighbor_node = new IxNodeHandle(file_hdr_, neighbor_page);
         if (neighbor_node->get_size() + node->get_size() >= node->get_min_size() * 2) {
             // 如果可以重分配，则调用redistribute函数
@@ -722,7 +722,7 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *tr
     if (rank > 0) {
         // 如果rank > 0，说明node结点有前驱结点,和前驱结点进行结合
         page_id_t neighbor_page_id = parent_node->value_at(rank - 1);
-        Page* neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
+        Page *neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
         IxNodeHandle *neighbor_node = new IxNodeHandle(file_hdr_, neighbor_page);
         // 如果可以合并，则调用coalesce函数
         neighbor_page->wlatch();
@@ -737,7 +737,7 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *tr
     if (rank != parent_node->get_size() - 1) {
         // 如果rank != parent_node->get_size() - 1，说明node结点有后继结点,和后继结点进行结合
         page_id_t neighbor_page_id = parent_node->value_at(rank + 1);
-        Page* neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
+        Page *neighbor_page = buffer_pool_manager_->fetch_page({fd_, neighbor_page_id});
         IxNodeHandle *neighbor_node = new IxNodeHandle(file_hdr_, neighbor_page);
         // 如果可以合并，则调用coalesce函数
         neighbor_page->wlatch();
@@ -1111,11 +1111,11 @@ bool IxIndexHandle::is_page_safe(IxNodeHandle *node, Operation operation) {
     TRACE_FUNCTION
     auto size = node->get_size();
 
-    switch(operation) {
+    switch (operation) {
         case Operation::INSERT:
             return size < node->get_max_size() - 1;
         case Operation::DELETE:
-            if(node->is_root_page()){
+            if (node->is_root_page()) {
                 return node->is_leaf_page() ? size > 1 : size > 2;
             }
             return size > node->get_min_size();
@@ -1151,16 +1151,16 @@ void IxIndexHandle::debug_print_tree() {
         INFO("Tree is empty!\n");
         return;
     }
-    
+
     // 打印树的基本信息
     INFO("Root page: {}", file_hdr_->root_page_);
     INFO("Last leaf: {}", file_hdr_->last_leaf_);
     INFO("Total pages: {}", file_hdr_->num_pages_);
     INFO("Key length: {}\n", file_hdr_->col_tot_len_);
-    
+
     // 从根节点开始递归打印
     debug_print_node(file_hdr_->root_page_, 0);
-    
+
     INFO("\n=== End of B+ Tree Structure Debug ===\n");
     debug_print_leaf_chain();
     INFO("====================================\n");
@@ -1176,22 +1176,22 @@ void IxIndexHandle::debug_print_node(page_id_t page_no, int depth) {
     if (page_no == IX_NO_PAGE || page_no == INVALID_PAGE_ID) {
         return;
     }
-    
+
     std::string res = std::string(depth * 2, ' ');  // 根据深度生成缩进字符串
-    
-    IxNodeHandle* node = fetch_node(page_no);
-    
+
+    IxNodeHandle *node = fetch_node(page_no);
+
     // 打印节点基本信息
     res += "Page[" + std::to_string(page_no) + "] ";
     res += (node->is_leaf_page() ? "LEAF " : "INTERNAL ");
     res += "Keys:" + std::to_string(node->get_size()) + "/" + std::to_string(node->get_max_size()) + " ";
     res += "Parent:" + std::to_string(node->get_parent_page_no());
-    
+
     if (node->is_leaf_page()) {
         res += " Prev:" + std::to_string(node->get_prev_leaf()) + " Next:" + std::to_string(node->get_next_leaf());
     }
     INFO(res);
-    
+
     // 如果是内部节点，递归打印子节点
     if (!node->is_leaf_page()) {
         for (int i = 0; i < node->get_size(); i++) {
@@ -1199,7 +1199,7 @@ void IxIndexHandle::debug_print_node(page_id_t page_no, int depth) {
             debug_print_node(child_page, depth + 1);
         }
     }
-    
+
     buffer_pool_manager_->unpin_page(node->get_page_id(), false);
     delete node;
 }
@@ -1220,7 +1220,7 @@ void IxIndexHandle::debug_print_leaf_chain() {
         auto next_page = now->value_at(0);
         now = fetch_node(next_page);
     }
-    while(now->get_page_no() != file_hdr_->last_leaf_){
+    while (now->get_page_no() != file_hdr_->last_leaf_) {
         res += "[" + std::to_string(now->get_page_no()) + "] ";
         auto next_page = now->get_next_leaf();
         now = fetch_node(next_page);

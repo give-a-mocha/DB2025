@@ -69,7 +69,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (size_t i = 0; i < rids_.size(); ++i) {
             auto &rid = rids_[i];
-            if(!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
+            if (!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
             // 获取旧记录并创建新记录
@@ -133,27 +133,26 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
 
             std::vector<Value> values(tab_.cols.size());
-            for(int i = 0; i < (int)tab_.cols.size(); ++i) {
+            for (int i = 0; i < (int)tab_.cols.size(); ++i) {
                 if (is_modify[i]) {
                     values[i].set_col_data(tab_.cols[i].type, old_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
                     values[i].init_raw(tab_.cols[i].len);
                 }
             }
 
-            //update = delete + insert
+            // update = delete + insert
 
             // fh_->delete_record(rid, context_);
             std::vector<Value> values_temp = convert_record_to_values(old_rec, tab_.cols);
             txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid, std::move(values_temp));
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec)
-            );
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec));
             context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);
 
-
             // 获取全局条件
-            std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
-            if(!conds.empty() && eval_conds(tab_.cols, conds, new_rec.get())){
+            std::vector<Condition> conds =
+                txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
+            if (!conds.empty() && eval_conds(tab_.cols, conds, new_rec.get())) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             auto rid_ = fh_->insert_record(new_rec->data, context_);
@@ -166,7 +165,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
             std::vector<Value> values_ = convert_record_to_values(new_rec, tab_.cols);
             txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, std::move(values_));
-            context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, *new_rec));
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, *new_rec));
             context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, rid_, tab_.name);
         }
         return nullptr;

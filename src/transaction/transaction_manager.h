@@ -83,7 +83,8 @@ class TransactionManager {
     std::shared_mutex version_info_mutex_;
     /** 存储表堆中每个元组的先前版本。 */
     std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>, PageIdHash> version_info_;
-private:
+
+   private:
     // 事务使用的并发控制算法，目前只需要考虑2PL
     ConcurrencyMode concurrency_mode_;
 
@@ -157,9 +158,9 @@ private:
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
 
     /**
-    * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
-    * 在更新之前，将调用 `check` 函数以确保有效性。
-    */
+     * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+     * 在更新之前，将调用 `check` 函数以确保有效性。
+     */
     bool UpdateUndoLink(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
 
     /**
@@ -197,7 +198,8 @@ private:
 
     void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
 
-    void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values, std::vector<bool> modified_fields);
+    void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values,
+                             std::vector<bool> modified_fields);
 
     void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
 };

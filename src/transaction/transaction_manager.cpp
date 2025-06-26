@@ -110,9 +110,9 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     for (const LockDataId& lock : lock_set_copy) {
         lock_manager_->unlock(txn, lock);
     }
-    
+
     auto lock_gap_set = txn->get_lock_gap_set();
-    auto lock_gap_set_copy = *lock_gap_set; // 复制间隙锁集合以避免迭代时修改
+    auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
     for (const int& tab_fd : lock_gap_set_copy) {
         lock_manager_->unlock_gap(txn, tab_fd);
     }
@@ -169,7 +169,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             log_manager->add_insert_log(context->txn_->get_transaction_id(), rec, rid, table_name);
         }
         // 删除版本链记录
-        DeleteUpdateVersionLink(handle->GetFd() ,rid, context->txn_);
+        DeleteUpdateVersionLink(handle->GetFd(), rid, context->txn_);
     }
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
@@ -179,7 +179,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     }
 
     auto lock_gap_set = txn->get_lock_gap_set();
-    auto lock_gap_set_copy = *lock_gap_set; // 复制间隙锁集合以避免迭代时修改
+    auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
     for (const int& tab_fd : lock_gap_set_copy) {
         lock_manager_->unlock_gap(txn, tab_fd);
     }
@@ -189,19 +189,15 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     txn->ClearUndoLogs();
     // 从全局事务表中删除
     // std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-    // txn_map.erase(txn->get_transaction_id());  
+    // txn_map.erase(txn->get_transaction_id());
     log_manager->add_abort_log(txn->get_transaction_id());
 }
 
 /**
-* @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
-* 在更新之前，将调用 `check` 函数以确保有效性。
-*/
-bool TransactionManager::UpdateUndoLink(
-    const int &fd,
-    Rid rid,
-    std::optional<UndoLink> prev_link
-) {
+ * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
+ * 在更新之前，将调用 `check` 函数以确保有效性。
+ */
+bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, std::optional<UndoLink> prev_link) {
     std::optional<VersionUndoLink> prev_version = VersionUndoLink::FromOptionalUndoLink(prev_link);
     return UpdateVersionLink(fd, rid, prev_version);
 }
@@ -210,11 +206,7 @@ bool TransactionManager::UpdateUndoLink(
  * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
  * 在更新之前，将调用 `check` 函数以确保有效性。
  */
-bool TransactionManager::UpdateVersionLink(
-    const int &fd,
-    Rid rid,
-    std::optional<VersionUndoLink> prev_version
-) {
+bool TransactionManager::UpdateVersionLink(const int& fd, Rid rid, std::optional<VersionUndoLink> prev_version) {
     // 获取对应的版本信息
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
@@ -239,8 +231,7 @@ bool TransactionManager::UpdateVersionLink(
     return true;  // 更新成功，返回 true
 }
 
-UndoLink TransactionManager::DeleteUpdateVersionLink(const int &fd, Rid rid, Transaction *txn) {
-
+UndoLink TransactionManager::DeleteUpdateVersionLink(const int& fd, Rid rid, Transaction* txn) {
     // 获取对应的版本信息
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
@@ -275,7 +266,7 @@ UndoLink TransactionManager::DeleteUpdateVersionLink(const int &fd, Rid rid, Tra
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
-std::optional<UndoLink> TransactionManager::GetUndoLink(const int &fd, Rid rid){
+std::optional<UndoLink> TransactionManager::GetUndoLink(const int& fd, Rid rid) {
     std::optional<VersionUndoLink> version_link = GetVersionLink(fd, rid);
     if (!version_link.has_value()) {
         return std::nullopt;  // 如果没有找到对应的版本链接，则返回 nullopt
@@ -284,7 +275,7 @@ std::optional<UndoLink> TransactionManager::GetUndoLink(const int &fd, Rid rid){
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
-std::optional<VersionUndoLink> TransactionManager::GetVersionLink(const int &fd, Rid rid){
+std::optional<VersionUndoLink> TransactionManager::GetVersionLink(const int& fd, Rid rid) {
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
@@ -353,9 +344,7 @@ UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
 /** @brief 获取系统中的最低读时间戳。 */
 timestamp_t TransactionManager::GetWatermark() { return running_txns_.GetWatermark(); }
 /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
-void TransactionManager::GarbageCollection(){
-    
-}
+void TransactionManager::GarbageCollection() {}
 
 /**
  * @brief 添加插入操作的撤销日志
@@ -363,18 +352,13 @@ void TransactionManager::GarbageCollection(){
  * @param rid 插入的记录的RID
  * @param values 插入的记录值
  */
-void TransactionManager::add_insert_undo_log(
-    Transaction *txn,
-    const int &fd,
-    Rid rid, 
-    std::vector<Value> values
-) {
+void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, std::vector<Value> values) {
     UndoLog log;
     log.is_deleted_ = false;
     log.modified_fields_ = std::vector<bool>(values.size(), true);
     log.tuple_ = std::move(values);
     log.ts_ = get_next_timestamp();
-    log.prev_version_ = UndoLink{}; // insert undo log 没有前一个版本
+    log.prev_version_ = UndoLink{};  // insert undo log 没有前一个版本
     auto undo_link = txn->AppendUndoLog(log);
     UpdateUndoLink(fd, rid, undo_link);
 }
@@ -386,13 +370,8 @@ void TransactionManager::add_insert_undo_log(
  * @param values 修改前的记录值
  * @param modified_fields 修改的字段
  */
-void TransactionManager::add_update_undo_log(
-    Transaction *txn,
-    const int &fd,
-    Rid rid, 
-    std::vector<Value> values, 
-    std::vector<bool> modified_fields
-) {
+void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid rid, std::vector<Value> values,
+                                             std::vector<bool> modified_fields) {
     UndoLog log;
     log.is_deleted_ = false;
     log.modified_fields_ = std::move(modified_fields);
@@ -409,12 +388,7 @@ void TransactionManager::add_update_undo_log(
  * @param rid 要删除的记录的RID
  * @param values 删除前的记录值
  */
-void TransactionManager::add_delete_undo_log(
-    Transaction *txn,
-    const int &fd,
-    Rid rid, 
-    std::vector<Value> values
-) {
+void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid rid, std::vector<Value> values) {
     UndoLog log;
     log.is_deleted_ = true;
     log.modified_fields_ = std::vector<bool>(values.size(), true);

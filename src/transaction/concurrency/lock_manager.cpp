@@ -392,8 +392,8 @@ std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* t
     }
     GapLockRequestQueue& request_queue = table_queue_it->second;
     for (const auto& gap_request : request_queue.request_queue_) {
-        if(gap_request.txn_id_ == txn->get_transaction_id()) {
-            continue; // 只返回其他事务的间隙锁条件
+        if (gap_request.txn_id_ == txn->get_transaction_id()) {
+            continue;  // 只返回其他事务的间隙锁条件
         }
         gap_conditions.insert(gap_conditions.end(), gap_request.conds.begin(), gap_request.conds.end());
     }
