@@ -345,6 +345,8 @@ class IxIndexHandle {
     page_id_t insert_entry(const char *key, const Rid &value, Transaction *transaction);
 
     page_id_t insert_entry_without_lock(const char *key, const Rid &value);
+
+    page_id_t insert_entry_force(const char *key, const Rid &value, Transaction *transaction);
     /**
      * @brief 分裂节点
      * @param node 需要分裂的节点

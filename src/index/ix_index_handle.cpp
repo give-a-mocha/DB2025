@@ -572,6 +572,35 @@ page_id_t IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &v
 }
 
 /**
+ * @brief 替换B+树中key位置rid值
+ * @details 完成键值对的替换操作,使用前应该通过get_value()确认key存在
+ * @param key 要插入的键
+ * @param value 要插入的记录ID
+ * @param transaction 事务指针，用于并发控制
+ * @return page_id_t
+ *         - 插入位置所在叶节点的页面号
+ *         - INVALID_PAGE_ID 表示插入失败
+ * @warning
+ * - 需要正确处理并发控制
+ * - 必须维护最右叶子节点信息
+ * - 要及时释放节点的内存资源
+ */
+page_id_t IxIndexHandle::insert_entry_force(const char *key, const Rid &value, Transaction *transaction) {
+    TRACE_FUNCTION
+    auto leaf_page = find_leaf_page(key, Operation::INSERT, transaction);
+    auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
+    int pos = leaf_node->lower_bound(key);
+    leaf_node->set_rid(pos, value);  // 替换键值对
+    auto res = leaf_node->get_page_no();
+    UnlockAncestors(transaction);
+    leaf_page->wunlatch();  // 插入完毕后释放叶子
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+    delete leaf_node;  // 释放叶子结点内存
+    // 返回插入到的叶结点的page_no
+    return res;
+}
+
+/**
  * @brief 从B+树中删除指定键值对
  * @details 删除键值对并处理可能的节点合并或重分配
  * @param key 要删除的键值

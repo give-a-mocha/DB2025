@@ -38,6 +38,15 @@ bool get_lock_and_check_conflict(
 	const Rid &rid
 );
 
+bool mvcc_insert_index(
+    const TabMeta& tab_, 
+    RmRecord& rec, 
+    Rid rid, 
+    Context* context_, 
+    TransactionManager* txn_mgr,
+    SmManager* sm_manager
+);
+
 /**
  * @brief 递归地计算算术表达式的值
  * @param term 当前要求值的表达式项

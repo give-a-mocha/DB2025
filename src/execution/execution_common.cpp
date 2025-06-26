@@ -110,6 +110,54 @@ std::unique_ptr<RmRecord> mvcc_get_record(
     return rec;
 }
 
+bool mvcc_insert_index(
+    const TabMeta& tab_, 
+    RmRecord& rec, 
+    Rid rid, 
+    Context* context_, 
+    TransactionManager* txn_mgr,
+    SmManager* sm_manager
+) {
+    RmFileHandle *fh_ = sm_manager->fhs_.at(tab_.name).get();
+    std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
+    inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
+    // 遍历表的所有索引
+    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+        auto& index = tab_.indexes[i];
+        auto ih = sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            offset += index.cols[j].len;
+        }
+        // 检查索引项是否已存在
+        std::vector<Rid> result;
+        bool is_exist = ih->get_value(key.get(), &result, context_->txn_);
+        page_id_t res = INVALID_PAGE_ID;
+        if (is_exist == false) {
+            res = ih->insert_entry(key.get(), rid, context_->txn_);
+        } else {
+            Rid existing_rid = result[0];
+            auto rec = mvcc_get_record(existing_rid, context_, fh_, txn_mgr, tab_.cols);
+            if (rec == nullptr) {
+                res = ih->insert_entry_force(key.get(), rid, context_->txn_);
+            }
+        }
+        if (res == INVALID_PAGE_ID) {
+            // 插入索引失败，可能是因为索引已存在
+            for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
+                auto& rollback_index = tab_.indexes[rollback_i];
+                auto rollback_ih = sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
+                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
+            }
+            return false;
+        }
+        inserted_keys.emplace_back(std::move(key)); // 保存已插入的键值
+    }
+    return true;
+}
+
 /**
  * @brief 从记录数据中根据列元数据提取值
  *

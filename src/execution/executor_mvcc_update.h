@@ -157,7 +157,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             auto rid_ = fh_->insert_record(new_rec->data, context_);
             txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
             // 添加日志要在插入索引之后，因为abort会回滚索引
-            if (!sm_manager_->insert_index(tab_name_, *new_rec, rid_, context_)) {
+            if (!mvcc_insert_index(tab_, *new_rec, rid_, context_, txn_mgr_, sm_manager_)) {
                 fh_->delete_record(rid_, context_);
                 txn_mgr_->abort(context_, context_->log_mgr_);
                 throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
