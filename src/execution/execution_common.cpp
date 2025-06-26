@@ -46,7 +46,7 @@ bool get_lock_and_check_conflict(
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
     }
     
-    auto pre_undo_link = txn_mgr->GetUndoLink(rid);
+    auto pre_undo_link = txn_mgr->GetUndoLink(fh->GetFd(), rid);
     if(pre_undo_link.has_value()) {
         auto pre_txn = pre_undo_link.value().prev_txn_;
         auto undo_log = txn_mgr->GetUndoLog(pre_undo_link.value());
@@ -76,7 +76,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(
     TRACE_FUNCTION
     auto rec = fh_->get_record(rid, context_);
 
-    auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
+    auto pre_undo_link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
     while(pre_undo_link.has_value()){
         auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
         //如果是自己修改的直接返回

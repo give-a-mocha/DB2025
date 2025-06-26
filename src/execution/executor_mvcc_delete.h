@@ -64,7 +64,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
             auto rec = fh_->get_record(rid, context_);
             // fh_->delete_record(rid, context_);
             std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
-            txn_mgr_->add_delete_undo_log(context_->txn_, rid, std::move(values));
+            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid, std::move(values));
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec)
             );

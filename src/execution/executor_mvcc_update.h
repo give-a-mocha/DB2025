@@ -142,7 +142,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
 
             // fh_->delete_record(rid, context_);
             std::vector<Value> values_temp = convert_record_to_values(old_rec, tab_.cols);
-            txn_mgr_->add_delete_undo_log(context_->txn_, rid, std::move(values_temp));
+            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid, std::move(values_temp));
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec)
             );
@@ -163,7 +163,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
             }
             std::vector<Value> values_ = convert_record_to_values(new_rec, tab_.cols);
-            txn_mgr_->add_insert_undo_log(context_->txn_, rid_, std::move(values_));
+            txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, std::move(values_));
             context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, *new_rec));
             context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, rid_, tab_.name);
         }
