@@ -9,10 +9,10 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #pragma once
+#include "execution_common.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
-#include "execution_common.h"
 #include "index/ix.h"
 #include "system/sm.h"
 
@@ -39,7 +39,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     MvccDeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                    std::vector<Rid> rids, Context *context, TransactionManager *txn_mgr) {
+                       std::vector<Rid> rids, Context *context, TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         tab_ = sm_manager_->db_.get_table(tab_name);
@@ -58,7 +58,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
         // 添加间隙锁
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (auto &rid : rids_) {
-            if(!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
+            if (!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid))  {
                 continue;
             }
             auto rec = fh_->get_record(rid, context_);

@@ -298,10 +298,10 @@ class OtherPlan : public Plan {
  * 实现limit和offset功能
  */
 class LimitPlan : public Plan {
-public:
-    std::shared_ptr<Plan> subplan_;    ///< 子计划
-    int offset_;                        ///< 跳过的记录数
-    int count_;                         ///< 返回的记录数
+   public:
+    std::shared_ptr<Plan> subplan_;  ///< 子计划
+    int offset_;                     ///< 跳过的记录数
+    int count_;                      ///< 返回的记录数
 
     ~LimitPlan() = default;
 

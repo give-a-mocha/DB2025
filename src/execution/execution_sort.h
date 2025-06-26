@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
+#include "common/parallel/sort.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
@@ -73,7 +74,7 @@ class SortExecutor : public AbstractExecutor {
         }
 
         // 使用std::sort排序
-        std::sort(
+        parallel::sort(
             sorted_tuples_.begin(), sorted_tuples_.end(),
             [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) { return this->cmp(a, b); });
     }

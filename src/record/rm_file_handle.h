@@ -45,9 +45,9 @@ class RmManager;
 struct RmPageHandle {
     const RmFileHdr *file_hdr;  // 当前页面所在文件的文件头指针，包含表的元数据信息
     Page *page;                 // 底层页面对象，负责实际的数据存储
-    RmPageHdr *page_hdr;        // 页面头部信息，指向页面数据的第一部分，存储页面级别的元数据
-    char *bitmap;               // 页面的位图区域，用于跟踪槽位的使用情况
-    char *slots;                // 实际记录存储区域，每个槽位存储一条记录
+    RmPageHdr *page_hdr;  // 页面头部信息，指向页面数据的第一部分，存储页面级别的元数据
+    char *bitmap;         // 页面的位图区域，用于跟踪槽位的使用情况
+    char *slots;          // 实际记录存储区域，每个槽位存储一条记录
 
     /**
      * @brief 页面句柄构造函数
@@ -83,9 +83,7 @@ struct RmPageHandle {
      * 2. 偏移量为：槽位号 * 记录大小
      * @warning 调用前应确保槽位号有效，否则可能导致越界访问
      */
-    char* get_slot(int slot_no) const {
-        return slots + slot_no * file_hdr->record_size;
-    }
+    char *get_slot(int slot_no) const { return slots + slot_no * file_hdr->record_size; }
 };
 
 /**
@@ -99,37 +97,37 @@ struct RmPageHandle {
  * 4. 协调磁盘管理器和缓冲池管理器
  */
 class RmFileHandle {
-    friend class RmScan;    // 允许记录扫描器访问内部成员
-    friend class RmManager; // 允许记录管理器访问内部成员
+    friend class RmScan;     // 允许记录扫描器访问内部成员
+    friend class RmManager;  // 允许记录管理器访问内部成员
 
    private:
-   DiskManager *disk_manager_;          // 磁盘管理器，负责文件的创建、删除和读写
-   BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，负责页面的缓存和淘汰
-   int fd_;                             // 文件描述符，唯一标识打开的文件
-   RmFileHdr file_hdr_;                 // 文件头结构，包含：
-                                       // - record_size: 记录大小
-                                       // - num_pages: 总页面数
-                                       // - num_records_per_page: 每页记录数
-                                       // - first_free_page_no: 第一个可用页面号
-                                       // - bitmap_size: 每页位图大小
+    DiskManager *disk_manager_;               // 磁盘管理器，负责文件的创建、删除和读写
+    BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，负责页面的缓存和淘汰
+    int fd_;                                  // 文件描述符，唯一标识打开的文件
+    RmFileHdr file_hdr_;                      // 文件头结构，包含：
+                                              // - record_size: 记录大小
+                                              // - num_pages: 总页面数
+                                              // - num_records_per_page: 每页记录数
+                                              // - first_free_page_no: 第一个可用页面号
+                                              // - bitmap_size: 每页位图大小
 
    public:
-   /**
-    * @brief 文件句柄构造函数
-    * @param disk_manager 磁盘管理器
-    * @param buffer_pool_manager 缓冲池管理器
-    * @param fd 文件描述符
-    * @warning 确保文件头页面(page_no=0)已经正确初始化，
-    * 否则可能导致文件结构损坏
-    */
-   RmFileHandle(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager, int fd)
-       : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager), fd_(fd) {
-       // 1. 从磁盘读取文件头信息到内存中
-       disk_manager_->read_page(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr_, sizeof(file_hdr_));
-       
-       // 2. 设置页面分配的起始编号，确保不会重复分配已使用的页面号
-       disk_manager_->set_fd2pageno(fd, file_hdr_.num_pages);
-   }
+    /**
+     * @brief 文件句柄构造函数
+     * @param disk_manager 磁盘管理器
+     * @param buffer_pool_manager 缓冲池管理器
+     * @param fd 文件描述符
+     * @warning 确保文件头页面(page_no=0)已经正确初始化，
+     * 否则可能导致文件结构损坏
+     */
+    RmFileHandle(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager, int fd)
+        : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager), fd_(fd) {
+        // 1. 从磁盘读取文件头信息到内存中
+        disk_manager_->read_page(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr_, sizeof(file_hdr_));
+
+        // 2. 设置页面分配的起始编号，确保不会重复分配已使用的页面号
+        disk_manager_->set_fd2pageno(fd, file_hdr_.num_pages);
+    }
 
     RmFileHdr get_file_hdr() { return file_hdr_; }
     int GetFd() { return fd_; }
@@ -164,7 +162,7 @@ class RmFileHandle {
      * @throw OutOfSpaceError 如果没有足够的空间
      * @note 系统自动分配插入位置，返回的RID用于后续访问
      */
-     Rid insert_record(char *buf, Context *context);
+    Rid insert_record(char *buf, Context *context);
 
     /**
      * @brief 在指定位置插入记录
@@ -173,7 +171,7 @@ class RmFileHandle {
      */
     void insert_record(const Rid &rid, char *buf);
 
-    void insert_record_force(const Rid& rid, char* buf);
+    void insert_record_force(const Rid &rid, char *buf);
 
     /**
      * @brief 删除记录
@@ -183,7 +181,7 @@ class RmFileHandle {
     void delete_record(const Rid &rid, Context *context);
 
     /**
-     * @brief 更新记录 
+     * @brief 更新记录
      * @param rid 要更新的记录ID
      * @param buf 新的记录数据
      * @param context 事务上下文
@@ -207,7 +205,7 @@ class RmFileHandle {
      */
     RmPageHandle fetch_page_handle(int page_no) const;
 
-    private:
+   private:
     /**
      * @brief 创建页面句柄的内部方法
      * @return 新创建的页面句柄

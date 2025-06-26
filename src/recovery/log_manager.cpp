@@ -64,13 +64,13 @@ void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
             log_buffer_.offset_ += update_log_record_->log_tot_len_;
             break;
         }
-		default: {
-			throw RMDBError("not supported log type");
-		}
+        default: {
+            throw RMDBError("not supported log type");
+        }
     }
-	// 超过一半写入
+    // 超过一半写入
     if (log_buffer_.offset_ > (LOG_BUFFER_SIZE >> 1)) {
-		// 已经锁上
+        // 已经锁上
         flush_log_to_disk_without_lock();
     }
 }
@@ -82,15 +82,15 @@ void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
  * 3. 确保在适当的时机触发刷盘以平衡性能和持久性
  */
 void LogManager::flush_log_to_disk() {
-	std::lock_guard<std::mutex> lock(latch_);
-	flush_log_to_disk_without_lock();
+    std::lock_guard<std::mutex> lock(latch_);
+    flush_log_to_disk_without_lock();
 }
 
 void LogManager::flush_log_to_disk_without_lock() {
-	// 将缓冲区内容写入磁盘
-	disk_manager_->write_log(log_buffer_.buffer_, static_cast<int>(log_buffer_.offset_));
-	// 清空缓冲区
-	log_buffer_.offset_ = 0;
+    // 将缓冲区内容写入磁盘
+    disk_manager_->write_log(log_buffer_.buffer_, static_cast<int>(log_buffer_.offset_));
+    // 清空缓冲区
+    log_buffer_.offset_ = 0;
 }
 
 void LogManager::add_insert_log(
@@ -198,9 +198,9 @@ std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t o
                 log_records_.emplace_back(std::move(log_record_));
                 break;
             }
-			default: {
-				throw RMDBError("not supported log type");
-			}
+            default: {
+                throw RMDBError("not supported log type");
+            }
         }
     }
 

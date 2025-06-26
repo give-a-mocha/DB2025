@@ -181,7 +181,7 @@ class DbMeta {
     std::string name_;                     // 数据库名称
     std::map<std::string, TabMeta> tabs_;  // 数据库中包含的表
 
-    size_t log_offset_ = 0;                 // 日志偏移量 用于故障恢复
+    size_t log_offset_ = 0;  // 日志偏移量 用于故障恢复
 
    public:
     // DbMeta(std::string name) : name_(name) {}

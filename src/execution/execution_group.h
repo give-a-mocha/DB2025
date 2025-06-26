@@ -183,21 +183,22 @@ class GroupExecutor : public AbstractExecutor {
             case ConditionRhsType::RHS_VALUE:
                 rhs_val = cond.rhs_val;
                 break;
-            case ConditionRhsType::RHS_COLUMN: // 假设 RHS_COLUMN 在 HAVING 中意味着聚合
-                 if (copy_cond.rhs_col.col_name.empty()) {
-                     throw InternalError("Aggregate column name cannot be empty in HAVING clause RHS");
-                 }
-                 // 计算条件的右侧聚合值
-                 rhs_val = get_aggr_value(rec_cols, rec, copy_cond.rhs_col, cond.rhs_col.agg_type);
-                 break;
+            case ConditionRhsType::RHS_COLUMN:  // 假设 RHS_COLUMN 在 HAVING 中意味着聚合
+                if (copy_cond.rhs_col.col_name.empty()) {
+                    throw InternalError("Aggregate column name cannot be empty in HAVING clause RHS");
+                }
+                // 计算条件的右侧聚合值
+                rhs_val = get_aggr_value(rec_cols, rec, copy_cond.rhs_col, cond.rhs_col.agg_type);
+                break;
             case ConditionRhsType::RHS_EXPR:
-                 // TODO: 实现 EvaluateAggrExpr 来处理包含聚合的表达式
-                 // rhs_val = EvaluateAggrExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
-                 // 暂时抛出错误，因为 EvaluateExpr 不适用于聚合上下文
-                 throw RMDBError("Arithmetic expressions involving aggregates in HAVING clause RHS not yet fully supported.");
-                 break;
+                // TODO: 实现 EvaluateAggrExpr 来处理包含聚合的表达式
+                // rhs_val = EvaluateAggrExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
+                // 暂时抛出错误，因为 EvaluateExpr 不适用于聚合上下文
+                throw RMDBError(
+                    "Arithmetic expressions involving aggregates in HAVING clause RHS not yet fully supported.");
+                break;
             default:
-                 throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
+                throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
         }
         // 比较左右两侧的值
         return Value::compare(lhs_val, rhs_val, cond.op);

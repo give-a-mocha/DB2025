@@ -22,10 +22,10 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;
     std::unique_ptr<AbstractExecutor> right_;
-    size_t len_;                               // 连接结果记录长度
-    std::vector<ColMeta> cols_;                // 结果集列元数据
-    std::vector<Condition> fed_conds_;         // 连接条件列表
-    bool _is_end;                              // 扫描结束标志
+    size_t len_;                        // 连接结果记录长度
+    std::vector<ColMeta> cols_;         // 结果集列元数据
+    std::vector<Condition> fed_conds_;  // 连接条件列表
+    bool _is_end;                       // 扫描结束标志
 
    public:
     /**
@@ -88,7 +88,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         right_->nextTuple();
         if (right_->is_end()) {
             left_->nextTuple();
-            if(left_->is_end()) {
+            if (left_->is_end()) {
                 _is_end = true;
                 return;
             }

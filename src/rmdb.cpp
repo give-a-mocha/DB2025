@@ -45,13 +45,15 @@ auto disk_manager = std::make_unique<DiskManager>();
 auto buffer_pool_manager = std::make_unique<BufferPoolManager>(BUFFER_POOL_SIZE, disk_manager.get());
 auto rm_manager = std::make_unique<RmManager>(disk_manager.get(), buffer_pool_manager.get());
 auto ix_manager = std::make_unique<IxManager>(disk_manager.get(), buffer_pool_manager.get());
-auto sm_manager = std::make_unique<SmManager>(disk_manager.get(), buffer_pool_manager.get(), rm_manager.get(), ix_manager.get());
+auto sm_manager =
+    std::make_unique<SmManager>(disk_manager.get(), buffer_pool_manager.get(), rm_manager.get(), ix_manager.get());
 auto lock_manager = std::make_unique<LockManager>();
 auto txn_manager = std::make_unique<TransactionManager>(lock_manager.get(), sm_manager.get(), ConcurrencyMode::MVCC);
 auto planner = std::make_unique<Planner>(sm_manager.get());
 auto optimizer = std::make_unique<Optimizer>(sm_manager.get(), planner.get());
 auto log_manager = std::make_unique<LogManager>(disk_manager.get());
-auto recovery = std::make_unique<RecoveryManager>(disk_manager.get(), buffer_pool_manager.get(), sm_manager.get(), log_manager.get());
+auto recovery = std::make_unique<RecoveryManager>(disk_manager.get(), buffer_pool_manager.get(), sm_manager.get(),
+                                                  log_manager.get());
 auto ql_manager = std::make_unique<QlManager>(sm_manager.get(), txn_manager.get(), nullptr, recovery.get());
 auto portal = std::make_unique<Portal>(sm_manager.get());
 auto analyze = std::make_unique<Analyze>(sm_manager.get());
@@ -259,7 +261,7 @@ void start_server() {
 
     int sockfd_server;
     int fd_temp;
-    struct sockaddr_in s_addr_in{};
+    struct sockaddr_in s_addr_in {};
 
     // 初始化连接
     sockfd_server = socket(AF_INET, SOCK_STREAM, 0);  // ipv4,TCP
@@ -288,7 +290,7 @@ void start_server() {
         std::cout << "Waiting for new connection..." << std::endl;
         pthread_t thread_id;
 
-        struct sockaddr_in s_addr_client{};
+        struct sockaddr_in s_addr_client {};
         int client_length = sizeof(s_addr_client);
         if (setjmp(jmpbuf)) {
             std::cout << "Break from Server Listen Loop\n";

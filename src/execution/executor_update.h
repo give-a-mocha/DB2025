@@ -12,12 +12,12 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <vector>
 
+#include "execution/execution_common.h"  // 添加包含
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "execution/execution_common.h" // 添加包含
 
 /**
  * @brief 更新执行器，负责实现UPDATE语句的功能
@@ -167,11 +167,11 @@ class UpdateExecutor : public AbstractExecutor {
             // 处理每个SET子句
             for (const auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
-                Value value; // 将 value 的声明提前
+                Value value;  // 将 value 的声明提前
 
                 // 根据 rhs_type 获取值
                 if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
-                    value = set_clause.rhs_val; // 直接使用 rhs_val
+                    value = set_clause.rhs_val;  // 直接使用 rhs_val
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
                     // 创建一个临时的 ExprTerm 来包装 ArithExpr
                     ExprTerm temp_expr_term(set_clause.rhs_expr);
@@ -180,19 +180,20 @@ class UpdateExecutor : public AbstractExecutor {
                     value = EvaluateExpr(temp_expr_term, *old_rec, tab_.cols);
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                     // 从旧记录中获取列的值 (使用 old_rec)
-                    const ColMeta* rhs_col_meta = nullptr;
-                    for(const auto& meta : tab_.cols) {
+                    const ColMeta *rhs_col_meta = nullptr;
+                    for (const auto &meta : tab_.cols) {
                         if (meta.tab_name == set_clause.rhs_col.tab_name && meta.name == set_clause.rhs_col.col_name) {
                             rhs_col_meta = &meta;
                             break;
                         }
                     }
                     if (!rhs_col_meta) {
-                         throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." + set_clause.rhs_col.col_name);
+                        throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." +
+                                        set_clause.rhs_col.col_name);
                     }
                     value = GetColumnValue(*old_rec, *rhs_col_meta);
                 } else {
-                     throw RMDBError("Unsupported SetRhsType");
+                    throw RMDBError("Unsupported SetRhsType");
                 }
 
                 // 处理类型转换 (使用计算或获取到的 value.type)
@@ -201,13 +202,13 @@ class UpdateExecutor : public AbstractExecutor {
                         value.set_int(static_cast<int>(value.float_val));
                     } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
                         value.set_float(static_cast<float>(value.int_val));
-                    } else if (col->type != value.type) { // 添加一个检查，防止相同类型也抛出错误
+                    } else if (col->type != value.type) {  // 添加一个检查，防止相同类型也抛出错误
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }
 
-                value.raw.reset(); // 确保 raw 数据被重置
-                value.init_raw(col->len); // 确保 raw 数据被初始化
+                value.raw.reset();         // 确保 raw 数据被重置
+                value.init_raw(col->len);  // 确保 raw 数据被初始化
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
@@ -240,8 +241,7 @@ class UpdateExecutor : public AbstractExecutor {
         for (size_t i = 0; i < rids_.size(); ++i) {
             fh_->update_record(rids_[i], new_records[i]->data, context_);
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_name_, rids_[i], *old_records[i])
-            );
+                std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_name_, rids_[i], *old_records[i]));
         }
 
         return nullptr;

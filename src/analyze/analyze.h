@@ -191,7 +191,7 @@ class Analyze {
      */
     JoinType convert_sv_join_type(ast::JoinType type);
 
-/**
+    /**
      * @brief 将语法树中的算术操作符转换为系统内部的 ArithOp
      * @param op 语法树中的算术操作符
      * @return 系统内部的 ArithOp 枚举值
@@ -208,13 +208,13 @@ class Analyze {
     std::shared_ptr<ExprTerm> AnalyzeExprTerm(const std::shared_ptr<ast::Expr> &ast_expr,
                                               const std::vector<ColMeta> &all_cols,
                                               const std::vector<TabRef> &tab_refs);
-/**
+    /**
      * @brief 递归检查算术表达式中的项是否都是数值类型
      * @param term 要检查的表达式项
      * @param all_cols 所有相关表的列元数据
      * @throw IncompatibleTypeError 如果发现非数值类型
      */
-    void CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta>& all_cols);
+    void CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta> &all_cols);
     /**
      * @brief 检查WHERE条件中是否包含聚合函数
      * @param conds WHERE子句的条件表达式集合

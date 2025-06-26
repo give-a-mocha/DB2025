@@ -7,23 +7,21 @@
 
 #include "executor_abstract.h"
 
-
 class ExplainGroupExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  ///< 指向上一个执行器的智能指针，用于获取输入元组
-    std::vector<TabCol> group_cols_;         ///< GROUP BY 子句中用于分组的列的元数据
+    std::vector<TabCol> group_cols_;          ///< GROUP BY 子句中用于分组的列的元数据
     std::vector<Condition> having_conds_;     ///< HAVING 子句中的过滤条件
     int offset_;
-    public:
 
-    ExplainGroupExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> group_cols, std::vector<Condition> conds, int offset) {
+   public:
+    ExplainGroupExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> group_cols,
+                         std::vector<Condition> conds, int offset) {
         prev_ = std::move(prev);
         offset_ = offset;
         group_cols_ = std::move(group_cols);
         having_conds_ = std::move(conds);
-
     }
-    
 
     std::unique_ptr<RmRecord> Next() override {
         std::string res = std::string(offset_, '\t');
@@ -49,8 +47,6 @@ class ExplainGroupExecutor : public AbstractExecutor {
         return nullptr;
     }
 
-    
-
     /**
      * @brief 获取记录标识符（RID）。
      * 对于 GroupExecutor，RID 通常没有明确意义，返回一个默认值。
@@ -58,11 +54,9 @@ class ExplainGroupExecutor : public AbstractExecutor {
      */
     Rid& rid() override { return _abstract_rid; }  // 返回基类中的默认 RID
 
-    
     /**
      * @brief 获取执行器的类型。
      * @return 执行器类型枚举值 ExecutorType::GROUP。
      */
     std::string getType() override { return "ExplainGroupExecutor"; };
-
 };

@@ -178,7 +178,9 @@ struct Col : public Expr {
     SvAggregateType aggregate_type{SvAggregateType::NONE};  // 聚合类型
 
     Col(std::string tab_name_, std::string col_name_)
-        : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)), alias(generate_alias(tab_name, col_name, SvAggregateType::NONE)) {}
+        : tab_name(std::move(tab_name_)),
+          col_name(std::move(col_name_)),
+          alias(generate_alias(tab_name, col_name, SvAggregateType::NONE)) {}
 
     Col(std::string tab_name_, std::string col_name_, std::string alias_)
         : tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {
@@ -211,9 +213,9 @@ struct ArithExpr : public Expr {
 
 struct SetClause : public TreeNode {
     std::string col_name;
-    std::shared_ptr<Expr> val; // Changed from Value to Expr
+    std::shared_ptr<Expr> val;  // Changed from Value to Expr
 
-    SetClause(std::string col_name_, std::shared_ptr<Expr> val_) // Changed from Value to Expr
+    SetClause(std::string col_name_, std::shared_ptr<Expr> val_)  // Changed from Value to Expr
         : col_name(std::move(col_name_)), val(std::move(val_)) {}
 };
 
@@ -310,13 +312,12 @@ struct SelectStmt : public TreeNode {
 };
 
 struct ExplainStmt : public SelectStmt {
-
     ExplainStmt(std::vector<std::shared_ptr<Col>> cols_, std::vector<std::shared_ptr<TableRef>> tabs_,
-               std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
-               std::vector<std::shared_ptr<GroupBy>> group_, std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
-               std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
-        : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_),
-                     std::move(group_), std::move(having_conds_), std::move(orders_), std::move(limit_)) {}
+                std::vector<std::shared_ptr<JoinExpr>> jointree_, std::vector<std::shared_ptr<BinaryExpr>> conds_,
+                std::vector<std::shared_ptr<GroupBy>> group_, std::vector<std::shared_ptr<BinaryExpr>> having_conds_,
+                std::vector<std::shared_ptr<OrderBy>> orders_, std::shared_ptr<Limit> limit_ = nullptr)
+        : SelectStmt(std::move(cols_), std::move(tabs_), std::move(jointree_), std::move(conds_), std::move(group_),
+                     std::move(having_conds_), std::move(orders_), std::move(limit_)) {}
 };
 
 // set enable_nestloop

@@ -54,7 +54,7 @@ struct UndoLog {
 };
 
 class Transaction {
-private:
+   private:
     // 用于标识当前事务为显式事务还是单条SQL语句的隐式事务
     bool txn_mode_;
     // 事务状态
@@ -81,7 +81,6 @@ private:
     // 维护事务执行过程中删除的索引页面
     std::shared_ptr<std::deque<Page *>> index_deleted_page_set_;
 
-
     std::atomic<timestamp_t> read_ts_{0};
     /** 提交时间戳 */
     std::atomic<timestamp_t> commit_ts_{INVALID_TS};
@@ -94,8 +93,8 @@ private:
 
     /** 用于访问事务级撤销日志的锁。 */
     std::mutex latch_;
-public:
 
+   public:
     explicit Transaction(txn_id_t txn_id, IsolationLevel isolation_level = IsolationLevel::SERIALIZABLE)
         : state_(TransactionState::DEFAULT), isolation_level_(isolation_level), txn_id_(txn_id) {
         /* 初始化事务的写集合（记录所有写操作），使用智能指针 */
@@ -135,14 +134,16 @@ public:
     inline void set_state(TransactionState state) { state_ = state; }
 
     inline lsn_t get_prev_lsn() { return prev_lsn_; }
- 
+
     inline void set_prev_lsn(lsn_t prev_lsn) { prev_lsn_ = prev_lsn; }
 
     // 返回写集合的共享指针
     inline std::shared_ptr<std::deque<std::unique_ptr<WriteRecord>>> get_write_set() { return write_set_; }
 
     // 向写集合添加一个写记录 (接收 unique_ptr)
-    inline void append_write_record(std::unique_ptr<WriteRecord> write_record) { write_set_->push_back(std::move(write_record)); }
+    inline void append_write_record(std::unique_ptr<WriteRecord> write_record) {
+        write_set_->push_back(std::move(write_record));
+    }
 
     inline std::shared_ptr<std::deque<Page *>> get_index_deleted_page_set() { return index_deleted_page_set_; }
 
@@ -158,15 +159,11 @@ public:
 
     inline timestamp_t get_read_ts() const { return read_ts_; }
 
-    inline void set_read_ts(timestamp_t read_ts){
-        read_ts_.store(read_ts);
-    }
+    inline void set_read_ts(timestamp_t read_ts) { read_ts_.store(read_ts); }
 
     inline timestamp_t get_commit_ts() const { return commit_ts_; }
 
-    inline void set_commit_ts(timestamp_t commit_ts) {
-        commit_ts_.store(commit_ts);
-    }
+    inline void set_commit_ts(timestamp_t commit_ts) { commit_ts_.store(commit_ts); }
     /** 修改现有的撤销日志 */
     inline auto ModifyUndoLog(int log_idx, UndoLog new_log) {
         std::scoped_lock<std::mutex> lck(latch_);

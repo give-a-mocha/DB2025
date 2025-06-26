@@ -49,9 +49,8 @@ class ExplainProjectExecutor : public AbstractExecutor {
         offset_ = offset;
         isStar_ = isStar;
         // 按表名(如果为空则用别名)和列名排序,保证解释计划输出的一致性
-        std::sort(cols_.begin(), cols_.end(), [&](const TabCol &a, const TabCol &b) {
-            return a.to_string() < b.to_string();
-        });
+        std::sort(cols_.begin(), cols_.end(),
+                  [&](const TabCol &a, const TabCol &b) { return a.to_string() < b.to_string(); });
     }
 
     /**

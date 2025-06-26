@@ -10,10 +10,10 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include "execution/execution_common.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
-#include "execution/execution_common.h"
 #include "index/ix.h"
 #include "system/sm.h"
 
@@ -41,7 +41,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @param conds 过滤条件列表
      * @param context 执行上下文
      */
-    MvccSeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context, TransactionManager *txn_mgr) {
+    MvccSeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context,
+                        TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
@@ -57,7 +58,6 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         context_ = context;
         txn_mgr_ = txn_mgr;
         fed_conds_ = conds_;  // 暂未优化的条件列表
-
     }
 
     /**
@@ -114,9 +114,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @brief 获取当前记录的数据
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
-    std::unique_ptr<RmRecord> Next() override {
-        return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-    }
+    std::unique_ptr<RmRecord> Next() override { return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_); }
 
     /**
      * @brief 获取记录的总长度

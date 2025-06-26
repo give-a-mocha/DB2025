@@ -14,22 +14,14 @@ See the Mulan PSL v2 for more details. */
 #include <vector>
 
 #include "common/common.h"
+#include "common/print.hpp"
 #include "transaction/transaction.h"
 #include "transaction/transaction_manager.h"
-#include "common/print.hpp"
 
-std::vector<Value> convert_record_to_values(
-	const std::unique_ptr<RmRecord> &record, 
-	const std::vector<ColMeta> &cols_
-);
+std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &record, const std::vector<ColMeta> &cols_);
 
-std::unique_ptr<RmRecord> mvcc_get_record(
-	const Rid &rid, 
-	Context *context_,
-	RmFileHandle *fh_,
-	TransactionManager *txn_mgr_,
-	const std::vector<ColMeta> &cols_
-);
+std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_,
+                                          TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_);
 
 bool get_lock_and_check_conflict(
 	Transaction *txn,

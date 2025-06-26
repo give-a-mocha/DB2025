@@ -23,9 +23,9 @@
 
 #include "transaction_manager.h"
 
+#include "common/print.hpp"
 #include "record/rm_file_handle.h"
 #include "system/sm_manager.h"
-#include "common/print.hpp"
 
 std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
 
@@ -71,13 +71,13 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
     txn_map.emplace(txn->get_transaction_id(), txn);
     timestamp_t start_ts = get_next_timestamp();
-    txn->set_start_ts(start_ts);  // 设置事务开始时间戳
-    txn->set_read_ts(last_commit_ts_); // 设置读取时间戳该事务早的最后一次提交时间戳
+    txn->set_start_ts(start_ts);        // 设置事务开始时间戳
+    txn->set_read_ts(last_commit_ts_);  // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
     log_manager->add_begin_log(txn->get_transaction_id());
 
-    running_txns_.AddTxn(start_ts); // 添加事务到水位线
+    running_txns_.AddTxn(start_ts);  // 添加事务到水位线
     return txn;
 }
 
@@ -100,13 +100,13 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     timestamp_t commit_ts = INVALID_TS;
     if (concurrency_mode_ == ConcurrencyMode::MVCC) {
         commit_ts = get_next_timestamp();
-        txn->set_commit_ts(commit_ts); // 设置提交时间戳
+        txn->set_commit_ts(commit_ts);  // 设置提交时间戳
         last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
     }
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
-    auto lock_set_copy = *lock_set; // 复制锁集合以避免迭代时修改
+    auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
     for (const LockDataId& lock : lock_set_copy) {
         lock_manager_->unlock(txn, lock);
     }
@@ -123,8 +123,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     log_manager->add_commit_log(txn->get_transaction_id());
     log_manager->flush_log_to_disk();
 
-    running_txns_.RemoveTxn(txn->get_start_ts()); // 从水位线中移除事务
-    running_txns_.UpdateCommitTs(commit_ts); // 更新水位线的提交时间戳
+    running_txns_.RemoveTxn(txn->get_start_ts());  // 从水位线中移除事务
+    running_txns_.UpdateCommitTs(commit_ts);       // 更新水位线的提交时间戳
 }
 
 /**
@@ -141,7 +141,6 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-
     Transaction* txn = context->txn_;
 
     auto write_set = txn->get_write_set();
@@ -151,12 +150,12 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         const auto table_name = (*iter)->GetTableName();
         const auto rid = (*iter)->GetRid();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
-        if(write_type == WType::INSERT_TUPLE) {
+        if (write_type == WType::INSERT_TUPLE) {
             auto rec = (*iter)->GetRecord();
             handle->delete_record(rid, context);
             sm_manager_->delete_index(table_name, rec, context);
             log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
-        } else if(write_type == WType::UPDATE_TUPLE) {
+        } else if (write_type == WType::UPDATE_TUPLE) {
             //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
             auto new_rec = handle->get_record(rid, context);
             auto old_rec = (*iter)->GetRecord();
@@ -164,7 +163,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             sm_manager_->delete_index(table_name, *new_rec, context);
             sm_manager_->insert_index(table_name, old_rec, rid, context);
             log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
-        } else if(write_type == WType::DELETE_TUPLE) {
+        } else if (write_type == WType::DELETE_TUPLE) {
             auto rec = (*iter)->GetRecord();
             handle->insert_record_force(rid, rec.data);
             log_manager->add_insert_log(context->txn_->get_transaction_id(), rec, rid, table_name);
@@ -174,7 +173,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     }
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-    auto lock_set_copy = *lock_set; // 复制锁集合以避免迭代时修改
+    auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
     for (const LockDataId& lock : lock_set_copy) {
         lock_manager_->unlock(txn, lock);
     }
@@ -226,11 +225,11 @@ bool TransactionManager::UpdateVersionLink(
         version_info_[page_id] = new_version_info;
         it = version_info_.find(page_id);
     }
-    auto &version_info = it->second;
+    auto& version_info = it->second;
     lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
-    auto &prev_version_map = version_info->prev_version_;
+    auto& prev_version_map = version_info->prev_version_;
     if (prev_version.has_value()) {
         // 如果提供了版本链接，则更新或插入
         prev_version_map[rid.slot_no] = *prev_version;
@@ -249,21 +248,21 @@ UndoLink TransactionManager::DeleteUpdateVersionLink(const int &fd, Rid rid, Tra
     if (it == version_info_.end()) {
         return UndoLink{};
     }
-    auto &version_info = it->second;
+    auto& version_info = it->second;
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
-    auto &prev_version_map = version_info->prev_version_;
+    auto& prev_version_map = version_info->prev_version_;
     auto prev_version_it = prev_version_map.find(rid.slot_no);
     if (prev_version_it != prev_version_map.end()) {
         VersionUndoLink version_link = prev_version_it->second;
         UndoLink undo_link = version_link.prev_;
         while (undo_link.prev_txn_ == txn->get_transaction_id()) {
             undo_link = GetUndoLog(undo_link).prev_version_;
-            if(!undo_link.IsValid()) {
+            if (!undo_link.IsValid()) {
                 break;
             }
         }
-        if(undo_link.IsValid()) {
+        if (undo_link.IsValid()) {
             // 如果撤销链接有效，则更新版本链接
             prev_version_it->second.prev_ = undo_link;
         } else {
@@ -292,7 +291,7 @@ std::optional<VersionUndoLink> TransactionManager::GetVersionLink(const int &fd,
     if (it == version_info_.end()) {
         return std::nullopt;  // 如果没有找到对应的版本信息，则返回 nullopt
     }
-    auto &version_info = it->second;
+    auto& version_info = it->second;
     lock.unlock();
     std::shared_lock<std::shared_mutex> version_lock(version_info->mutex_);
     auto prev_version_it = version_info->prev_version_.find(rid.slot_no);
@@ -304,7 +303,7 @@ std::optional<VersionUndoLink> TransactionManager::GetVersionLink(const int &fd,
 
 /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
  * 如果索引超出范围仍然会抛出异常。 */
-std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link){
+std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link) {
     // 检查事务是否存在
     if (link.prev_txn_ == INVALID_TXN_ID) return std::nullopt;
     std::unique_lock<std::mutex> lock(latch_);
@@ -327,18 +326,18 @@ std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link){
 
 /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
  * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
-UndoLog TransactionManager::GetUndoLog(UndoLink link){
+UndoLog TransactionManager::GetUndoLog(UndoLink link) {
     // 检查事务是否存在
-    if (link.prev_txn_ == INVALID_TXN_ID){
+    if (link.prev_txn_ == INVALID_TXN_ID) {
         throw RMDBError("Invalid transaction ID: " + std::to_string(link.prev_txn_));
     }
     std::unique_lock<std::mutex> lock(latch_);
     return GetUndoLogWithoutLock(link);
 }
 
-UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link){
+UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
     auto it = TransactionManager::txn_map.find(link.prev_txn_);
-    if(it == TransactionManager::txn_map.end()) {
+    if (it == TransactionManager::txn_map.end()) {
         throw RMDBError("Transaction not found: " + std::to_string(link.prev_txn_));
     }
     auto txn = it->second;
@@ -352,9 +351,7 @@ UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link){
 }
 
 /** @brief 获取系统中的最低读时间戳。 */
-timestamp_t TransactionManager::GetWatermark(){
-    return running_txns_.GetWatermark();
-}
+timestamp_t TransactionManager::GetWatermark() { return running_txns_.GetWatermark(); }
 /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
 void TransactionManager::GarbageCollection(){
     

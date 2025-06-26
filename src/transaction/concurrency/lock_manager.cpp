@@ -10,11 +10,12 @@ See the Mulan PSL v2 for more details. */
 
 #include "lock_manager.h"
 
-#include "transaction/txn_defs.h"
-#include <mutex>
 #include <algorithm>
+#include <mutex>
 #include <tuple>
 #include <utility>
+
+#include "transaction/txn_defs.h"
 
 /**
  * @description: 申请行级共享锁
@@ -24,11 +25,10 @@ See the Mulan PSL v2 for more details. */
  * @param {int} tab_fd
  */
 bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_); // 1. Acquire global latch
+    std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
     // 两阶段锁协议
-    if (txn->get_state() == TransactionState::SHRINKING ||
-        txn->get_state() == TransactionState::COMMITTED ||
+    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
         txn->get_state() == TransactionState::ABORTED) {
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
     }
@@ -36,29 +36,29 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
         txn->set_state(TransactionState::GROWING);
     }
 
-    //创建锁数据标识符( 行级锁
+    // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
 
     auto queue_it = lock_table_.find(lock_data_id);
-    if(queue_it == lock_table_.end()) {
+    if (queue_it == lock_table_.end()) {
         // 如果锁表中没有该锁数据标识符，则创建一个新的锁请求队列
-        queue_it = lock_table_.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(lock_data_id), // 构造 key
-            std::forward_as_tuple()             // 默认构造 value (LockRequestQueue)
-        ).first;
+        queue_it = lock_table_
+                       .emplace(std::piecewise_construct,
+                                std::forward_as_tuple(lock_data_id),  // 构造 key
+                                std::forward_as_tuple()               // 默认构造 value (LockRequestQueue)
+                                )
+                       .first;
     }
     LockRequestQueue& request_queue = queue_it->second;
 
     // 检查是否已经获得锁
-    for(const auto& req : request_queue.request_queue_) {
-        if(req.txn_id_ == txn->get_transaction_id() && req.granted_) {
+    for (const auto& req : request_queue.request_queue_) {
+        if (req.txn_id_ == txn->get_transaction_id() && req.granted_) {
             if (req.lock_mode_ == LockManager::LockMode::EXCLUSIVE || req.lock_mode_ == LockManager::LockMode::SHARED) {
                 return true;
             }
         }
     }
-
 
     // 检查是否冲突
     bool conflict = false;
@@ -82,7 +82,7 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
 
         // wait-die策略下，等待锁被授予或事务被中止
         // request_queue.request_queue_.push_back(current_request);
-        
+
         // auto current_request_it = std::prev(request_queue.request_queue_.end());
 
         // while (true) {
@@ -152,11 +152,10 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
  * @throws TransactionAbortException 如果事务状态不允许加锁
  */
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_); // 1. Acquire global latch
+    std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
     // 两阶段锁协议
-    if (txn->get_state() == TransactionState::SHRINKING ||
-        txn->get_state() == TransactionState::COMMITTED ||
+    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
         txn->get_state() == TransactionState::ABORTED) {
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
     }
@@ -164,42 +163,42 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         txn->set_state(TransactionState::GROWING);
     }
 
-    //创建锁数据标识符( 行级锁
+    // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
 
     auto queue_it = lock_table_.find(lock_data_id);
-    if(queue_it == lock_table_.end()) {
+    if (queue_it == lock_table_.end()) {
         // 如果锁表中没有该锁数据标识符，则创建一个新的锁请求队列
-        queue_it = lock_table_.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(lock_data_id), // 构造 key
-            std::forward_as_tuple()             // 默认构造 value (LockRequestQueue)
-        ).first;
+        queue_it = lock_table_
+                       .emplace(std::piecewise_construct,
+                                std::forward_as_tuple(lock_data_id),  // 构造 key
+                                std::forward_as_tuple()               // 默认构造 value (LockRequestQueue)
+                                )
+                       .first;
     }
     LockRequestQueue& request_queue = queue_it->second;
 
     // 检查是否已经获得锁
-    for(const auto& req : request_queue.request_queue_) {
-        if(req.txn_id_ == txn->get_transaction_id() && req.granted_) {
+    for (const auto& req : request_queue.request_queue_) {
+        if (req.txn_id_ == txn->get_transaction_id() && req.granted_) {
             if (req.lock_mode_ == LockManager::LockMode::EXCLUSIVE) {
                 return true;
             }
         }
     }
 
-    
     bool conflict = false;
     for (const auto& req : request_queue.request_queue_) {
         if (req.granted_) {
-             if (req.txn_id_ != txn->get_transaction_id()) {
-                 conflict = true;
-                 break;
-             }
-             
-             if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
-                  conflict = true;
-                  break;
-             }
+            if (req.txn_id_ != txn->get_transaction_id()) {
+                conflict = true;
+                break;
+            }
+
+            if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
+                conflict = true;
+                break;
+            }
         }
     }
 
@@ -219,7 +218,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         // auto current_request_it = std::prev(request_queue.request_queue_.end());
 
         // while (true) {
-            
+
         //     request_queue.cv_.wait(lock, [&] {
         //         if (txn->get_state() == TransactionState::ABORTED) {
         //             return true;
@@ -232,7 +231,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         //                     break;
         //                 }
         //                 if (req.txn_id_ != txn->get_transaction_id()) {
-        //                     can_grant = false; 
+        //                     can_grant = false;
         //                     break;
         //                 }
         //                 if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
@@ -241,7 +240,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         //                 }
         //             }
         //         }
-        //          return can_grant; 
+        //          return can_grant;
         //     });
 
         //     bool is_aborted = false;
@@ -268,18 +267,18 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         //     for (const auto& req : request_queue.request_queue_) {
         //          if (req.granted_) {
         //              if (req.txn_id_ != txn->get_transaction_id()) {
-        //                  still_conflict = true; 
+        //                  still_conflict = true;
         //                  break;
         //              }
         //              if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
-        //                  still_conflict = true; 
+        //                  still_conflict = true;
         //                  break;
         //              }
         //          }
         //     }
 
         //     if (!still_conflict) {
-        //         current_request_it->granted_ = true; 
+        //         current_request_it->granted_ = true;
         //         txn->get_lock_set()->insert(lock_data_id);
         //         return true;
         //     }
@@ -293,10 +292,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
  * @param {Transaction*} txn 要申请锁的事务对象指针
  * @param {int} tab_fd 目标表的fd
  */
-bool LockManager::lock_shared_on_table(Transaction* txn, int tab_fd) {
-    
-    return true;
-}
+bool LockManager::lock_shared_on_table(Transaction* txn, int tab_fd) { return true; }
 
 /**
  * @description: 申请表级写锁
@@ -304,10 +300,7 @@ bool LockManager::lock_shared_on_table(Transaction* txn, int tab_fd) {
  * @param {Transaction*} txn 要申请锁的事务对象指针
  * @param {int} tab_fd 目标表的fd
  */
-bool LockManager::lock_exclusive_on_table(Transaction* txn, int tab_fd) {
-    
-    return true;
-}
+bool LockManager::lock_exclusive_on_table(Transaction* txn, int tab_fd) { return true; }
 
 /**
  * @description: 申请表级意向读锁
@@ -315,10 +308,7 @@ bool LockManager::lock_exclusive_on_table(Transaction* txn, int tab_fd) {
  * @param {Transaction*} txn 要申请锁的事务对象指针
  * @param {int} tab_fd 目标表的fd
  */
-bool LockManager::lock_IS_on_table(Transaction* txn, int tab_fd) {
-    
-    return true;
-}
+bool LockManager::lock_IS_on_table(Transaction* txn, int tab_fd) { return true; }
 
 /**
  * @description: 申请表级意向写锁
@@ -326,10 +316,7 @@ bool LockManager::lock_IS_on_table(Transaction* txn, int tab_fd) {
  * @param {Transaction*} txn 要申请锁的事务对象指针
  * @param {int} tab_fd 目标表的fd
  */
-bool LockManager::lock_IX_on_table(Transaction* txn, int tab_fd) {
-    
-    return true;
-}
+bool LockManager::lock_IX_on_table(Transaction* txn, int tab_fd) { return true; }
 
 /**
  * @description: 释放锁
@@ -338,7 +325,7 @@ bool LockManager::lock_IX_on_table(Transaction* txn, int tab_fd) {
  * @param {LockDataId} lock_data_id 要释放的锁ID
  */
 bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
-    std::unique_lock<std::mutex> lock(latch_); 
+    std::unique_lock<std::mutex> lock(latch_);
 
     auto lock_table_it = lock_table_.find(lock_data_id);
     if (lock_table_it == lock_table_.end()) {
@@ -349,8 +336,8 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
     LockRequestQueue& request_queue = lock_table_it->second;
     txn_id_t txn_id = txn->get_transaction_id();
     bool is_find = false;
-    
-    for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end(); ) {
+
+    for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end();) {
         if (it->txn_id_ == txn_id) {
             it = request_queue.request_queue_.erase(it);
             is_find = true;
@@ -376,8 +363,7 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
     std::unique_lock<std::mutex> lock(latch_);
 
-    if (txn->get_state() == TransactionState::SHRINKING ||
-        txn->get_state() == TransactionState::COMMITTED ||
+    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
         txn->get_state() == TransactionState::ABORTED) {
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
     }
@@ -387,11 +373,9 @@ bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> 
 
     auto queue_it = gap_lock_table_.find(tab_fd);
     if (queue_it == gap_lock_table_.end()) {
-        queue_it = gap_lock_table_.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(tab_fd),
-            std::forward_as_tuple() 
-        ).first;
+        queue_it =
+            gap_lock_table_.emplace(std::piecewise_construct, std::forward_as_tuple(tab_fd), std::forward_as_tuple())
+                .first;
     }
     GapLockRequestQueue& request_queue = queue_it->second;
     request_queue.request_queue_.emplace_back(txn->get_transaction_id(), std::move(conds));
@@ -407,7 +391,7 @@ std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* t
         return gap_conditions;
     }
     GapLockRequestQueue& request_queue = table_queue_it->second;
-    for(const auto& gap_request : request_queue.request_queue_) {
+    for (const auto& gap_request : request_queue.request_queue_) {
         if(gap_request.txn_id_ == txn->get_transaction_id()) {
             continue; // 只返回其他事务的间隙锁条件
         }
@@ -422,11 +406,11 @@ bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
         txn->get_lock_gap_set()->erase(tab_fd);
-        return false; 
+        return false;
     }
 
     GapLockRequestQueue& request_queue = table_queue_it->second;
-    for(auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end(); ) {
+    for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end();) {
         if (it->txn_id_ == txn->get_transaction_id()) {
             it = request_queue.request_queue_.erase(it);
             break;

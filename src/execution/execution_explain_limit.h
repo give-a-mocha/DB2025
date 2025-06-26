@@ -1,22 +1,21 @@
 #pragma once
 
-#include "executor_abstract.h"
 #include "execution_defs.h"
 #include "execution_manager.h"
+#include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
 
 class ExplainLimitExecutor : public AbstractExecutor {
-private:
-    std::unique_ptr<AbstractExecutor> child_;    // 子执行器
-    int offset_;                                 // 跳过的记录数
-    int count_;                                  // 返回的记录数
-    int output_offset_;                     // 输出的缩进偏移量
+   private:
+    std::unique_ptr<AbstractExecutor> child_;  // 子执行器
+    int offset_;                               // 跳过的记录数
+    int count_;                                // 返回的记录数
+    int output_offset_;                        // 输出的缩进偏移量
 
-public:
-    ExplainLimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count, int output_offset) 
+   public:
+    ExplainLimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count, int output_offset)
         : child_(std::move(child)), offset_(offset), count_(count), output_offset_(output_offset) {}
-
 
     std::unique_ptr<RmRecord> Next() override {
         // 按指定缩进生成输出
@@ -32,7 +31,6 @@ public:
         child_->Next();
         return nullptr;
     }
-
 
     Rid &rid() override { return child_->rid(); }
 

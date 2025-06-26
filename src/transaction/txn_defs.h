@@ -12,16 +12,16 @@ See the Mulan PSL v2 for more details. */
 
 #include <atomic>
 
+#include "common/common.h"  // Ensure Value is available
 #include "common/config.h"
 #include "defs.h"
 #include "record/rm_defs.h"
-#include "common/common.h" // Ensure Value is available
 
 /* 标识事务状态 */
 enum class TransactionState { DEFAULT, GROWING, SHRINKING, COMMITTED, ABORTED };
 
 /* 系统的隔离级别，当前赛题中为可串行化隔离级别 */
-enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE};
+enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE };
 
 /* 事务写操作类型，包括插入、删除、更新三种操作 */
 enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };
@@ -38,12 +38,13 @@ enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };
  * ----------------------------------------------
  */
 class WriteRecord {
-private:
+   private:
     WType wtype_;
     std::string tab_name_;
     Rid rid_;
     RmRecord record_;
-public:
+
+   public:
     WriteRecord() = default;
 
     // constructor for insert operation
@@ -76,7 +77,7 @@ enum class LockDataType { TABLE = 0, RECORD = 1 };
  * @description: 加锁对象的唯一标识
  */
 class LockDataId {
-public:
+   public:
     int fd_;
     Rid rid_;
     LockDataType type_;
@@ -163,6 +164,5 @@ class TransactionAbortException : public std::exception {
 struct GapLockRequest {
     txn_id_t txn_id_;
     std::vector<Condition> conds;
-    GapLockRequest(txn_id_t txn_id, std::vector<Condition> conds)
-        : txn_id_(txn_id), conds(std::move(conds)) {}
+    GapLockRequest(txn_id_t txn_id, std::vector<Condition> conds) : txn_id_(txn_id), conds(std::move(conds)) {}
 };

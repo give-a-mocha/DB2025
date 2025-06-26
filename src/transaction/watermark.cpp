@@ -10,26 +10,22 @@ See the Mulan PSL v2 for more details. */
 
 #include "transaction/watermark.h"
 
-void Watermark::AddTxn(timestamp_t read_ts){
-	current_reads_[read_ts] = read_ts;
-	watermark_ = current_reads_.begin()->first;
+void Watermark::AddTxn(timestamp_t read_ts) {
+    current_reads_[read_ts] = read_ts;
+    watermark_ = current_reads_.begin()->first;
 }
 
-void Watermark::RemoveTxn(timestamp_t read_ts){
-	current_reads_[read_ts]--;
-	if (current_reads_[read_ts] <= 0) {
-		current_reads_.erase(read_ts);
-	}
-	if (current_reads_.empty()) {
-		watermark_ = commit_ts_;
-	} else {
-		watermark_ = current_reads_.begin()->first;
-	}
+void Watermark::RemoveTxn(timestamp_t read_ts) {
+    current_reads_[read_ts]--;
+    if (current_reads_[read_ts] <= 0) {
+        current_reads_.erase(read_ts);
+    }
+    if (current_reads_.empty()) {
+        watermark_ = commit_ts_;
+    } else {
+        watermark_ = current_reads_.begin()->first;
+    }
 }
 
-void Watermark::UpdateCommitTs(timestamp_t commit_ts){
-	commit_ts_ = commit_ts;
-}
-timestamp_t Watermark::GetWatermark(){
-	return watermark_;
-}
+void Watermark::UpdateCommitTs(timestamp_t commit_ts) { commit_ts_ = commit_ts; }
+timestamp_t Watermark::GetWatermark() { return watermark_; }
