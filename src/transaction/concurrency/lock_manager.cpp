@@ -413,7 +413,6 @@ bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
     for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end();) {
         if (it->txn_id_ == txn->get_transaction_id()) {
             it = request_queue.request_queue_.erase(it);
-            break;
         } else {
             ++it;
         }
