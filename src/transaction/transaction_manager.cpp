@@ -191,11 +191,6 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     log_manager->add_abort_log(txn->get_transaction_id());
     
     running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
-    // 从全局事务表中删除
-    std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-    txn_map.erase(txn->get_transaction_id());
-    lock.unlock();
-    delete txn;  // 删除事务对象
 }
 
 /**
@@ -350,6 +345,10 @@ UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
 timestamp_t TransactionManager::GetWatermark() { return running_txns_.GetWatermark(); }
 
 void TransactionManager::do_delete(Transaction *txn) {
+    if (txn == nullptr || txn->get_write_set() == nullptr) {
+        return;
+    }
+    
     for (const auto& iter : *txn->get_write_set()) {
         const auto write_type = iter->GetWriteType();
         const auto table_name = iter->GetTableName();
@@ -361,19 +360,31 @@ void TransactionManager::do_delete(Transaction *txn) {
             sm_manager_->delete_index_with_rid(table_name, iter->GetRecord(), rid, txn);
         }
     }
+    
     txn->get_write_set()->clear();  // 清空写集合
-    txn->ClearUndoLogs(); // 清空撤销日志
+    txn->ClearUndoLogs();          // 清空撤销日志
 }
-/** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
-void TransactionManager::GarbageCollection() {
-    //! Masttf DO:
-    // 1. 清理过期的版本链接
-    // 2. 将delete操作落盘,删除事务
-    // 3. 刷新到磁盘
+
+bool TransactionManager::is_transaction_expired(Transaction *txn, timestamp_t watermark) const {
+    if (txn == nullptr) return false;
+    
+    TransactionState state = txn->get_state();
+    if (state == TransactionState::COMMITTED && txn->get_commit_ts() <= watermark) {
+        return true;
+    }
+    if (state == TransactionState::ABORTED && txn->get_read_ts() <= watermark) {
+        return true;
+    }
+    return false;
+}
+
+void TransactionManager::cleanup_expired_versions(timestamp_t watermark) {
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
+    
     for (auto it = version_info_.begin(); it != version_info_.end();) {
         auto& version_info = it->second;
         std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
+        
         // 清理过期的版本链接
         for (auto version_it = version_info->prev_version_.begin();
              version_it != version_info->prev_version_.end();) {
@@ -384,26 +395,78 @@ void TransactionManager::GarbageCollection() {
                 ++version_it;
             }
         }
+        
+        // 如果版本信息为空，删除整个版本信息
         if (version_info->prev_version_.empty()) {
             it = version_info_.erase(it);  // 删除空的版本信息
         } else {
             ++it;
         }
     }
-    lock.unlock();
+}
 
-    for(auto it = txn_map.begin(); it != txn_map.end();) {
-        if (it->second->get_state() == TransactionState::COMMITTED && it->second->get_commit_ts() <= GetWatermark()) {
-            // 事务已终止，执行清理
-            do_delete(it->second);
-            delete it->second;  // 删除事务对象
-            it = txn_map.erase(it);  // 从事务映射表中删除
-        } else {
-            ++it;  // 继续遍历下一个事务
+/** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
+void TransactionManager::GarbageCollection() {
+    timestamp_t watermark = GetWatermark();
+    std::vector<Transaction*> expired_txns;
+    
+    // 第一阶段：收集可以回收的事务
+    {
+        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
+        for (auto it = txn_map.begin(); it != txn_map.end(); ++it) {
+            Transaction* txn = it->second;
+            if (is_transaction_expired(txn, watermark)) {
+                expired_txns.push_back(txn);
+            }
         }
     }
+    
+    // 第二阶段：清理版本链
+    cleanup_expired_versions(watermark);
+    
+    // 第三阶段：处理过期事务的删除操作并清理事务对象
+    {
+        std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
+        for (Transaction* txn : expired_txns) {
+            // 只对已提交的事务执行删除操作
+            if (txn->get_state() == TransactionState::COMMITTED) {
+                do_delete(txn);
+            }
+            
+            // 从事务映射表中删除
+            txn_map.erase(txn->get_transaction_id());
+            delete txn;  // 删除事务对象
+        }
+    }
+    
+    // 第四阶段：刷新到磁盘
+    if (!expired_txns.empty()) {
+        sm_manager_->flush_to_disk();
+    }
+}
 
-    sm_manager_->flush_to_disk();  // 刷新所有文件句柄到磁盘
+bool TransactionManager::should_perform_gc(){
+    // 检查是否需要执行垃圾回收的条件
+    std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
+    
+    // 条件1：事务数量过多（超过1000个）
+    if (txn_map.size() > 1000) {
+        return true;
+    }
+    
+    // 条件2：检查是否有大量已终止的事务
+    size_t terminated_count = 0;
+    timestamp_t watermark = running_txns_.GetWatermark();
+    
+    for (const auto& pair : txn_map) {
+        Transaction* txn = pair.second;
+        if (is_transaction_expired(txn, watermark)) {
+            terminated_count++;
+        }
+    }
+    
+    // 如果已终止的事务数量超过总数的30%，则需要GC
+    return terminated_count > txn_map.size() * 0.3;
 }
 
 /**

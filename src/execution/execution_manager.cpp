@@ -134,16 +134,28 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
             case PlanTag::T_Transaction_commit: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->commit(context->txn_, context->log_mgr_);
+                if (txn_mgr_->should_perform_gc()) {
+                    // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
+                    txn_mgr_->GarbageCollection();
+                }
                 break;
             }
             case PlanTag::T_Transaction_rollback: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context, context->log_mgr_);
+                if (txn_mgr_->should_perform_gc()) {
+                    // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
+                    txn_mgr_->GarbageCollection();
+                }
                 break;
             }
             case PlanTag::T_Transaction_abort: {
                 context->txn_ = txn_mgr_->get_transaction(*txn_id);
                 txn_mgr_->abort(context, context->log_mgr_);
+                if (txn_mgr_->should_perform_gc()) {
+                    // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
+                    txn_mgr_->GarbageCollection();
+                }
                 break;
             }
             case PlanTag::T_Create_StaticCheckPoint: {

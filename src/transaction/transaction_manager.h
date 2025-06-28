@@ -202,6 +202,9 @@ class TransactionManager {
     /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
     void GarbageCollection();
 
+    /** @brief 检查是否需要执行垃圾回收 */
+    bool should_perform_gc();
+
     void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
 
     void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values,
@@ -210,4 +213,11 @@ class TransactionManager {
     void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
 
     void do_delete(Transaction *txn);
+
+   private:
+    /** @brief 检查事务是否可以被垃圾回收 */
+    bool is_transaction_expired(Transaction *txn, timestamp_t watermark) const;
+
+    /** @brief 批量清理过期的版本链接 */
+    void cleanup_expired_versions(timestamp_t watermark);
 };
