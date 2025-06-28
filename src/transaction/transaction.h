@@ -194,8 +194,7 @@ class Transaction {
         return undo_logs_.size();
     }
 
-    inline auto clear() -> void {
-        write_set_->clear();               // 清空事务的写集合
+    inline auto clear_lock_set() -> void {
         lock_set_->clear();                // 清空事务的锁集合
         lock_gap_set_->clear();            // 清空事务的间隙锁集合
         index_latch_page_set_->clear();    // 清空索引加锁页面集合

@@ -27,5 +27,8 @@ void Watermark::RemoveTxn(timestamp_t read_ts) {
     }
 }
 
-void Watermark::UpdateCommitTs(timestamp_t commit_ts) { commit_ts_ = commit_ts; }
+void Watermark::UpdateCommitTs(timestamp_t commit_ts) { 
+    commit_ts_ = std::max(commit_ts_, commit_ts);
+}
+
 timestamp_t Watermark::GetWatermark() { return watermark_; }

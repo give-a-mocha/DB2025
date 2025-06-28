@@ -118,13 +118,13 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     }
 
     // 清空事务相关的集合
-    txn->clear();
+    txn->clear_lock_set();
 
     log_manager->add_commit_log(txn->get_transaction_id());
     log_manager->flush_log_to_disk();
 
-    running_txns_.RemoveTxn(txn->get_start_ts());  // 从水位线中移除事务
     running_txns_.UpdateCommitTs(commit_ts);       // 更新水位线的提交时间戳
+    running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
 }
 
 /**
@@ -153,15 +153,15 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         if (write_type == WType::INSERT_TUPLE) {
             auto rec = (*iter)->GetRecord();
             handle->delete_record(rid, context);
-            sm_manager_->delete_index_with_rid(table_name, rec, rid, context);
+            sm_manager_->delete_index_with_rid(table_name, rec, rid, context->txn_);
             log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
         } else if (write_type == WType::UPDATE_TUPLE) {
             //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
             auto new_rec = handle->get_record(rid, context);
             auto old_rec = (*iter)->GetRecord();
             handle->update_record(rid, old_rec.data, context);
-            sm_manager_->delete_index_with_rid(table_name, *new_rec, rid, context);
-            sm_manager_->insert_index_force(table_name, old_rec, rid, context);
+            sm_manager_->delete_index_with_rid(table_name, *new_rec, rid, context->txn_);
+            sm_manager_->insert_index_force(table_name, old_rec, rid, context->txn_);
             log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
         } else if (write_type == WType::DELETE_TUPLE) {
             auto rec = (*iter)->GetRecord();
@@ -171,6 +171,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         // 删除版本链记录
         DeleteUpdateVersionLink(handle->GetFd(), rid, context->txn_);
     }
+    txn->get_write_set()->clear();  // 清空写集合
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
     auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
@@ -184,13 +185,17 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         lock_manager_->unlock_gap(txn, tab_fd);
     }
 
-    txn->clear();
+    txn->clear_lock_set();
     txn->set_state(TransactionState::ABORTED);
     txn->ClearUndoLogs();
-    // 从全局事务表中删除
-    // std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
-    // txn_map.erase(txn->get_transaction_id());
     log_manager->add_abort_log(txn->get_transaction_id());
+    
+    running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
+    // 从全局事务表中删除
+    std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
+    txn_map.erase(txn->get_transaction_id());
+    lock.unlock();
+    delete txn;  // 删除事务对象
 }
 
 /**
@@ -343,8 +348,63 @@ UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
 
 /** @brief 获取系统中的最低读时间戳。 */
 timestamp_t TransactionManager::GetWatermark() { return running_txns_.GetWatermark(); }
+
+void TransactionManager::do_delete(Transaction *txn) {
+    for (const auto& iter : *txn->get_write_set()) {
+        const auto write_type = iter->GetWriteType();
+        const auto table_name = iter->GetTableName();
+        const auto rid = iter->GetRid();
+        std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
+        if (write_type == WType::DELETE_TUPLE) {
+            handle->delete_record(rid, nullptr);
+            
+            sm_manager_->delete_index_with_rid(table_name, iter->GetRecord(), rid, txn);
+        }
+    }
+    txn->get_write_set()->clear();  // 清空写集合
+    txn->ClearUndoLogs(); // 清空撤销日志
+}
 /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
-void TransactionManager::GarbageCollection() {}
+void TransactionManager::GarbageCollection() {
+    //! Masttf DO:
+    // 1. 清理过期的版本链接
+    // 2. 将delete操作落盘,删除事务
+    // 3. 刷新到磁盘
+    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
+    for (auto it = version_info_.begin(); it != version_info_.end();) {
+        auto& version_info = it->second;
+        std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
+        // 清理过期的版本链接
+        for (auto version_it = version_info->prev_version_.begin();
+             version_it != version_info->prev_version_.end();) {
+            auto undo_log = GetUndoLog(version_it->second.prev_);
+            if (undo_log.ts_ <= GetWatermark()) {
+                version_it = version_info->prev_version_.erase(version_it);
+            } else {
+                ++version_it;
+            }
+        }
+        if (version_info->prev_version_.empty()) {
+            it = version_info_.erase(it);  // 删除空的版本信息
+        } else {
+            ++it;
+        }
+    }
+    lock.unlock();
+
+    for(auto it = txn_map.begin(); it != txn_map.end();) {
+        if (it->second->get_state() == TransactionState::COMMITTED && it->second->get_commit_ts() <= GetWatermark()) {
+            // 事务已终止，执行清理
+            do_delete(it->second);
+            delete it->second;  // 删除事务对象
+            it = txn_map.erase(it);  // 从事务映射表中删除
+        } else {
+            ++it;  // 继续遍历下一个事务
+        }
+    }
+
+    sm_manager_->flush_to_disk();  // 刷新所有文件句柄到磁盘
+}
 
 /**
  * @brief 添加插入操作的撤销日志

@@ -125,9 +125,9 @@ class TransactionManager {
 
     LockManager *get_lock_manager() { return lock_manager_; }
 
-    //! Masttf DO
+
     timestamp_t get_next_txn_id() { return next_txn_id_.fetch_add(1); }
-    //! Masttf DO
+
     timestamp_t get_next_timestamp() { return next_timestamp_.fetch_add(1); }
 
     TransactionState get_txn_state(txn_id_t txn_id) {
@@ -153,6 +153,12 @@ class TransactionManager {
         assert(res->get_thread_id() == std::this_thread::get_id());
 
         return res;
+    }
+
+    bool exsit_transaction(txn_id_t txn_id) {
+        if (txn_id == INVALID_TXN_ID) return false;
+        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
+        return TransactionManager::txn_map.find(txn_id) != TransactionManager::txn_map.end();
     }
 
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
@@ -202,4 +208,6 @@ class TransactionManager {
                              std::vector<bool> modified_fields);
 
     void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
+
+    void do_delete(Transaction *txn);
 };
