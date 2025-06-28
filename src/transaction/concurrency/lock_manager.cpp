@@ -27,15 +27,6 @@ See the Mulan PSL v2 for more details. */
 bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
-    // 两阶段锁协议
-    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
-        txn->get_state() == TransactionState::ABORTED) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
-    }
-    if (txn->get_state() == TransactionState::DEFAULT) {
-        txn->set_state(TransactionState::GROWING);
-    }
-
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
 
@@ -153,15 +144,6 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
  */
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
-
-    // 两阶段锁协议
-    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
-        txn->get_state() == TransactionState::ABORTED) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
-    }
-    if (txn->get_state() == TransactionState::DEFAULT) {
-        txn->set_state(TransactionState::GROWING);
-    }
 
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
@@ -363,14 +345,6 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
     std::unique_lock<std::mutex> lock(latch_);
 
-    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
-        txn->get_state() == TransactionState::ABORTED) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
-    }
-    if (txn->get_state() == TransactionState::DEFAULT) {
-        txn->set_state(TransactionState::GROWING);
-    }
-
     auto queue_it = gap_lock_table_.find(tab_fd);
     if (queue_it == gap_lock_table_.end()) {
         queue_it =
@@ -383,18 +357,21 @@ bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> 
     return true;
 }
 
-std::vector<Condition> LockManager::get_gap_condition(int tab_fd) {
+std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* txn) {
     std::unique_lock<std::mutex> lock(latch_);
     std::vector<Condition> gap_conditions;
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
-        return std::move(gap_conditions);
+        return gap_conditions;
     }
     GapLockRequestQueue& request_queue = table_queue_it->second;
     for (const auto& gap_request : request_queue.request_queue_) {
+        if (gap_request.txn_id_ == txn->get_transaction_id()) {
+            continue;  // 只返回其他事务的间隙锁条件
+        }
         gap_conditions.insert(gap_conditions.end(), gap_request.conds.begin(), gap_request.conds.end());
     }
-    return std::move(gap_conditions);
+    return gap_conditions;
 }
 
 bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
@@ -410,7 +387,6 @@ bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
     for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end();) {
         if (it->txn_id_ == txn->get_transaction_id()) {
             it = request_queue.request_queue_.erase(it);
-            break;
         } else {
             ++it;
         }

@@ -18,6 +18,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # 关键：获取完整的 git 历史和分支信息
+          fetch-depth: 0
+          # 确保有推送权限
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 检出 PR 的 head 分支，而不是 merge commit
+          ref: ${{ github.head_ref }}
 
       - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
@@ -30,3 +37,7 @@ jobs:
         with:
           commit_message: "style: format code with clang-format"
           branch: ${{ github.head_ref }}
+          # 确保获取最新状态
+          skip_fetch: false
+          # 只格式化 src 目录的文件
+          file_pattern: "src/"

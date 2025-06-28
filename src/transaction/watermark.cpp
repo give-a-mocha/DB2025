@@ -11,21 +11,21 @@ See the Mulan PSL v2 for more details. */
 #include "transaction/watermark.h"
 
 void Watermark::AddTxn(timestamp_t read_ts) {
-    current_reads_[read_ts] = read_ts;
+    current_reads_[read_ts]++;
     watermark_ = current_reads_.begin()->first;
 }
 
 void Watermark::RemoveTxn(timestamp_t read_ts) {
-    current_reads_[read_ts]--;
-    if (current_reads_[read_ts] <= 0) {
-        current_reads_.erase(read_ts);
+    auto it = current_reads_.find(read_ts);
+    if (it != current_reads_.end()) {
+        it->second--;
+        if (it->second <= 0) {
+            current_reads_.erase(it);
+        }
     }
-    if (current_reads_.empty()) {
-        watermark_ = commit_ts_;
-    } else {
-        watermark_ = current_reads_.begin()->first;
-    }
+    watermark_ = current_reads_.empty() ? commit_ts_ : current_reads_.begin()->first;
 }
 
-void Watermark::UpdateCommitTs(timestamp_t commit_ts) { commit_ts_ = commit_ts; }
+void Watermark::UpdateCommitTs(timestamp_t commit_ts) { commit_ts_ = std::max(commit_ts_, commit_ts); }
+
 timestamp_t Watermark::GetWatermark() { return watermark_; }

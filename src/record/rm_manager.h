@@ -78,9 +78,12 @@ class RmManager {
         file_hdr.num_pages = 1;
         file_hdr.record_num = 0;
         file_hdr.first_free_page_no = RM_NO_PAGE;
-        // We have: sizeof(hdr) + (n + 7) / 8 + n * record_size <= PAGE_SIZE
+        // [RmPageHdr] [Bitmap] [Bitmap] [Record1] [Record2] ... [RecordN]
+        // sizeof(lsn_t) + sizeof(RmPageHdr) + bitmap_size + (记录数 × record_size) ≤ PAGE_SIZE
+        // sizeof(lsn_t) + sizeof(hdr) + (n + BITMAP_WIDTH - 1) / BITMAP_WIDTH + n * record_size <= PAGE_SIZE
         file_hdr.num_records_per_page =
-            (BITMAP_WIDTH * (PAGE_SIZE - 1 - (int)sizeof(RmPageHdr)) + 1) / (1 + record_size * BITMAP_WIDTH);
+            (BITMAP_WIDTH * (PAGE_SIZE - 1 - (int)sizeof(RmPageHdr) - (int)sizeof(lsn_t)) + 1) /
+            (1 + record_size * BITMAP_WIDTH);
         file_hdr.bitmap_size = (file_hdr.num_records_per_page + BITMAP_WIDTH - 1) / BITMAP_WIDTH;
 
         // 将file header写入磁盘文件（名为file name，文件描述符为fd）中的第0页

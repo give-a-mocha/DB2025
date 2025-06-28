@@ -69,31 +69,40 @@ class MvccInsertExecutor : public AbstractExecutor {
         // 处理每个字段的值
         for (size_t i = 0; i < values_.size(); i++) {
             auto &col = tab_.cols[i];
-            auto &val = values_[i];
 
             // 处理类型不匹配的情况
-            if (col.type != val.type) {
-                if (col.type == ColType::TYPE_INT && val.type == ColType::TYPE_FLOAT) {
-                    val.set_int(static_cast<int>(val.float_val));
-                } else if (col.type == ColType::TYPE_FLOAT && val.type == ColType::TYPE_INT) {
-                    val.set_float(static_cast<float>(val.int_val));
+            if (col.type != values_[i].type) {
+                if (col.type == ColType::TYPE_INT && values_[i].type == ColType::TYPE_FLOAT) {
+                    values_[i].set_int(static_cast<int>(values_[i].float_val));
+                } else if (col.type == ColType::TYPE_FLOAT && values_[i].type == ColType::TYPE_INT) {
+                    values_[i].set_float(static_cast<float>(values_[i].int_val));
                 } else {
-                    throw IncompatibleTypeError(coltype2str(col.type), coltype2str(val.type));
+                    throw IncompatibleTypeError(coltype2str(col.type), coltype2str(values_[i].type));
                 }
             }
 
             // 复制值到记录中
-            val.init_raw(col.len);
-            memcpy(rec.data + col.offset, val.raw->data, col.len);
+            values_[i].init_raw(col.len);
+            memcpy(rec.data + col.offset, values_[i].raw->data, col.len);
         }
 
         // 获取全局条件
-        std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd());
+        std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
 
         if (!conds.empty() && eval_conds(tab_.cols, conds, &rec)) {
             throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
-        rid_ = mvcc_insert_record(tab_, rec, context_, fh_, txn_mgr_, values_);
+        rid_ = fh_->insert_record(rec.data, context_);
+        txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
+        // 添加日志要在插入索引之后，因为abort会回滚索引
+        if (!mvcc_insert_index(tab_, rec, rid_, context_, txn_mgr_, sm_manager_)) {
+            fh_->delete_record(rid_, context_);
+            txn_mgr_->abort(context_, context_->log_mgr_);
+            throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
+        }
+        txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, std::move(values_));
+        context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, rec));
+        context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), rec, rid_, tab_.name);
         return nullptr;
     }
 

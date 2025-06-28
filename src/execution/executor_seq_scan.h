@@ -62,7 +62,6 @@ class SeqScanExecutor : public AbstractExecutor {
     void beginTuple() override {
         // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
-
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();

@@ -320,17 +320,21 @@ class IxIndexHandle {
      */
     bool get_value(const char *key, std::vector<Rid> *result, Transaction *transaction);
 
+    bool get_value_without_lock(const char *key, std::vector<Rid> *result);
     /**
      * @brief 查找包含指定键的叶节点
      * @param key 目标键值
      * @param operation 操作类型（查找/插入/删除）
      * @param transaction 当前事务
-     * @param find_first 是否查找第一个叶节点
-     * @return pair<叶节点句柄, 根节点是否加锁>
+     * @return 叶节点页面指针
      */
-    std::pair<IxNodeHandle *, bool> find_leaf_page(const char *key, Operation operation, Transaction *transaction,
-                                                   bool find_first = false);
+    Page *find_leaf_page(const char *key, Operation operation, Transaction *transaction);
 
+    Page *find_leaf_page_without_lock(const char *key, Operation operation);
+
+    void create_new_root(const char *key, const Rid &value);
+
+    bool insert_into_leaf(const char *key, const Rid &value, IxNodeHandle *leaf_node);
     /**
      * @brief 插入键值对
      * @param key 键值
@@ -340,6 +344,9 @@ class IxIndexHandle {
      */
     page_id_t insert_entry(const char *key, const Rid &value, Transaction *transaction);
 
+    page_id_t insert_entry_without_lock(const char *key, const Rid &value);
+
+    page_id_t insert_entry_force(const char *key, const Rid &value, Transaction *transaction);
     /**
      * @brief 分裂节点
      * @param node 需要分裂的节点
@@ -354,7 +361,7 @@ class IxIndexHandle {
      * @param new_node 新节点
      * @param transaction 当前事务
      */
-    void insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node, Transaction *transaction);
+    void insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node);
 
     /**
      * @brief 删除键值对
@@ -365,14 +372,23 @@ class IxIndexHandle {
     bool delete_entry(const char *key, Transaction *transaction);
 
     /**
+     * @brief 从B+树中删除指定键和RID对
+     * @param key 要删除的键值
+     * @param rid 要删除的特定RID
+     * @param transaction 事务指针
+     * @return bool
+     *         - true：成功删除目标RID
+     *         - false：未找到目标键值对或RID
+     */
+    bool delete_entry(const char *key, const Rid &rid, Transaction *transaction);
+
+    /**
      * @brief 处理节点键值过少的情况
      * @param node 当前节点
      * @param transaction 当前事务
-     * @param root_is_latched 根节点是否加锁
      * @return 是否需要继续处理
      */
-    bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr,
-                                  bool *root_is_latched = nullptr);
+    bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr);
 
     /**
      * @brief 调整根节点
@@ -401,7 +417,7 @@ class IxIndexHandle {
      * @return 是否成功合并
      */
     bool coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index,
-                  Transaction *transaction, bool *root_is_latched);
+                  Transaction *transaction);
 
     /**
      * @brief 查找大于等于指定键的第一个位置
@@ -428,6 +444,27 @@ class IxIndexHandle {
      * @return 索引ID
      */
     Iid leaf_begin() const;
+
+    //===== 调试函数 =====
+
+    /**
+     * @brief 调试函数：以树形结构打印B+树
+     * @details 递归遍历B+树的所有节点，以树形结构显示页号和键的个数
+     */
+    void debug_print_tree();
+
+    /**
+     * @brief 递归打印节点信息
+     * @param page_no 节点页号
+     * @param depth 当前节点深度，用于控制缩进
+     */
+    void debug_print_node(page_id_t page_no, int depth);
+
+    /**
+     * @brief 打印叶子节点链表
+     * @details 从第一个叶子节点开始，沿着链表打印所有叶子节点的连接关系
+     */
+    void debug_print_leaf_chain();
 
    private:
     //===== 树结构维护函数 =====
@@ -467,6 +504,48 @@ class IxIndexHandle {
      * 2. 可能触发缓冲池页面替换
      */
     IxNodeHandle *fetch_node(int page_no) const;
+
+    //===== 溢出页管理函数 =====
+
+    /**
+     * @brief 创建新的溢出页
+     * @return 新创建的溢出页页号
+     * @note 溢出页用于存储重复键值对应的多个RID
+     */
+    page_id_t create_overflow_page();
+
+    /**
+     * @brief 向溢出页中插入RID
+     * @param value 要插入的RID
+     * @param page_no 溢出页页号
+     * @return 是否插入成功
+     * @note 如果当前溢出页已满，会自动链接到新的溢出页
+     */
+    bool insert_into_overflow_page(const Rid &value, page_id_t page_no);
+
+    /**
+     * @brief 从溢出页中删除RID，并自动清理空页面
+     * @param value 要删除的RID
+     * @param page_no 溢出页页号
+     * @param prev_page_no 前一个溢出页的页号，用于维护链表
+     * @return 删除后的下一个溢出页页号（如果当前页被删除）或当前页号
+     */
+    page_id_t remove_from_overflow_page(const Rid &value, page_id_t page_no, page_id_t prev_page_no);
+
+    /**
+     * @brief 获取溢出页中的所有RID
+     * @param page_no 溢出页页号
+     * @param result 存储结果的向量
+     * @note 会遍历整个溢出页链表
+     */
+    void get_all_rids_from_overflow_page(page_id_t page_no, std::vector<Rid> *result) const;
+
+    /**
+     * @brief 释放溢出页链表
+     * @param page_no 溢出页链表的起始页号
+     * @note 释放从指定页开始的整个溢出页链表
+     */
+    void release_overflow_page_chain(page_id_t page_no);
 
     /**
      * @brief 创建新的B+树节点
@@ -517,4 +596,9 @@ class IxIndexHandle {
      * @warning 必须确保iid有效
      */
     Rid get_rid(const Iid &iid) const;
+
+    // 检查该页是否合法
+    bool is_page_safe(IxNodeHandle *node, Operation operation);
+
+    void UnlockAncestors(Transaction *transaction);
 };

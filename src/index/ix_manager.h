@@ -89,22 +89,17 @@ class IxManager {
         return index_name;
     }
 
-    /*
-     * @description: 检查索引文件是否存在通过表名和索引列元数据
-     */
     bool exists(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
-        return disk_manager_->is_file(ix_name);
+        return exists_with_index_name(ix_name);
     }
 
-    /*
-     * @description: 检查索引文件是否存在通过表名和索引列
-     */
     bool exists(const std::string &filename, const std::vector<std::string> &index_cols) {
         auto ix_name = get_index_name(filename, index_cols);
-        return disk_manager_->is_file(ix_name);
+        return exists_with_index_name(ix_name);
     }
 
+    bool exists_with_index_name(const std::string &ix_name) { return disk_manager_->is_file(ix_name); }
     /**
      * @brief 创建索引文件
      * @param filename 表名
@@ -212,14 +207,15 @@ class IxManager {
 
     void destroy_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
-        disk_manager_->destroy_file(ix_name);
+        destroy_index_with_index_name(ix_name);
     }
 
     void destroy_index(const std::string &filename, const std::vector<std::string> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
-        disk_manager_->destroy_file(ix_name);
+        destroy_index_with_index_name(ix_name);
     }
-    void destroy_index(const std::string &index_name) { disk_manager_->destroy_file(index_name); }
+
+    void destroy_index_with_index_name(const std::string &ix_name) { disk_manager_->destroy_file(ix_name); }
 
     /**
      * @brief 打开索引文件并创建索引句柄
@@ -230,12 +226,15 @@ class IxManager {
      */
     std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
-        int fd = disk_manager_->open_file(ix_name);
-        return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
+        return open_index_with_index_name(ix_name);
     }
 
     std::unique_ptr<IxIndexHandle> open_index(const std::string &filename, const std::vector<std::string> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
+        return open_index_with_index_name(ix_name);
+    }
+
+    std::unique_ptr<IxIndexHandle> open_index_with_index_name(const std::string &ix_name) {
         int fd = disk_manager_->open_file(ix_name);
         return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
     }
@@ -256,12 +255,11 @@ class IxManager {
     }
 
     /**
-     * @brief 删除索引
-     * @param ih 要删除的索引句柄
-     * @note 这是一个底层操作，通常通过destroy_index调用
-     * @warning 确保没有其他事务正在使用该索引
+     * @brief 关闭索引文件
+     * @param ih 要关闭的索引句柄
+     * @warning 关闭后不能再使用该索引句柄
      */
-    void drop_index(const IxIndexHandle *ih) {
+    void close_index_without_flush(const IxIndexHandle *ih) {
         buffer_pool_manager_->delete_all_pages(ih->fd_);
         disk_manager_->close_file(ih->fd_);
     }

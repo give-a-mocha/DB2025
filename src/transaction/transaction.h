@@ -45,10 +45,8 @@ struct UndoLog {
     bool is_deleted_;
     /* 此撤销日志修改的字段 */
     std::vector<bool> modified_fields_;
-    /* 修改后的字段 */
+    /* 修改前的字段 */
     std::vector<Value> tuple_;
-
-    RmRecord *tuple_test_;
     /* 此撤销日志的时间戳 */
     timestamp_t ts_{INVALID_TS};
     /* 撤销日志的前一个版本 */
@@ -185,15 +183,20 @@ class Transaction {
         return undo_logs_[log_id];
     }
 
+    inline auto ClearUndoLogs() -> void {
+        std::scoped_lock<std::mutex> lck(latch_);
+        undo_logs_.clear();  // 清空事务的撤销日志
+    }
+
     /** @return 撤销日志的数量 */
     inline auto GetUndoLogNum() -> size_t {
         std::scoped_lock<std::mutex> lck(latch_);
         return undo_logs_.size();
     }
 
-    inline auto clear() -> void {
-        write_set_->clear();               // 清空事务的写集合
+    inline auto clear_lock_set() -> void {
         lock_set_->clear();                // 清空事务的锁集合
+        lock_gap_set_->clear();            // 清空事务的间隙锁集合
         index_latch_page_set_->clear();    // 清空索引加锁页面集合
         index_deleted_page_set_->clear();  // 清空索引删除页面集合
     }

@@ -87,7 +87,7 @@ class LockManager {
 
     bool lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds);
 
-    std::vector<Condition> get_gap_condition(int tab_fd);
+    std::vector<Condition> get_gap_condition(int tab_fd, Transaction* txn);
 
     bool unlock_gap(Transaction* txn, int tab_fd);
 };

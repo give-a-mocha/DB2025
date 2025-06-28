@@ -136,9 +136,8 @@ void SmManager::open_db(const std::string& db_name) {
     for (auto& [table_name, table_info] : db_.tabs_) {
         fhs_.emplace(table_name, rm_manager_->open_file(table_name));
         for (auto& index : table_info.indexes) {
-            // !索引暂未实现，只是作为占位
             auto&& index_name = ix_manager_->get_index_name(table_name, index.cols);
-            ihs_.emplace(index_name, ix_manager_->open_index(index_name, index.cols));
+            ihs_.emplace(index_name, ix_manager_->open_index_with_index_name(index_name));
         }
     }
 }
@@ -396,8 +395,10 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 1. 获取表的元数据并验证
     TabMeta& tab = db_.get_table(tab_name);
 
+    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
+
     // 2. 检查索引是否已存在
-    if (ix_manager_->exists(tab_name, col_names)) {
+    if (ix_manager_->exists_with_index_name(index_name)) {
         throw IndexExistsError(tab_name, col_names);
     }
 
@@ -411,9 +412,9 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     }
 
     // 4. 创建和打开索引文件
-    auto fh_ = fhs_[tab_name].get();                     // 获取表的文件句柄
-    ix_manager_->create_index(tab_name, cols);           // 创建索引文件
-    auto ih_ = ix_manager_->open_index(tab_name, cols);  // 打开索引文件
+    auto fh_ = fhs_[tab_name].get();                                 // 获取表的文件句柄
+    ix_manager_->create_index(tab_name, cols);                       // 创建索引文件
+    auto ih_ = ix_manager_->open_index_with_index_name(index_name);  // 打开索引文件
 
     // 5. 为索引键分配缓冲区
     std::vector<char> key_buffer(tot_col_len);  // 存储组合索引键的缓冲区
@@ -423,7 +424,6 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
         auto record = fh_->get_record(rmScan.rid(), context);
-
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -435,8 +435,12 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
         // 将键值对插入B+树
         // 键：索引列值的组合
         // 值：记录的RID
-        auto res = ih_->insert_entry(key, rmScan.rid(), context == nullptr ? nullptr : context->txn_);
-
+        page_id_t res = INVALID_PAGE_ID;  // 初始化结果为无效页ID
+        if (context == nullptr) {
+            res = ih_->insert_entry_without_lock(key, rmScan.rid());
+        } else {
+            res = ih_->insert_entry(key, rmScan.rid(), context->txn_);
+        }
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (res == INVALID_PAGE_ID) {
             drop_index(tab_name, col_names, context);
@@ -445,7 +449,6 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     }
 
     // 7. 更新内存中的索引信息
-    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
     ihs_.emplace(index_name, std::move(ih_));  // 保存索引句柄
 
     // 8. 更新表的元数据
@@ -470,20 +473,19 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
  */
 void SmManager::drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
     //! DO
-    if (!ix_manager_->exists(tab_name, col_names)) {
+    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
+    if (!ix_manager_->exists_with_index_name(index_name)) {
         throw IndexNotFoundError(tab_name, col_names);
     }
     // 关闭并删除索引文件
-    auto index_name = ix_manager_->get_index_name(tab_name, col_names);
     auto it = ihs_.find(index_name);
-
     if (it != ihs_.end()) {
         // 如果已经打开从缓冲池中删掉，并关闭文件
-        ix_manager_->drop_index(it->second.get());
+        ix_manager_->close_index_without_flush(it->second.get());
         ihs_.erase(it);
     }
     // 删除索引文件
-    disk_manager_->destroy_file(index_name);
+    ix_manager_->destroy_index_with_index_name(index_name);
     // 从表的元数据中删除索引
     TabMeta& tab = db_.get_table(tab_name);
     auto index = tab.get_index_meta(col_names);
@@ -508,4 +510,96 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
         col_names.push_back(col.name);
     }
     drop_index(tab_name, col_names, context);
+}
+
+bool SmManager::insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
+    TabMeta& tab_ = db_.get_table(tab_name);
+    std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
+    inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
+
+    // 遍历表的所有索引
+    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+        auto& index = tab_.indexes[i];
+        // 获取索引句柄
+        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+
+        // 构造索引键值
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            offset += index.cols[j].len;
+        }
+
+        // 插入索引项
+        auto res = ih->insert_entry(key.get(), rid, txn);
+        if (res == INVALID_PAGE_ID) {
+            // 插入失败，回滚已插入的索引
+            for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
+                auto& rollback_index = tab_.indexes[rollback_i];
+                auto rollback_ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
+                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), txn);
+            }
+            return false;
+        }
+        inserted_keys.emplace_back(std::move(key));
+    }
+    return true;
+}
+
+bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
+    TabMeta& tab_ = db_.get_table(tab_name);
+    // 遍历表的所有索引
+    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+        auto& index = tab_.indexes[i];
+        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            offset += index.cols[j].len;
+        }
+        // 插入索引项
+        auto res = ih->insert_entry_force(key.get(), rid, txn);
+        if (res == INVALID_PAGE_ID) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool SmManager::delete_index(const std::string& tab_name, RmRecord& rec, Transaction* txn) {
+    TabMeta& tab_ = db_.get_table(tab_name);
+    // 遍历表的所有索引
+    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+        auto& index = tab_.indexes[i];
+        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            offset += index.cols[j].len;
+        }
+        // 删除索引项
+        ih->delete_entry(key.get(), txn);
+    }
+    return true;
+}
+
+bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
+    TabMeta& tab_ = db_.get_table(tab_name);
+    // 遍历表的所有索引
+    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+        auto& index = tab_.indexes[i];
+        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            offset += index.cols[j].len;
+        }
+        // 删除索引项
+        ih->delete_entry(key.get(), rid, txn);
+    }
+    return true;
 }

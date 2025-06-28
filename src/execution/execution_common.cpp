@@ -16,69 +16,11 @@ See the Mulan PSL v2 for more details. */
 
 #include "system/sm.h"
 
-auto ReconstructTuple(const std::vector<ColMeta> &cols, const RmRecord &base_tuple, const TupleMeta &base_meta,
-                      const std::vector<UndoLog> &undo_logs) -> std::optional<RmRecord> {
-    // 如果元组已被删除，返回空
-    if (base_meta.is_deleted_) {
-        return std::nullopt;
-    }
-
-    // 创建结果记录的副本
-    RmRecord result(base_tuple.size);
-    memcpy(result.data, base_tuple.data, base_tuple.size);
-
-    // 应用撤销日志，从最新到最旧
-    for (auto it = undo_logs.rbegin(); it != undo_logs.rend(); ++it) {
-        const auto &undo_log = *it;
-
-        if (undo_log.is_deleted_) {
-            // 如果撤销日志标记为删除，返回空
-            return std::nullopt;
-        }
-
-        // 应用撤销日志中的字段修改
-        if (undo_log.tuple_test_) {
-            memcpy(result.data, undo_log.tuple_test_->data, result.size);
-        } else if (!undo_log.tuple_.empty()) {
-            // 使用Value数组重建记录
-            for (size_t i = 0; i < undo_log.tuple_.size() && i < cols.size(); ++i) {
-                if (i < undo_log.modified_fields_.size() && undo_log.modified_fields_[i]) {
-                    const auto &col = cols[i];
-                    const auto &val = undo_log.tuple_[i];
-                    if (val.raw && val.raw->data) {
-                        memcpy(result.data + col.offset, val.raw->data, col.len);
-                    }
-                }
-            }
-        }
-    }
-    return result;
-}
-
-auto IsWriteWriteConflict(timestamp_t tuple_ts, Transaction *txn) -> bool {
-    // 检查写-写冲突
-    // 如果元组的时间戳大于事务的开始时间戳，则存在写-写冲突
-    return tuple_ts > txn->get_start_ts();
-}
-
-auto message_out(Context *context_, const std::string &output) -> void {
-    if (context_ && context_->data_send_ && context_->offset_ && *context_->offset_ + output.length() < BUFFER_LENGTH) {
-        memcpy(context_->data_send_ + *context_->offset_, output.c_str(), output.length());
-        *context_->offset_ += output.length();
-    }
-}
-
-auto message_out(Context *context_, const char *output, size_t output_size) -> void {
-    if (context_ && context_->data_send_ && context_->offset_ && *context_->offset_ + output_size < BUFFER_LENGTH) {
-        memcpy(context_->data_send_ + *context_->offset_, output, output_size);
-        *context_->offset_ += output_size;
-    }
-}
-
 std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &record,
                                             const std::vector<ColMeta> &cols_) {
     TRACE_FUNCTION
     std::vector<Value> values;
+    values.reserve(cols_.size());  // 预分配空间以提高性能
     for (const auto &col : cols_) {
         Value value;
         value.set_col_data(col.type, record->data + col.offset, col.len);
@@ -87,15 +29,18 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
     }
     return values;
 }
-bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
-    TRACE_FUNCTION
+
+/**
+ * @brief 检查事务是否与记录发生冲突, 获取锁
+ */
+bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
     // 检查是否有未提交事务修改
     bool ok = txn_mgr->get_lock_manager()->lock_exclusive_on_record(txn, rid, fh->GetFd());
     if (ok == false) {
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
     }
 
-    auto pre_undo_link = txn_mgr->GetUndoLink(rid);
+    auto pre_undo_link = txn_mgr->GetUndoLink(fh->GetFd(), rid);
     if (pre_undo_link.has_value()) {
         auto pre_txn = pre_undo_link.value().prev_txn_;
         auto undo_log = txn_mgr->GetUndoLog(pre_undo_link.value());
@@ -120,7 +65,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
     TRACE_FUNCTION
     auto rec = fh_->get_record(rid, context_);
 
-    auto pre_undo_link = txn_mgr_->GetUndoLink(rid);
+    auto pre_undo_link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
     while (pre_undo_link.has_value()) {
         auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
         // 如果是自己修改的直接返回
@@ -154,93 +99,56 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
     return rec;
 }
 
-Rid mvcc_insert_record(const TabMeta &tab_, RmRecord &rec, Context *context_, RmFileHandle *fh_,
-                       TransactionManager *txn_mgr_, const std::vector<Value> &valus_) {
-    TRACE_FUNCTION
-    auto rid = fh_->insert_record(rec.data, context_);
-    // 加锁
-    txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
-    // 插入记录后，创建UndoLog
-    UndoLog undo_log;
-    undo_log.is_deleted_ = false;
-    std::vector<Value> values(valus_.size());
-    for (size_t i = 0; i < valus_.size(); ++i) {
-        values[i] = valus_[i];
-        if (!values[i].raw) {
-            values[i].init_raw(tab_.cols[i].len);  // 确保每个Value都有原始数据缓冲区
+bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *context_, TransactionManager *txn_mgr,
+                       SmManager *sm_manager) {
+    RmFileHandle *fh_ = sm_manager->fhs_.at(tab_.name).get();
+    std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
+    inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
+    // 遍历表的所有索引
+    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
+        auto &index = tab_.indexes[i];
+        auto ih = sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+        auto key = std::make_unique<char[]>(index.col_tot_len);
+        int offset = 0;
+        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            offset += index.cols[j].len;
         }
-    }
-    undo_log.tuple_ = std::move(values);
-    // 此时commit_ts 应该是还未提交
-    undo_log.ts_ = txn_mgr_->get_next_timestamp();
-    // 插入时没有前一个版本
-    undo_log.prev_version_ = UndoLink{};
-    undo_log.modified_fields_.resize(valus_.size(), true);  // 全部字段都被修改
-    auto undo_link = context_->txn_->AppendUndoLog(undo_log);
-    txn_mgr_->UpdateUndoLink(rid, undo_link);
-    context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid, rec));
-    context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), rec, rid, tab_.name);
-    return rid;
-}
-
-void mvcc_delete_record(const TabMeta &tab_, const Rid &rid, Context *context_, RmFileHandle *fh_,
-                        TransactionManager *txn_mgr_) {
-    TRACE_FUNCTION
-    auto rec = fh_->get_record(rid, context_);
-    UndoLog undo_log;
-    undo_log.is_deleted_ = true;
-    std::vector<Value> values = convert_record_to_values(rec, tab_.cols);
-    undo_log.tuple_ = std::move(values);
-    undo_log.modified_fields_.resize(tab_.cols.size(), true);  // 全部字段都被修改
-    // 此时commit_ts 应该是还未提交
-    undo_log.ts_ = txn_mgr_->get_next_timestamp();
-    auto pre = txn_mgr_->GetUndoLink(rid);
-    if (pre.has_value()) {
-        undo_log.prev_version_ = pre.value();  // 获取前一个版本的撤销链接
-    } else {
-        undo_log.prev_version_ = UndoLink{};  // 没有前一个版本
-    }
-
-    auto undo_link = context_->txn_->AppendUndoLog(undo_log);
-    txn_mgr_->UpdateUndoLink(rid, undo_link);
-    context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *rec));
-    context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *rec, rid, tab_.name);
-}
-
-void mvcc_update_record(const TabMeta &tab_, const Rid &rid, std::unique_ptr<RmRecord> &new_rec,
-                        std::unique_ptr<RmRecord> &old_rec, Context *context_, RmFileHandle *fh_,
-                        TransactionManager *txn_mgr_, std::vector<bool> is_modify) {
-    TRACE_FUNCTION
-    fh_->update_record(rid, new_rec->data, context_);
-    std::vector<Value> values(tab_.cols.size());
-    for (size_t i = 0; i < tab_.cols.size(); ++i) {
-        if (is_modify[i] == false) {
-            continue;  // 如果该字段没有被修改，则跳过
+        // 检查索引项是否已存在
+        std::vector<Rid> result;
+        bool is_exist = ih->get_value(key.get(), &result, context_->txn_);
+        page_id_t res = INVALID_PAGE_ID;
+        if (is_exist == false) {
+            res = ih->insert_entry(key.get(), rid, context_->txn_);
+        } else {
+            bool ok = true;
+            for (const auto &rid_ : result) {
+                bool is_not_deleted = get_lock_and_check_conflict(context_->txn_, txn_mgr, fh_, rid_);
+                LockDataId lock_data_id(fh_->GetFd(), rid_, LockDataType::RECORD);
+                txn_mgr->get_lock_manager()->unlock(context_->txn_, lock_data_id);
+                if (is_not_deleted == true) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
+                res = ih->insert_entry_force(key.get(), rid, context_->txn_);
+            }
         }
-        Value value;
-        value.set_col_data(tab_.cols[i].type, old_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
-        value.init_raw(tab_.cols[i].len);  // 确保每个Value都有原始数据缓冲区
-        values[i] = value;
+        if (res == INVALID_PAGE_ID) {
+            // 插入索引失败，可能是因为索引已存在
+            for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
+                auto &rollback_index = tab_.indexes[rollback_i];
+                auto rollback_ih =
+                    sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols))
+                        .get();
+                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), rid, context_->txn_);
+            }
+            return false;
+        }
+        inserted_keys.emplace_back(std::move(key));  // 保存已插入的键值
     }
-    // 创建UndoLog
-    UndoLog undo_log;
-    undo_log.is_deleted_ = false;  // 更新不是删除操作
-    undo_log.tuple_ = values;
-    // 此时commit_ts 应该是还未提交
-    undo_log.ts_ = txn_mgr_->get_next_timestamp();
-    auto pre = txn_mgr_->GetUndoLink(rid);
-    if (pre.has_value()) {
-        undo_log.prev_version_ = pre.value();  // 获取前一个版本的撤销链接
-    } else {
-        undo_log.prev_version_ = UndoLink{};  // 没有前一个版本
-    }
-    undo_log.modified_fields_ = std::move(is_modify);  // 使用传入的修改标志
-
-    auto undo_link = context_->txn_->AppendUndoLog(undo_log);
-    txn_mgr_->UpdateUndoLink(rid, undo_link);
-
-    context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::UPDATE_TUPLE, tab_.name, rid, *old_rec));
-    context_->log_mgr_->add_update_log(context_->txn_->get_transaction_id(), *old_rec, *new_rec, rid, tab_.name);
+    return true;
 }
 
 /**

@@ -82,7 +82,7 @@ class TransactionManager {
     /** 保护版本信息 */
     std::shared_mutex version_info_mutex_;
     /** 存储表堆中每个元组的先前版本。 */
-    std::unordered_map<page_id_t, std::shared_ptr<PageVersionInfo>> version_info_;
+    std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>, PageIdHash> version_info_;
 
    private:
     // 事务使用的并发控制算法，目前只需要考虑2PL
@@ -125,9 +125,8 @@ class TransactionManager {
 
     LockManager *get_lock_manager() { return lock_manager_; }
 
-    //! Masttf DO
     timestamp_t get_next_txn_id() { return next_txn_id_.fetch_add(1); }
-    //! Masttf DO
+
     timestamp_t get_next_timestamp() { return next_timestamp_.fetch_add(1); }
 
     TransactionState get_txn_state(txn_id_t txn_id) {
@@ -155,28 +154,36 @@ class TransactionManager {
         return res;
     }
 
+    bool exsit_transaction(txn_id_t txn_id) {
+        if (txn_id == INVALID_TXN_ID) return false;
+        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
+        return TransactionManager::txn_map.find(txn_id) != TransactionManager::txn_map.end();
+    }
+
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
 
     /**
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
-    bool UpdateUndoLink(Rid rid, std::optional<UndoLink> prev_link,
-                        std::function<bool(std::optional<UndoLink>)> &&check = nullptr);
+    bool UpdateUndoLink(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
 
     /**
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
-    bool UpdateVersionLink(Rid rid, std::optional<VersionUndoLink> prev_version,
-                           std::function<bool(std::optional<VersionUndoLink>)> &&check = nullptr);
+    bool UpdateVersionLink(const int &fd, Rid rid, std::optional<VersionUndoLink> prev_version);
 
-    void DeleteUpdateVersionLink(Rid rid, Transaction *txn);
+    /**
+     * @brief 删除txn的撤销链接
+     * @return 返回当前的最后一个撤销链接。
+     */
+    UndoLink DeleteUpdateVersionLink(const int &fd, Rid rid, Transaction *txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
-    std::optional<UndoLink> GetUndoLink(Rid rid);
+    std::optional<UndoLink> GetUndoLink(const int &fd, Rid rid);
 
     /** @brief 获取表堆元组的第一个撤销日志。*/
-    std::optional<VersionUndoLink> GetVersionLink(Rid rid);
+    std::optional<VersionUndoLink> GetVersionLink(const int &fd, Rid rid);
 
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
      * 如果索引超出范围仍然会抛出异常。 */
@@ -194,8 +201,22 @@ class TransactionManager {
     /** @brief 垃圾回收。仅在所有事务都未访问时调用。 */
     void GarbageCollection();
 
-   private:
-    void delete_index_record(TabMeta tab_, RmRecord *rec, Rid rid, Context *context);
+    /** @brief 检查是否需要执行垃圾回收 */
+    bool should_perform_gc();
 
-    void insert_index_record(TabMeta tab_, RmRecord *rec, Rid rid, Context *context);
+    void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
+
+    void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values,
+                             std::vector<bool> modified_fields);
+
+    void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
+
+    void do_delete(Transaction *txn);
+
+   private:
+    /** @brief 检查事务是否可以被垃圾回收 */
+    bool is_transaction_expired(Transaction *txn, timestamp_t watermark) const;
+
+    /** @brief 批量清理过期的版本链接 */
+    void cleanup_expired_versions(timestamp_t watermark);
 };

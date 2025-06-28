@@ -9,10 +9,11 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "log_recovery.h"
+#include "common/print.hpp"
 
 void RecoveryManager::recovery() {
     size_t log_start_offset = sm_manager_->db_.get_log_offset();
-    std::vector<LogRecord *> log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
+    auto log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);
     std::unordered_set<txn_id_t> uncommitted_txns;  // 用于记录未提交的事务ID
     std::unordered_map<std::string, int> tab_page_num;
 
@@ -39,17 +40,17 @@ void RecoveryManager::recovery() {
                 break;
             }
             case LogType::INSERT: {
-                auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
+                auto log_record_ = dynamic_cast<InsertLogRecord *>(log_record.get());
                 process_table_operation(log_record_);
                 break;
             }
             case LogType::DELETE: {
-                auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
+                auto log_record_ = dynamic_cast<DeleteLogRecord *>(log_record.get());
                 process_table_operation(log_record_);
                 break;
             }
             case LogType::UPDATE: {
-                auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
+                auto log_record_ = dynamic_cast<UpdateLogRecord *>(log_record.get());
                 process_table_operation(log_record_);
                 break;
             }
@@ -72,29 +73,43 @@ void RecoveryManager::recovery() {
             log_record->log_type_ == LogType::ABORT) {
             continue;
         }
-        redo(log_record);
+        redo(log_record.get());
     }
 
     const int size = log_records_.size();
     for (int i = size - 1; i >= 0; --i) {
-        auto log_record = log_records_[i];
+        auto &log_record = log_records_[i];
         if (log_record->log_type_ == LogType::BEGIN || log_record->log_type_ == LogType::COMMIT ||
             log_record->log_type_ == LogType::ABORT) {
             continue;
         }
         if (uncommitted_txns.find(log_record->log_tid_) != uncommitted_txns.end()) {
-            undo(log_record);
+            undo(log_record.get());
         }
     }
+    for (const auto &[tab_name, tab_meta] : sm_manager_->db_.tabs_) {
+        std::vector<IndexMeta> indexes;
+        indexes.reserve(tab_meta.indexes.size());
+        for (auto &index_ : tab_meta.indexes) {
+            indexes.emplace_back(index_);
+        }
+        for (const auto &index_ : indexes) {
+            sm_manager_->drop_index(index_.tab_name, index_.cols, nullptr);
+            std::vector<std::string> col_names_;
+            col_names_.reserve(index_.cols.size());
+            for (const auto &col : index_.cols) {
+                col_names_.emplace_back(col.name);
+            }
+            sm_manager_->create_index(index_.tab_name, col_names_, nullptr);
+        }
+    }
+
     flush_to_disk();
+    log_records_.clear();
 }
 
 void RecoveryManager::flush_to_disk() {
-    for (const auto &[tab_name_, fh_] : sm_manager_->fhs_) {
-        auto file_hdr_ = fh_->get_file_hdr();
-        disk_manager_->write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char *)(&file_hdr_), sizeof(file_hdr_));
-        buffer_pool_manager_->flush_all_pages(fh_->GetFd());
-    }
+    sm_manager_->flush_to_disk();
     char *STATIC_CHECK_POINT_STR = "[[STATIC_CHECK_POINT]]\n\n";
     disk_manager_->write_log(STATIC_CHECK_POINT_STR, std::strlen(STATIC_CHECK_POINT_STR));
     sm_manager_->set_log_offset(disk_manager_->get_file_size(LOG_FILE_NAME));
@@ -193,8 +208,19 @@ void RecoveryManager::create_static_check_point() {
     std::unique_lock lock_(latch_);
     std::unique_lock lock(log_mgr_->latch_);
     auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
-
     log_mgr_->flush_log_to_disk_without_lock();
-
     flush_to_disk();
+    // 在静态检查点之前的，未提交事务，应该添加
+    std::unordered_set<txn_id_t> committed_txns;
+    for (const auto &log_record : log_records_) {
+        if (log_record->log_type_ == LogType::COMMIT || log_record->log_type_ == LogType::ABORT) {
+            committed_txns.insert(log_record->log_tid_);
+        }
+    }
+    for (const auto &log_record : log_records_) {
+        if (committed_txns.find(log_record->log_tid_) == committed_txns.end()) {
+            log_mgr_->add_log_to_buffer_without_lock(log_record.get());
+        }
+    }
+    log_mgr_->flush_log_to_disk_without_lock();
 }
