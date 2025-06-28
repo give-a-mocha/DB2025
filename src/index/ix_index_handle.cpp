@@ -354,7 +354,13 @@ bool IxIndexHandle::get_value(const char *key, std::vector<Rid> *result, Transac
     Rid *rid;
     bool ok = leaf_node->leaf_lookup(key, &rid);
     if (ok) {
-        result->push_back(*rid);
+        if (rid->slot_no == IX_NO_SLOT) {
+            // 这是一个溢出页的引用，需要读取溢出页中的所有RID
+            get_all_rids_from_overflow_page(rid->page_no, result);
+        } else {
+            // 这是一个普通的RID
+            result->push_back(*rid);
+        }
     }
     leaf_page->runlatch();  // 读取完毕后释放叶子结点的读锁
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
@@ -370,7 +376,13 @@ bool IxIndexHandle::get_value_without_lock(const char *key, std::vector<Rid> *re
     Rid *rid;
     bool ok = leaf_node->leaf_lookup(key, &rid);
     if (ok) {
-        result->push_back(*rid);
+        if (rid->slot_no == IX_NO_SLOT) {
+            // 这是一个溢出页的引用，需要读取溢出页中的所有RID
+            get_all_rids_from_overflow_page(rid->page_no, result);
+        } else {
+            // 这是一个普通的RID
+            result->push_back(*rid);
+        }
     }
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
     delete leaf_node;  // 释放叶子结点内存
@@ -590,7 +602,16 @@ page_id_t IxIndexHandle::insert_entry_force(const char *key, const Rid &value, T
     auto leaf_page = find_leaf_page(key, Operation::INSERT, transaction);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     int pos = leaf_node->lower_bound(key);
-    leaf_node->set_rid(pos, value);  // 替换键值对
+    auto rid_ = leaf_node->get_rid(pos);
+    if (rid_->slot_no == IX_NO_SLOT) {
+        insert_into_overflow_page(value, rid_->page_no);
+    } else {
+        page_id_t overflow_page_no = create_overflow_page();
+        insert_into_overflow_page(*rid_, overflow_page_no);
+        insert_into_overflow_page(value, overflow_page_no);
+        // 更新原RID为溢出页引用
+        leaf_node->set_rid(pos, Rid{overflow_page_no, IX_NO_SLOT});
+    }
     auto res = leaf_node->get_page_no();
     UnlockAncestors(transaction);
     leaf_page->wunlatch();  // 插入完毕后释放叶子
@@ -598,6 +619,201 @@ page_id_t IxIndexHandle::insert_entry_force(const char *key, const Rid &value, T
     delete leaf_node;  // 释放叶子结点内存
     // 返回插入到的叶结点的page_no
     return res;
+}
+
+/**
+ * @brief 创建新的溢出页
+ * @return 新创建的溢出页页号
+ * @note 溢出页用于存储重复键值对应的多个RID
+ */
+page_id_t IxIndexHandle::create_overflow_page() {
+    TRACE_FUNCTION
+    file_hdr_->num_pages_++;
+    
+    PageId new_page_id = {.fd = fd_, .page_no = INVALID_PAGE_ID};
+    Page *page = buffer_pool_manager_->new_page(&new_page_id);
+    if (page == nullptr) {
+        throw RMDBError("Failed to create overflow page");
+    }
+    
+    // 初始化溢出页头部
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
+    *hdr = IxOverflowPageHdr(); // 使用默认构造函数初始化
+    
+    buffer_pool_manager_->unpin_page(new_page_id, true); // 标记为dirty
+    return new_page_id.page_no;
+}
+
+/**
+ * @brief 向溢出页中插入RID
+ * @param value 要插入的RID
+ * @param page_no 溢出页页号
+ * @return 是否插入成功
+ * @note 如果当前溢出页已满，会自动链接到新的溢出页
+ */
+bool IxIndexHandle::insert_into_overflow_page(const Rid &value, page_id_t page_no) {
+    TRACE_FUNCTION
+    Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
+    if (page == nullptr) {
+        throw RMDBError("Failed to fetch overflow page");
+    }
+    
+    // 获取溢出页头部和RID数组
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
+    Rid *rids = reinterpret_cast<Rid*>(page->get_data() + sizeof(IxOverflowPageHdr));
+    
+    // 计算页面最大可存储的RID数量
+    int max_rids = IX_OVERFLOW_PAGE_MAX_RIDS();
+    
+    if (hdr->num_rids < max_rids) {
+        // 当前页面有空间，直接插入
+        rids[hdr->num_rids] = value;
+        hdr->num_rids++;
+        buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty
+        return true;
+    } else if (hdr->next_overflow_page != IX_NO_PAGE) {
+        // 当前页面已满，但有下一个溢出页，递归插入
+        buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+        return insert_into_overflow_page(value, hdr->next_overflow_page);
+    } else {
+        // 当前页面已满且没有下一个溢出页，创建新的溢出页
+        page_id_t new_overflow_page = create_overflow_page();
+        hdr->next_overflow_page = new_overflow_page;
+        buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty，因为修改了next_overflow_page
+        
+        // 向新创建的溢出页插入RID
+        return insert_into_overflow_page(value, new_overflow_page);
+    }
+}
+
+/**
+ * @brief 从溢出页中删除RID，并自动清理空页面
+ * @param value 要删除的RID
+ * @param page_no 溢出页页号
+ * @param prev_page_no 前一个溢出页的页号，用于维护链表（IX_NO_PAGE表示这是第一个溢出页）
+ * @return 删除后的下一个溢出页页号（如果当前页被删除）或当前页号
+ */
+page_id_t IxIndexHandle::remove_from_overflow_page(const Rid &value, page_id_t page_no, page_id_t prev_page_no) {
+    TRACE_FUNCTION
+    if (page_no == IX_NO_PAGE) {
+        return IX_NO_PAGE;
+    }
+    
+    Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
+    if (page == nullptr) {
+        return page_no;
+    }
+    
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
+    Rid *rids = reinterpret_cast<Rid*>(page->get_data() + sizeof(IxOverflowPageHdr));
+    
+    // 在当前页面中查找要删除的RID
+    for (int i = 0; i < hdr->num_rids; i++) {
+        if (rids[i].page_no == value.page_no && rids[i].slot_no == value.slot_no) {
+            // 找到要删除的RID，用最后一个RID覆盖它
+            rids[i] = rids[hdr->num_rids - 1];
+            hdr->num_rids--;
+            
+            // 检查页面是否变空
+            if (hdr->num_rids == 0) {
+                page_id_t next_page = hdr->next_overflow_page;
+                
+                // 更新前一个页面的next指针（如果存在前一个页面）
+                if (prev_page_no != IX_NO_PAGE) {
+                    Page *prev_page = buffer_pool_manager_->fetch_page({fd_, prev_page_no});
+                    if (prev_page != nullptr) {
+                        IxOverflowPageHdr *prev_hdr = reinterpret_cast<IxOverflowPageHdr*>(prev_page->get_data());
+                        prev_hdr->next_overflow_page = next_page;
+                        buffer_pool_manager_->unpin_page(prev_page->get_page_id(), true);
+                    }
+                }
+                
+                // 删除当前空页面
+                buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+                buffer_pool_manager_->delete_page({fd_, page_no});
+                file_hdr_->num_pages_--;
+                
+                return next_page; // 返回下一个页面的页号
+            } else {
+                buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty
+                return page_no; // 页面没有被删除，返回当前页号
+            }
+        }
+    }
+    
+    // 在当前页面中没找到，继续在下一个溢出页中查找
+    if (hdr->next_overflow_page != IX_NO_PAGE) {
+        page_id_t new_next = remove_from_overflow_page(value, hdr->next_overflow_page, page_no);
+        if (new_next != hdr->next_overflow_page) {
+            // 下一个页面被删除了，更新当前页面的next指针
+            hdr->next_overflow_page = new_next;
+            buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty
+        } else {
+            buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+        }
+        return page_no;
+    }
+    
+    buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+    return page_no;
+}
+
+/**
+ * @brief 获取溢出页中的所有RID
+ * @param page_no 溢出页页号
+ * @param result 存储结果的向量
+ * @note 会遍历整个溢出页链表
+ */
+void IxIndexHandle::get_all_rids_from_overflow_page(page_id_t page_no, std::vector<Rid> *result) {
+    TRACE_FUNCTION
+    Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
+    if (page == nullptr) {
+        return;
+    }
+    
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
+    Rid *rids = reinterpret_cast<Rid*>(page->get_data() + sizeof(IxOverflowPageHdr));
+    
+    // 添加当前页面的所有RID
+    for (int i = 0; i < hdr->num_rids; i++) {
+        result->push_back(rids[i]);
+    }
+    
+    // 递归处理下一个溢出页
+    if (hdr->next_overflow_page != IX_NO_PAGE) {
+        get_all_rids_from_overflow_page(hdr->next_overflow_page, result);
+    }
+    
+    buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+}
+
+/**
+ * @brief 释放溢出页链表
+ * @param page_no 溢出页链表的起始页号
+ * @note 释放从指定页开始的整个溢出页链表
+ */
+void IxIndexHandle::release_overflow_page_chain(page_id_t page_no) {
+    TRACE_FUNCTION
+    if (page_no == IX_NO_PAGE) {
+        return;
+    }
+    
+    Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
+    if (page == nullptr) {
+        return;
+    }
+    
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
+    page_id_t next_page = hdr->next_overflow_page;
+    
+    buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+    buffer_pool_manager_->delete_page({fd_, page_no});
+    file_hdr_->num_pages_--;
+    
+    // 递归释放下一个溢出页
+    if (next_page != IX_NO_PAGE) {
+        release_overflow_page_chain(next_page);
+    }
 }
 
 /**
@@ -628,23 +844,92 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
 
     Page *leaf_page = find_leaf_page(key, Operation::DELETE, transaction);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
-    if (leaf_node->get_size() == leaf_node->remove(key)) {
+
+    int pos = leaf_node->lower_bound(key);
+    
+    // 检查键是否存在
+    if (pos >= leaf_node->get_size() || ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
         // 没有这个键
         UnlockAncestors(transaction);
         leaf_page->wunlatch();  // 删除完毕后释放叶子结
         buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
         delete leaf_node;  // 释放叶子结点内存
         return false;
-    } else {
-        coalesce_or_redistribute(leaf_node, transaction);
-        // transaction->append_index_deleted_page(leaf_page);
+    }
+
+    // 键存在，获取对应的RID
+    auto rid_ = leaf_node->get_rid(pos);
+
+    // 检查是否为溢出页引用
+    if (rid_->slot_no == IX_NO_SLOT && rid_->page_no != IX_NO_PAGE) {
+        release_overflow_page_chain(rid_->page_no);
+    }
+
+    // 删除键
+    leaf_node->erase_pair(pos);
+    coalesce_or_redistribute(leaf_node, transaction);
+    UnlockAncestors(transaction);
+    leaf_page->wunlatch();
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+    delete leaf_node;
+    return true;
+}
+
+/**
+ * @brief 从B+树中删除指定键值对
+ * @return bool
+ *         - true：成功删除目标键值对
+ *         - false：未找到目标键值对
+ * @warning
+ * - 
+ */
+bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *transaction) {
+    TRACE_FUNCTION
+    root_latch_.lock();
+    if (is_empty()) {
+        root_latch_.unlock();
+        return false;  // 如果索引为空，直接返回false
+    }
+
+    Page *leaf_page = find_leaf_page(key, Operation::DELETE, transaction);
+    auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
+
+    int pos = leaf_node->lower_bound(key);
+    
+    // 检查键是否存在
+    if (pos >= leaf_node->get_size() || ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
+        // 没有这个键
         UnlockAncestors(transaction);
         leaf_page->wunlatch();  // 删除完毕后释放叶子结
-        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
         delete leaf_node;  // 释放叶子结点内存
-        return true;
+        return false;
     }
-    return false;
+
+    // 键存在，获取对应的RID
+    auto rid_ = leaf_node->get_rid(pos);
+    bool is_dirty = false;
+    bool need_delete = false;
+    // 检查是否为溢出页引用
+    if (rid_->slot_no == IX_NO_SLOT && rid_->page_no != IX_NO_PAGE) {
+        auto next_page_no = remove_from_overflow_page(rid, rid_->page_no, IX_NO_PAGE);
+        is_dirty = (next_page_no != rid_->page_no);
+        leaf_node->set_rid(pos, Rid{next_page_no, IX_NO_SLOT});
+        if(next_page_no == IX_NO_PAGE) {
+            need_delete = true;
+        }
+    }
+    if (need_delete){
+        // 删除键
+        leaf_node->erase_pair(pos);
+        is_dirty = true;  // 删除操作需要标记为脏页
+        coalesce_or_redistribute(leaf_node, transaction);
+    }
+    UnlockAncestors(transaction);
+    leaf_page->wunlatch();
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), is_dirty);
+    delete leaf_node;
+    return true;
 }
 
 /**
