@@ -123,8 +123,10 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
         } else {
             bool ok = true;
             for (const auto &rid_ : result) {
-                auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr, tab_.cols);
-                if (rec != nullptr) {
+                bool is_not_deleted = get_lock_and_check_conflict(context_->txn_, txn_mgr, fh_, rid_);
+                LockDataId lock_data_id(fh_->GetFd(), rid_, LockDataType::RECORD);
+                txn_mgr->get_lock_manager()->unlock(context_->txn_, lock_data_id);
+                if (is_not_deleted == true) {
                     ok = false;
                     break;
                 }

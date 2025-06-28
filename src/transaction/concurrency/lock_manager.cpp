@@ -27,15 +27,6 @@ See the Mulan PSL v2 for more details. */
 bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
-    // 两阶段锁协议
-    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
-        txn->get_state() == TransactionState::ABORTED) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
-    }
-    if (txn->get_state() == TransactionState::DEFAULT) {
-        txn->set_state(TransactionState::GROWING);
-    }
-
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
 
@@ -153,15 +144,6 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
  */
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
-
-    // 两阶段锁协议
-    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
-        txn->get_state() == TransactionState::ABORTED) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
-    }
-    if (txn->get_state() == TransactionState::DEFAULT) {
-        txn->set_state(TransactionState::GROWING);
-    }
 
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
@@ -362,14 +344,6 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 
 bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
     std::unique_lock<std::mutex> lock(latch_);
-
-    if (txn->get_state() == TransactionState::SHRINKING || txn->get_state() == TransactionState::COMMITTED ||
-        txn->get_state() == TransactionState::ABORTED) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::LOCK_ON_SHIRINKING);
-    }
-    if (txn->get_state() == TransactionState::DEFAULT) {
-        txn->set_state(TransactionState::GROWING);
-    }
 
     auto queue_it = gap_lock_table_.find(tab_fd);
     if (queue_it == gap_lock_table_.end()) {
