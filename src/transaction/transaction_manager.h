@@ -125,7 +125,6 @@ class TransactionManager {
 
     LockManager *get_lock_manager() { return lock_manager_; }
 
-
     timestamp_t get_next_txn_id() { return next_txn_id_.fetch_add(1); }
 
     timestamp_t get_next_timestamp() { return next_timestamp_.fetch_add(1); }

@@ -210,18 +210,18 @@ class SmManager {
         flush_meta();
     }
 
-    bool insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction *txn);
+    bool insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn);
 
-    bool insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction *txn);
+    bool insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn);
 
-    bool delete_index(const std::string& tab_name, RmRecord& rec, Transaction *txn);
+    bool delete_index(const std::string& tab_name, RmRecord& rec, Transaction* txn);
 
-    bool delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction *txn);
+    bool delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn);
 
     void flush_to_disk() {
-        for (const auto &[tab_name_, fh_] : fhs_) {
+        for (const auto& [tab_name_, fh_] : fhs_) {
             auto file_hdr_ = fh_->get_file_hdr();
-            disk_manager_->write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char *)(&file_hdr_), sizeof(file_hdr_));
+            disk_manager_->write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char*)(&file_hdr_), sizeof(file_hdr_));
             buffer_pool_manager_->flush_all_pages(fh_->GetFd());
         }
     }

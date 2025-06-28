@@ -512,7 +512,7 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-bool SmManager::insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction *txn) {
+bool SmManager::insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
     inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
@@ -547,7 +547,7 @@ bool SmManager::insert_index(const std::string& tab_name, RmRecord& rec, Rid rid
     return true;
 }
 
-bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction *txn) {
+bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
@@ -568,7 +568,7 @@ bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, R
     return true;
 }
 
-bool SmManager::delete_index(const std::string& tab_name, RmRecord& rec, Transaction *txn) {
+bool SmManager::delete_index(const std::string& tab_name, RmRecord& rec, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
@@ -586,7 +586,7 @@ bool SmManager::delete_index(const std::string& tab_name, RmRecord& rec, Transac
     return true;
 }
 
-bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction *txn) {
+bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {

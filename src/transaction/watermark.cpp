@@ -12,7 +12,7 @@ See the Mulan PSL v2 for more details. */
 
 void Watermark::AddTxn(timestamp_t read_ts) {
     current_reads_[read_ts]++;
-    watermark_ =  current_reads_.begin()->first;
+    watermark_ = current_reads_.begin()->first;
 }
 
 void Watermark::RemoveTxn(timestamp_t read_ts) {
@@ -26,8 +26,6 @@ void Watermark::RemoveTxn(timestamp_t read_ts) {
     watermark_ = current_reads_.empty() ? commit_ts_ : current_reads_.begin()->first;
 }
 
-void Watermark::UpdateCommitTs(timestamp_t commit_ts) { 
-    commit_ts_ = std::max(commit_ts_, commit_ts);
-}
+void Watermark::UpdateCommitTs(timestamp_t commit_ts) { commit_ts_ = std::max(commit_ts_, commit_ts); }
 
 timestamp_t Watermark::GetWatermark() { return watermark_; }
