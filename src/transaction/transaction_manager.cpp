@@ -153,15 +153,15 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         if (write_type == WType::INSERT_TUPLE) {
             auto rec = (*iter)->GetRecord();
             handle->delete_record(rid, context);
-            sm_manager_->delete_index(table_name, rec, context);
+            sm_manager_->delete_index_with_rid(table_name, rec, rid, context);
             log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
         } else if (write_type == WType::UPDATE_TUPLE) {
             //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
             auto new_rec = handle->get_record(rid, context);
             auto old_rec = (*iter)->GetRecord();
             handle->update_record(rid, old_rec.data, context);
-            sm_manager_->delete_index(table_name, *new_rec, context);
-            sm_manager_->insert_index(table_name, old_rec, rid, context);
+            sm_manager_->delete_index_with_rid(table_name, *new_rec, rid, context);
+            sm_manager_->insert_index_force(table_name, old_rec, rid, context);
             log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
         } else if (write_type == WType::DELETE_TUPLE) {
             auto rec = (*iter)->GetRecord();

@@ -121,9 +121,15 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
         if (is_exist == false) {
             res = ih->insert_entry(key.get(), rid, context_->txn_);
         } else {
-            Rid existing_rid = result[0];
-            auto rec = mvcc_get_record(existing_rid, context_, fh_, txn_mgr, tab_.cols);
-            if (rec == nullptr) {
+            bool ok = true;
+            for(const auto &rid_ : result) {
+                auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr, tab_.cols);
+                if(rec != nullptr) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) {
                 res = ih->insert_entry_force(key.get(), rid, context_->txn_);
             }
         }
@@ -134,7 +140,7 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
                 auto rollback_ih =
                     sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols))
                         .get();
-                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), context_->txn_);
+                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), rid, context_->txn_);
             }
             return false;
         }
