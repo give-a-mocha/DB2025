@@ -122,9 +122,9 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
             res = ih->insert_entry(key.get(), rid, context_->txn_);
         } else {
             bool ok = true;
-            for(const auto &rid_ : result) {
+            for (const auto &rid_ : result) {
                 auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr, tab_.cols);
-                if(rec != nullptr) {
+                if (rec != nullptr) {
                     ok = false;
                     break;
                 }

@@ -629,18 +629,18 @@ page_id_t IxIndexHandle::insert_entry_force(const char *key, const Rid &value, T
 page_id_t IxIndexHandle::create_overflow_page() {
     TRACE_FUNCTION
     file_hdr_->num_pages_++;
-    
+
     PageId new_page_id = {.fd = fd_, .page_no = INVALID_PAGE_ID};
     Page *page = buffer_pool_manager_->new_page(&new_page_id);
     if (page == nullptr) {
         throw RMDBError("Failed to create overflow page");
     }
-    
+
     // 初始化溢出页头部
-    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
-    *hdr = IxOverflowPageHdr(); // 使用默认构造函数初始化
-    
-    buffer_pool_manager_->unpin_page(new_page_id, true); // 标记为dirty
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr *>(page->get_data());
+    *hdr = IxOverflowPageHdr();  // 使用默认构造函数初始化
+
+    buffer_pool_manager_->unpin_page(new_page_id, true);  // 标记为dirty
     return new_page_id.page_no;
 }
 
@@ -657,19 +657,19 @@ bool IxIndexHandle::insert_into_overflow_page(const Rid &value, page_id_t page_n
     if (page == nullptr) {
         throw RMDBError("Failed to fetch overflow page");
     }
-    
+
     // 获取溢出页头部和RID数组
-    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
-    Rid *rids = reinterpret_cast<Rid*>(page->get_data() + sizeof(IxOverflowPageHdr));
-    
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr *>(page->get_data());
+    Rid *rids = reinterpret_cast<Rid *>(page->get_data() + sizeof(IxOverflowPageHdr));
+
     // 计算页面最大可存储的RID数量
     int max_rids = IX_OVERFLOW_PAGE_MAX_RIDS();
-    
+
     if (hdr->num_rids < max_rids) {
         // 当前页面有空间，直接插入
         rids[hdr->num_rids] = value;
         hdr->num_rids++;
-        buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty
+        buffer_pool_manager_->unpin_page(page->get_page_id(), true);  // 标记为dirty
         return true;
     } else if (hdr->next_overflow_page != IX_NO_PAGE) {
         // 当前页面已满，但有下一个溢出页，递归插入
@@ -679,8 +679,8 @@ bool IxIndexHandle::insert_into_overflow_page(const Rid &value, page_id_t page_n
         // 当前页面已满且没有下一个溢出页，创建新的溢出页
         page_id_t new_overflow_page = create_overflow_page();
         hdr->next_overflow_page = new_overflow_page;
-        buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty，因为修改了next_overflow_page
-        
+        buffer_pool_manager_->unpin_page(page->get_page_id(), true);  // 标记为dirty，因为修改了next_overflow_page
+
         // 向新创建的溢出页插入RID
         return insert_into_overflow_page(value, new_overflow_page);
     }
@@ -698,62 +698,62 @@ page_id_t IxIndexHandle::remove_from_overflow_page(const Rid &value, page_id_t p
     if (page_no == IX_NO_PAGE) {
         return IX_NO_PAGE;
     }
-    
+
     Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
     if (page == nullptr) {
         return page_no;
     }
-    
-    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
-    Rid *rids = reinterpret_cast<Rid*>(page->get_data() + sizeof(IxOverflowPageHdr));
-    
+
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr *>(page->get_data());
+    Rid *rids = reinterpret_cast<Rid *>(page->get_data() + sizeof(IxOverflowPageHdr));
+
     // 在当前页面中查找要删除的RID
     for (int i = 0; i < hdr->num_rids; i++) {
         if (rids[i].page_no == value.page_no && rids[i].slot_no == value.slot_no) {
             // 找到要删除的RID，用最后一个RID覆盖它
             rids[i] = rids[hdr->num_rids - 1];
             hdr->num_rids--;
-            
+
             // 检查页面是否变空
             if (hdr->num_rids == 0) {
                 page_id_t next_page = hdr->next_overflow_page;
-                
+
                 // 更新前一个页面的next指针（如果存在前一个页面）
                 if (prev_page_no != IX_NO_PAGE) {
                     Page *prev_page = buffer_pool_manager_->fetch_page({fd_, prev_page_no});
                     if (prev_page != nullptr) {
-                        IxOverflowPageHdr *prev_hdr = reinterpret_cast<IxOverflowPageHdr*>(prev_page->get_data());
+                        IxOverflowPageHdr *prev_hdr = reinterpret_cast<IxOverflowPageHdr *>(prev_page->get_data());
                         prev_hdr->next_overflow_page = next_page;
                         buffer_pool_manager_->unpin_page(prev_page->get_page_id(), true);
                     }
                 }
-                
+
                 // 删除当前空页面
                 buffer_pool_manager_->unpin_page(page->get_page_id(), false);
                 buffer_pool_manager_->delete_page({fd_, page_no});
                 file_hdr_->num_pages_--;
-                
-                return next_page; // 返回下一个页面的页号
+
+                return next_page;  // 返回下一个页面的页号
             } else {
-                buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty
-                return page_no; // 页面没有被删除，返回当前页号
+                buffer_pool_manager_->unpin_page(page->get_page_id(), true);  // 标记为dirty
+                return page_no;  // 页面没有被删除，返回当前页号
             }
         }
     }
-    
+
     // 在当前页面中没找到，继续在下一个溢出页中查找
     if (hdr->next_overflow_page != IX_NO_PAGE) {
         page_id_t new_next = remove_from_overflow_page(value, hdr->next_overflow_page, page_no);
         if (new_next != hdr->next_overflow_page) {
             // 下一个页面被删除了，更新当前页面的next指针
             hdr->next_overflow_page = new_next;
-            buffer_pool_manager_->unpin_page(page->get_page_id(), true); // 标记为dirty
+            buffer_pool_manager_->unpin_page(page->get_page_id(), true);  // 标记为dirty
         } else {
             buffer_pool_manager_->unpin_page(page->get_page_id(), false);
         }
         return page_no;
     }
-    
+
     buffer_pool_manager_->unpin_page(page->get_page_id(), false);
     return page_no;
 }
@@ -770,20 +770,20 @@ void IxIndexHandle::get_all_rids_from_overflow_page(page_id_t page_no, std::vect
     if (page == nullptr) {
         return;
     }
-    
-    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
-    Rid *rids = reinterpret_cast<Rid*>(page->get_data() + sizeof(IxOverflowPageHdr));
-    
+
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr *>(page->get_data());
+    Rid *rids = reinterpret_cast<Rid *>(page->get_data() + sizeof(IxOverflowPageHdr));
+
     // 添加当前页面的所有RID
     for (int i = 0; i < hdr->num_rids; i++) {
         result->push_back(rids[i]);
     }
-    
+
     // 递归处理下一个溢出页
     if (hdr->next_overflow_page != IX_NO_PAGE) {
         get_all_rids_from_overflow_page(hdr->next_overflow_page, result);
     }
-    
+
     buffer_pool_manager_->unpin_page(page->get_page_id(), false);
 }
 
@@ -797,19 +797,19 @@ void IxIndexHandle::release_overflow_page_chain(page_id_t page_no) {
     if (page_no == IX_NO_PAGE) {
         return;
     }
-    
+
     Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
     if (page == nullptr) {
         return;
     }
-    
-    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr*>(page->get_data());
+
+    IxOverflowPageHdr *hdr = reinterpret_cast<IxOverflowPageHdr *>(page->get_data());
     page_id_t next_page = hdr->next_overflow_page;
-    
+
     buffer_pool_manager_->unpin_page(page->get_page_id(), false);
     buffer_pool_manager_->delete_page({fd_, page_no});
     file_hdr_->num_pages_--;
-    
+
     // 递归释放下一个溢出页
     if (next_page != IX_NO_PAGE) {
         release_overflow_page_chain(next_page);
@@ -846,9 +846,10 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
 
     int pos = leaf_node->lower_bound(key);
-    
+
     // 检查键是否存在
-    if (pos >= leaf_node->get_size() || ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
+    if (pos >= leaf_node->get_size() ||
+        ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
         // 没有这个键
         UnlockAncestors(transaction);
         leaf_page->wunlatch();  // 删除完毕后释放叶子结
@@ -881,7 +882,7 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
  *         - true：成功删除目标键值对
  *         - false：未找到目标键值对
  * @warning
- * - 
+ * -
  */
 bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *transaction) {
     TRACE_FUNCTION
@@ -895,9 +896,10 @@ bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *t
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
 
     int pos = leaf_node->lower_bound(key);
-    
+
     // 检查键是否存在
-    if (pos >= leaf_node->get_size() || ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
+    if (pos >= leaf_node->get_size() ||
+        ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
         // 没有这个键
         UnlockAncestors(transaction);
         leaf_page->wunlatch();  // 删除完毕后释放叶子结
@@ -915,11 +917,11 @@ bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *t
         auto next_page_no = remove_from_overflow_page(rid, rid_->page_no, IX_NO_PAGE);
         is_dirty = (next_page_no != rid_->page_no);
         leaf_node->set_rid(pos, Rid{next_page_no, IX_NO_SLOT});
-        if(next_page_no == IX_NO_PAGE) {
+        if (next_page_no == IX_NO_PAGE) {
             need_delete = true;
         }
     }
-    if (need_delete){
+    if (need_delete) {
         // 删除键
         leaf_node->erase_pair(pos);
         is_dirty = true;  // 删除操作需要标记为脏页

@@ -21,16 +21,16 @@ See the Mulan PSL v2 for more details. */
  */
 void IxScan::next() {
     assert(!is_end());
-    
+
     if (has_overflow_cache_ && rid_index_ < current_rids_.size() - 1) {
         // 当前键还有未返回的RID，直接移动到下一个RID
         rid_index_++;
         return;
     }
-    
+
     // 当前键的所有RID都已遍历，移动到下一个键值位置
     next_key_position();
-    
+
     // 加载新位置的RID缓存
     if (!is_end()) {
         load_current_rids();
@@ -45,7 +45,7 @@ void IxScan::next_key_position() {
     auto node = new IxNodeHandle(ih_->file_hdr_, now);
     assert(node->is_leaf_page());
     assert(iid_.slot_no < node->get_size());
-    
+
     // increment slot no
     iid_.slot_no++;
     if (iid_.page_no != ih_->file_hdr_->last_leaf_ && iid_.slot_no == node->get_size()) {
@@ -69,14 +69,14 @@ void IxScan::load_current_rids() {
     current_rids_.clear();
     rid_index_ = 0;
     has_overflow_cache_ = false;
-    
+
     if (is_end()) {
         return;
     }
-    
+
     auto node = new IxNodeHandle(ih_->file_hdr_, now);
     auto rid = node->get_rid(iid_.slot_no);
-    
+
     if (rid->slot_no == IX_NO_SLOT && rid->page_no != IX_NO_PAGE) {
         // 这是一个溢出页引用，获取所有RID
         ih_->get_all_rids_from_overflow_page(rid->page_no, &current_rids_);
@@ -86,7 +86,7 @@ void IxScan::load_current_rids() {
         current_rids_.push_back(*rid);
         has_overflow_cache_ = true;
     }
-    
+
     delete node;
 }
 
@@ -95,10 +95,10 @@ void IxScan::load_current_rids() {
  * @details 从RID缓存中返回当前索引对应的RID，支持溢出页
  * @return Rid 当前位置对应的记录标识符
  */
-Rid IxScan::rid() const { 
+Rid IxScan::rid() const {
     if (has_overflow_cache_ && rid_index_ < current_rids_.size()) {
         return current_rids_[rid_index_];
     }
     // 如果没有缓存，使用原来的方法（向后兼容）
-    return ih_->get_rid(iid_); 
+    return ih_->get_rid(iid_);
 }
