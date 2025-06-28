@@ -911,14 +911,14 @@ bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *t
     // 键存在，获取对应的RID
     auto rid_ = leaf_node->get_rid(pos);
     bool is_dirty = false;
-    bool need_delete = false;
+    bool need_delete = true;
     // 检查是否为溢出页引用
     if (rid_->slot_no == IX_NO_SLOT && rid_->page_no != IX_NO_PAGE) {
         auto next_page_no = remove_from_overflow_page(rid, rid_->page_no, IX_NO_PAGE);
         is_dirty = (next_page_no != rid_->page_no);
         leaf_node->set_rid(pos, Rid{next_page_no, IX_NO_SLOT});
-        if (next_page_no == IX_NO_PAGE) {
-            need_delete = true;
+        if (next_page_no != IX_NO_PAGE) {
+            need_delete = false;
         }
     }
     if (need_delete) {
