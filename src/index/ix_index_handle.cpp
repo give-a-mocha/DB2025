@@ -764,7 +764,7 @@ page_id_t IxIndexHandle::remove_from_overflow_page(const Rid &value, page_id_t p
  * @param result 存储结果的向量
  * @note 会遍历整个溢出页链表
  */
-void IxIndexHandle::get_all_rids_from_overflow_page(page_id_t page_no, std::vector<Rid> *result) {
+void IxIndexHandle::get_all_rids_from_overflow_page(page_id_t page_no, std::vector<Rid> *result) const {
     TRACE_FUNCTION
     Page *page = buffer_pool_manager_->fetch_page({fd_, page_no});
     if (page == nullptr) {

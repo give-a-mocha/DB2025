@@ -15,17 +15,19 @@ See the Mulan PSL v2 for more details. */
 
 /**
  * @brief B+树索引扫描器类
- * @details 用于遍历B+树的叶子节点链表
+ * @details 用于遍历B+树的叶子节点链表，支持溢出页的高效处理
  *
  * 设计特点：
  * 1. 直接遍历叶子节点链表，避免重复查找
  * 2. 支持范围扫描操作
  * 3. 提供顺序访问接口
+ * 4. 优化溢出页访问，批量获取重复键的所有RID
  *
  * 关键功能：
  * - 使用双指针维护扫描范围
  * - 通过叶子节点链表高效遍历
  * - 支持范围查询的边界控制
+ * - 缓存溢出页RID，避免重复访问
  *
  * @note TODO：
  * - 需要为页面遍历添加读锁
@@ -38,6 +40,11 @@ class IxScan : public RecScan {
     BufferPoolManager *bpm_;   // 缓冲池管理器
     Page *now;
 
+    // 溢出页优化相关成员
+    std::vector<Rid> current_rids_;  // 当前键值对应的所有RID缓存
+    size_t rid_index_;               // 当前RID在缓存中的索引
+    bool has_overflow_cache_;        // 是否有有效的RID缓存
+
    public:
     /**
      * @brief 构造索引扫描器
@@ -47,10 +54,12 @@ class IxScan : public RecScan {
      * @param bpm 缓冲池管理器
      */
     IxScan(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
-        : ih_(ih), iid_(lower), end_(upper), bpm_(bpm) {
+        : ih_(ih), iid_(lower), end_(upper), bpm_(bpm), rid_index_(0), has_overflow_cache_(false) {
         if (!is_end()) {
             now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
             now->rlatch();  // 获取读锁，确保扫描期间页面不被修改
+            // 初始化RID缓存
+            load_current_rids();
         }
     }
 
@@ -90,4 +99,17 @@ class IxScan : public RecScan {
             now = nullptr;                                // 清空当前页面指针
         }
     }
+
+   private:
+    /**
+     * @brief 加载当前位置对应的所有RID（处理溢出页）
+     * @note 如果当前键值有溢出页，会一次性加载所有RID到缓存中
+     */
+    void load_current_rids();
+
+    /**
+     * @brief 移动到下一个键值位置（跳过当前键的所有RID）
+     * @note 内部使用，用于跳转到下一个不同的键值
+     */
+    void next_key_position();
 };

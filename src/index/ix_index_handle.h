@@ -538,7 +538,7 @@ class IxIndexHandle {
      * @param result 存储结果的向量
      * @note 会遍历整个溢出页链表
      */
-    void get_all_rids_from_overflow_page(page_id_t page_no, std::vector<Rid> *result);
+    void get_all_rids_from_overflow_page(page_id_t page_no, std::vector<Rid> *result) const;
 
     /**
      * @brief 释放溢出页链表
