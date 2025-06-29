@@ -42,7 +42,7 @@ constexpr int RM_FIRST_RECORD_PAGE = 1;
 /** @brief 单条记录的最大大小(字节)
  *  @note 考虑到页面大小和存储效率，限制记录大小
  */
-constexpr int RM_MAX_RECORD_SIZE = 512;
+constexpr int RM_MAX_RECORD_SIZE = 1024;
 
 /**
  * @brief 元组元数据结构体

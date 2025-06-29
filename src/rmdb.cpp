@@ -150,11 +150,11 @@ void *client_handler(void *sock_fd) {
 
         printf("i_recvBytes: %d \n ", i_recvBytes);
 
-        if (strcmp(data_recv, "exit") == 0) {
+        if (strncasecmp(data_recv, "exit", 4) == 0) {
             std::cout << "Client exit." << std::endl;
             break;
         }
-        if (strcmp(data_recv, "crash") == 0) {
+        if (strncasecmp(data_recv, "crash", 5) == 0) {
             std::cout << "Server crash" << std::endl;
             exit(1);
         }

@@ -28,7 +28,7 @@ using namespace ast;
 
 // SQL关键字 - 这些是保留字，在词法分析阶段识别
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER GROUP BY HAVING COUNT SUM AVG MIN MAX
-%token WHERE UPDATE SET SELECT INT CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ENABLE_NESTLOOP ENABLE_SORTMERGE
+%token WHERE UPDATE SET SELECT INT CHAR FLOAT DATETIME INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ENABLE_NESTLOOP ENABLE_SORTMERGE
 %token LIMIT OFFSET
 %token EXPLAIN AS
 %token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON SEMI
@@ -39,9 +39,9 @@ using namespace ast;
 
 // 带语义值的Token - 这些Token携带具体的数据
 %token <sv_str> IDENTIFIER VALUE_STRING     // 标识符和字符串字面量
-%token <sv_int> VALUE_INT                   // 整数字面量
-%token <sv_float> VALUE_FLOAT               // 浮点数字面量
-%token <sv_bool> VALUE_BOOL                 // 布尔字面量
+%token <sv_int> VALUE_INT                             // 整数字面量
+%token <sv_float> VALUE_FLOAT                         // 浮点数字面量
+%token <sv_bool> VALUE_BOOL                           // 布尔字面量
 
 
 // 语句类型 - 所有返回TreeNode的语法规则
@@ -82,16 +82,16 @@ using namespace ast;
 
 // WHERE相关
 %type <sv_cond> condition                   // 条件表达式
-%type <sv_conds> whereClause optWhereClause opt_on_clause// WHERE子句
+%type <sv_conds> whereClause optWhereClause opt_on_clause // WHERE子句
 
 // ORDER BY相关
 %type <sv_orderby> order_clause 
 %type <sv_orderbys> order_clauses opt_order_clause  // ORDER BY子句
-%type <sv_orderby_dir> opt_asc_desc               // 排序方向
+%type <sv_orderby_dir> opt_asc_desc                 // 排序方向
 
 // JOIN相关
-%type <sv_join_type> joinType               // JOIN类型
-%type <sv_join_expr> joinExpr               // JOIN表达式
+%type <sv_join_type> joinType                // JOIN类型
+%type <sv_join_expr> joinExpr                // JOIN表达式
 %type <sv_join_exprs> joinExprs optJoinExprs // JOIN表达式列表
 
 // group相关
@@ -288,6 +288,10 @@ type:
     |   FLOAT                               // 浮点数类型
     {
         $$ = std::make_shared<TypeLen>(SV_TYPE_FLOAT, sizeof(float));
+    }
+    |   DATETIME                            // 日期时间类型
+    {
+        $$ = std::make_shared<TypeLen>(SV_TYPE_STRING, 19);
     }
     ;
 
