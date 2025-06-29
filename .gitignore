@@ -52,6 +52,7 @@ index_test/*.txt
 
 lex.yy.cpp
 lex.yy.hpp
+lex.yy.h
 yacc.tab.cpp
 yacc.tab.h
 yacc.tab.hpp
