@@ -940,9 +940,9 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
                 all_cols.push_back(col);
             }
         }
-        if (ok) {
-            return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
-        }
+        // if (ok) {
+        //     return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
+        // }
         return x;
     } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
         for (auto &cond : x->conds_) {
@@ -963,10 +963,12 @@ std::shared_ptr<Plan> Planner::build_projection_plan(std::shared_ptr<Plan> plan,
                 all_cols.emplace_back(col);
             }
         }
-        if (cnt != get_table_col_num(x->tab_name_)) {
-            return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
-        }
-        return x;
+
+        return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
+        // if (cnt != get_table_col_num(x->tab_name_)) {
+        //     return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), all_cols);
+        // }
+        // return x;
     } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
         // 添加所有排序列到需要的列中
         for (const auto &sort_col : x->sel_cols_) {
