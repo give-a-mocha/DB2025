@@ -16,6 +16,8 @@
 %option bison-bridge
 /* 记录每个词的位置 */
 %option bison-locations
+/* 使词法分析器可重入 */
+%option reentrant
 
 %{
 #include "ast.h"

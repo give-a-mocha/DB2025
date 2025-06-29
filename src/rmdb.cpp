@@ -57,7 +57,7 @@ auto recovery = std::make_unique<RecoveryManager>(disk_manager.get(), buffer_poo
 auto ql_manager = std::make_unique<QlManager>(sm_manager.get(), txn_manager.get(), nullptr, recovery.get());
 auto portal = std::make_unique<Portal>(sm_manager.get());
 auto analyze = std::make_unique<Analyze>(sm_manager.get());
-pthread_mutex_t *buffer_mutex;
+// pthread_mutex_t *buffer_mutex;
 pthread_mutex_t *sockfd_mutex;
 
 /* 用于处理Ctrl+C信号的跳转缓冲区 */
@@ -126,6 +126,9 @@ void *client_handler(void *sock_fd) {
     int offset = 0;
     // 记录客户端当前正在执行的事务ID
     txn_id_t txn_id = INVALID_TXN_ID;
+    // 初始化parser
+    yyscan_t scanner;
+    yylex_init(&scanner);
 
     std::string output = "establish client connection, sockfd: " + std::to_string(fd) + "\n";
     std::cout << output;
@@ -134,7 +137,7 @@ void *client_handler(void *sock_fd) {
         std::cout << "Waiting for request..." << std::endl;
         memset(data_recv, 0, BUFFER_LENGTH);
 
-        i_recvBytes = read(fd, data_recv, BUFFER_LENGTH);
+        i_recvBytes = recv(fd, data_recv, BUFFER_LENGTH, 0);
 
         if (i_recvBytes == 0) {
             std::cout << "Maybe the client has closed" << std::endl;
@@ -167,16 +170,16 @@ void *client_handler(void *sock_fd) {
 
         // 用于判断是否已经调用了yy_delete_buffer来删除buf
         bool finish_analyze = false;
-        pthread_mutex_lock(buffer_mutex);
-        YY_BUFFER_STATE buf = yy_scan_string(data_recv);
-        if (yyparse() == 0) {
+        // pthread_mutex_lock(buffer_mutex);
+        YY_BUFFER_STATE buf = yy_scan_string(data_recv, scanner);
+        if (yyparse(scanner) == 0) {
             if (ast::parse_tree != nullptr) {
                 try {
                     // analyze and rewrite
                     std::shared_ptr<Query> query = analyze->do_analyze(ast::parse_tree);
-                    yy_delete_buffer(buf);
+                    yy_delete_buffer(buf, scanner);
                     finish_analyze = true;
-                    pthread_mutex_unlock(buffer_mutex);
+                    // pthread_mutex_unlock(buffer_mutex);
                     // 优化器
                     std::shared_ptr<Plan> plan = optimizer->plan_query(query, context.get());
                     // portal
@@ -232,8 +235,8 @@ void *client_handler(void *sock_fd) {
             outfile.close();
         }
         if (finish_analyze == false) {
-            yy_delete_buffer(buf);
-            pthread_mutex_unlock(buffer_mutex);
+            yy_delete_buffer(buf, scanner);
+            // pthread_mutex_unlock(buffer_mutex);
         }
         // future TODO: 格式化 sql_handler.result, 传给客户端
         // send result with fixed format, use protobuf in the future
@@ -249,6 +252,10 @@ void *client_handler(void *sock_fd) {
             // }
         }
     }
+    
+    delete [] data_send;  // 释放动态分配的内存
+
+    yylex_destroy(scanner);  // 销毁扫描器
 
     // Clear
     std::cout << "Terminating current client_connection..." << std::endl;
@@ -267,9 +274,9 @@ void *client_handler(void *sock_fd) {
 void start_server() {
     TRACE_FUNCTION
     // init mutex
-    buffer_mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
+    // buffer_mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
     sockfd_mutex = (pthread_mutex_t *)malloc(sizeof(pthread_mutex_t));
-    pthread_mutex_init(buffer_mutex, nullptr);
+    // pthread_mutex_init(buffer_mutex, nullptr);
     pthread_mutex_init(sockfd_mutex, nullptr);
 
     int sockfd_server;
