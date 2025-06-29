@@ -6,10 +6,10 @@
 #include <memory>
 
 // 词法分析器接口函数声明
-int yylex(YYSTYPE *yylval, YYLTYPE *yylloc);
+int yylex(YYSTYPE *yylval, YYLTYPE *yylloc, void *yyscanner);
 
 // 语法错误处理函数
-void yyerror(YYLTYPE *locp, const char* s) {
+void yyerror(YYLTYPE *locp, void *yyscanner, const char* s) {
     std::cerr << "Parser Error at line " << locp->first_line << " column " << locp->first_column << ": " << s << std::endl;
 }
 
@@ -22,6 +22,8 @@ using namespace ast;
 %locations
 // 启用详细的语法错误信息
 %define parse.error verbose
+
+%param {void *yyscanner}
 
 
 // SQL关键字 - 这些是保留字，在词法分析阶段识别

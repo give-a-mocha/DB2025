@@ -12,10 +12,16 @@ See the Mulan PSL v2 for more details. */
 
 #include "defs.h"
 
-int yyparse();
-
 typedef struct yy_buffer_state *YY_BUFFER_STATE;
 
-YY_BUFFER_STATE yy_scan_string(const char *str);
+typedef void *yyscan_t;
 
-void yy_delete_buffer(YY_BUFFER_STATE buffer);
+int yyparse(yyscan_t yyscanner);
+
+int yylex_init(yyscan_t *yyscanner);
+
+YY_BUFFER_STATE yy_scan_string(const char *str, yyscan_t yyscanner);
+
+void yy_delete_buffer(YY_BUFFER_STATE buffer, yyscan_t yyscanner);
+
+int yylex_destroy(yyscan_t yyscanner);

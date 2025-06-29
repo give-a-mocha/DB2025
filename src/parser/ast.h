@@ -380,7 +380,7 @@ struct SemValue {
     std::shared_ptr<Limit> sv_limit;
 };
 
-extern std::shared_ptr<ast::TreeNode> parse_tree;
+extern thread_local std::shared_ptr<ast::TreeNode> parse_tree;
 
 }  // namespace ast
 

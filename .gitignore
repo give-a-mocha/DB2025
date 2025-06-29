@@ -57,3 +57,9 @@ yacc.tab.h
 yacc.tab.hpp
 
 *.sql
+
+uv.lock
+main.py
+pyproject.toml
+.python-version
+TPCC-Tester/
