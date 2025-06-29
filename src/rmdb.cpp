@@ -252,8 +252,8 @@ void *client_handler(void *sock_fd) {
             // }
         }
     }
-    
-    delete [] data_send;  // 释放动态分配的内存
+
+    delete[] data_send;  // 释放动态分配的内存
 
     yylex_destroy(scanner);  // 销毁扫描器
 
