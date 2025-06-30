@@ -58,7 +58,7 @@ class TraceStackPrint {
 // #ifndef ENABLE_TRACE
 // #define ENABLE_TRACE
 // #endif
-#ifndef ENABLE_TRACE
+#ifdef ENABLE_TRACE
 #undef ENABLE_TRACE
 #endif
 #ifdef ENABLE_TRACE

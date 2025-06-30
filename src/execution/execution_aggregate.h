@@ -46,6 +46,7 @@ class AggregateExecutor : public AbstractExecutor {
         output_cols_.front().offset = 0;
         // 如果第一个聚合类型是COUNT，设置其类型为整数
         if (agg_types.front() == AggregateType::COUNT) {
+            output_cols_.front().agg_type = agg_types.front();
             output_cols_.front().type = ColType::TYPE_INT;
             output_cols_.front().len = sizeof(int);
             beginIndex = 1;
@@ -55,8 +56,11 @@ class AggregateExecutor : public AbstractExecutor {
         for (size_t i = beginIndex; i < output_cols_.size(); ++i) {
             // 根据聚合类型设置输出类型
             switch (agg_types[i]) {
+                // 保持原始列类型
+                case AggregateType::SUM:
+                case AggregateType::MIN:
+                case AggregateType::MAX:
                 case AggregateType::NONE:
-                    // 如果没有聚合，保持原始类型
                     output_cols_[i].type = cols_[i].type;
                     output_cols_[i].len = cols_[i].len;
                     break;
@@ -69,19 +73,10 @@ class AggregateExecutor : public AbstractExecutor {
                     output_cols_[i].type = ColType::TYPE_FLOAT;
                     output_cols_[i].len = sizeof(float);
                     break;
-                case AggregateType::SUM:
-                    // 如果原始类型是FLOAT，结果也是FLOAT
-                    if (output_cols_[i].type == ColType::TYPE_FLOAT) {
-                        output_cols_[i].len = sizeof(float);
-                    }
-                    break;
-                // MIN和MAX保持原始类型
-                case AggregateType::MIN:
-                case AggregateType::MAX:
-                    break;
                 default:
                     throw InternalError("Unknown aggregate type");
             }
+            output_cols_[i].agg_type = agg_types[i];  // 设置聚合类型
             // 计算列的偏移量（基于前一列的偏移量和长度）
             if (i != 0) output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;
         }
@@ -91,7 +86,6 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 开始元组遍历，执行聚合操作
      */
     void beginTuple() override {
-        TRACE_FUNCTION
         prev_->beginTuple();
 
         // 检查前一个执行器是否为分组执行器
@@ -123,7 +117,6 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 移动到下一个元组
      */
     void nextTuple() override {
-        TRACE_FUNCTION
         if (current_record_ != aggregated_records_.end()) {
             ++current_record_;
         }
@@ -166,7 +159,6 @@ class AggregateExecutor : public AbstractExecutor {
      * @return 聚合后的记录，如果为空则返回nullptr
      */
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
-        TRACE_FUNCTION
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
         std::vector<Value> values(agg_types_.size());

@@ -48,6 +48,7 @@ class GroupExecutor : public AbstractExecutor {
             } else {
                 cols_.push_back(*get_col(prev_->cols(), sel_col));
             }
+            cols_.back().agg_type = sel_col.agg_type;  // 设置聚合类型
         });
         // 处理 GROUP BY 列元数据
         std::for_each(group_cols.begin(), group_cols.end(), [this](const auto& group_col) {
@@ -157,7 +158,7 @@ class GroupExecutor : public AbstractExecutor {
      * @return 如果所有条件都满足，则返回 true；否则返回 false。
      */
     bool eval_aggr_conds(const std::vector<ColMeta>& rec_cols, const std::vector<Condition>& conds,
-                         const std::vector<std::unique_ptr<RmRecord>>& records) const {
+                         const std::vector<std::unique_ptr<RmRecord>>& records) {
         TRACE_FUNCTION
         return std::all_of(conds.begin(), conds.end(), [&](const Condition& cond) {
             // 对每个条件调用 eval_aggr_cond
@@ -173,7 +174,7 @@ class GroupExecutor : public AbstractExecutor {
      * @return 如果条件满足，则返回 true；否则返回 false。
      */
     bool eval_aggr_cond(const std::vector<ColMeta>& rec_cols, const Condition& cond,
-                        const std::vector<std::unique_ptr<RmRecord>>& rec) const {
+                        const std::vector<std::unique_ptr<RmRecord>>& rec) {
         auto copy_cond = cond;  // 创建条件的副本以防修改原始条件
         // 计算条件的左侧聚合值
         Value lhs_val = get_aggr_value(rec_cols, rec, copy_cond.lhs_col, cond.lhs_col.agg_type);

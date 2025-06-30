@@ -35,12 +35,11 @@ class ProjectionExecutor : public AbstractExecutor {
      * @param sel_cols 需要投影的列
      */
     ProjectionExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol> &sel_cols) {
+        TRACE_FUNCTION
         // 转移前序执行器的所有权到当前执行器
         prev_ = std::move(prev);
-
-        // 检查前序执行器是否为聚合执行器
-        // 如果是聚合执行器，需要特殊处理列的映射关系
-        if (prev_->getType() == "AggregateExecutor") {
+        if (prev_ != nullptr && (prev_->getType() == "AggregateExecutor" || prev_->getType() == "SortExecutor" ||
+                                 prev_->getType() == "GroupExecutor")) {
             prev_is_aggr_ = true;
         }
 
@@ -53,7 +52,7 @@ class ProjectionExecutor : public AbstractExecutor {
         // 遍历需要投影的每一列
         for (auto &sel_col : sel_cols) {
             // 在前序执行器的列中查找当前要投影的列
-            auto pos = get_col(prev_cols, sel_col);
+            auto pos = get_col(prev_cols, sel_col, prev_is_aggr_);
 
             // 记录该列在前序执行器结果中的索引位置
             // 用于后续从前序记录中提取对应列的数据
@@ -76,11 +75,11 @@ class ProjectionExecutor : public AbstractExecutor {
         // 设置投影后记录的总长度
         len_ = curr_offset;
 
-        // 特殊处理：如果前序是聚合执行器
-        // 直接使用前序执行器的列元数据，因为聚合结果的列结构可能已经发生变化
-        if (prev_is_aggr_) {
-            cols_ = prev_cols;
-        }
+        // // 特殊处理：如果前序是聚合执行器
+        // // 直接使用前序执行器的列元数据，因为聚合结果的列结构可能已经发生变化
+        // if (prev_is_aggr_) {
+        //     cols_ = prev_cols;
+        // }
     }
 
     /**
@@ -109,7 +108,7 @@ class ProjectionExecutor : public AbstractExecutor {
         // 获取输入记录
         auto prev_rec = prev_->Next();
         if (!prev_rec) {
-            std::cerr << "Error: Previous record is null at " + getType() << std::endl;
+            ERROR("Error: Previous record is null at {}", getType());
             return nullptr;
         }
 
@@ -120,9 +119,6 @@ class ProjectionExecutor : public AbstractExecutor {
         // 复制选中的列数据
         for (size_t i = 0; i < sel_idxs_.size(); ++i) {
             size_t prev_idx = sel_idxs_[i];
-            if (prev_is_aggr_) {
-                prev_idx = i;
-            }
             auto &prev_col = prev_cols[prev_idx];
             auto &proj_col = cols_[i];
 
