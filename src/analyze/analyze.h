@@ -129,6 +129,9 @@ class Analyze {
      */
     void convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs);
 
+    void convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs, const std::unordered_map<std::string, TabCol> &col_refs);
+
+    bool convert_col_alias(const std::unordered_map<std::string, TabCol> &col_refs, TabCol &target);
     /**
      * @brief 获取所有相关表的列元数据
      * @param tab_names 表名列表

@@ -83,7 +83,12 @@ struct TabCol {
      * @return 如果x等于y则返回true
      */
     friend bool operator==(const TabCol &x, const TabCol &y) {
-        return x.tab_name == y.tab_name && x.col_name == y.col_name && x.tab_alias == y.tab_alias;
+        return x.tab_name == y.tab_name && x.col_name == y.col_name && x.tab_alias == y.tab_alias &&
+               x.col_alias == y.col_alias && x.agg_type == y.agg_type;
+    }
+
+    friend bool operator!=(const TabCol &x, const TabCol &y) {
+        return !(x == y);  // 使用相等运算符的否定
     }
 
     /**

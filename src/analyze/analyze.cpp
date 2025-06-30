@@ -81,7 +81,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
     std::shared_ptr<Query> query = std::make_shared<Query>();          // 创建查询对象
     if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse)) {  // 处理SELECT查询
         // 检查所有表是否存在并处理表名和别名
-        std::vector<TabRef> tab_refs;  // 存储表引用及其别名
+        std::vector<TabRef> tab_refs;                      // 存储表引用及其别名
+        std::unordered_map<std::string, TabCol> col_refs;  // 存储列别名及其对应列
         tab_refs.reserve(x->tabs.size());
         query->tables.reserve(x->tabs.size());
         for (const auto &sv_tab : x->tabs) {
@@ -146,7 +147,18 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
                 sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
                 convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
-                query->cols.push_back(sel_col);                    // 添加到查询列表
+                if (col_refs.count(sel_col.col_alias) && col_refs[sel_col.col_alias] != sel_col) {
+                    throw AmbiguousColumnError(sel_col.col_alias);
+                }
+                col_refs[sel_col.col_alias] = sel_col;  // 存储列
+                query->cols.push_back(sel_col);         // 添加到查询列表
+            }
+        }
+
+        // 检查别名是否与原有列冲突
+        for (const auto &col : all_cols) {
+            if (col_refs.count(col.name)) {
+                throw AmbiguousColumnError(col.name);
             }
         }
 
@@ -221,7 +233,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 order_by_info.dir = sv_order_by->orderby_dir;
 
                 TabCol order_by_col = {"", sv_order_by->cols->col_name, sv_order_by->cols->tab_name};
-                convert_tabname(all_cols, order_by_col, tab_refs);
+                convert_tabname(all_cols, order_by_col, tab_refs, col_refs);
                 order_by_col.set_agg_type(sv_order_by->cols->aggregate_type);
                 order_by_info.col = check_column(all_cols, order_by_col);
                 query->order_bys.push_back(order_by_info);
@@ -410,6 +422,25 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
         target.tab_name = tab_name;                   // 设置推断出的表名
         convert_tabname(all_cols, target, tab_refs);  // 递归调用，进一步解析表名和别名
     }
+}
+
+void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs, const std::unordered_map<std::string, TabCol> &col_refs) {
+    TRACE_FUNCTION
+    if(target.tab_alias.empty() && target.tab_name.empty() && convert_col_alias(col_refs, target)) {
+        return;  // 如果列别名转换成功，直接返回
+    }
+    // 如果列别名转换失败，继续使用原有的 convert_tabname 逻辑
+    convert_tabname(all_cols, target, tab_refs);
+}
+
+bool Analyze::convert_col_alias(const std::unordered_map<std::string, TabCol> &col_refs, TabCol &target) {
+    TRACE_FUNCTION
+    if (col_refs.count(target.col_name)){
+        // 如果列名在别名映射中存在，直接使用对应的列引用
+        target = col_refs.at(target.col_name);
+        return true;
+    }
+    return false;
 }
 
 /**
