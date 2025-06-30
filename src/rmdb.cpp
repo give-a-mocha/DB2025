@@ -216,7 +216,7 @@ void *client_handler(void *sock_fd) {
                     offset = e.get_msg_len() + 1;
 
                     if (sm_manager->is_output_file_) {
-                    // 将报错信息写入output.txt
+                        // 将报错信息写入output.txt
                         std::fstream outfile;
                         outfile.open("output.txt", std::ios::out | std::ios::app);
                         outfile << "failure\n";

@@ -64,7 +64,7 @@ class SmManager {
     // 键：索引名（格式：表名_列名）
     // 值：对应的索引文件句柄
     // 用途：管理当前数据库中每个索引的文件访问
-    bool is_output_file_ = true;   // 是否启用输出文件
+    bool is_output_file_ = true;  // 是否启用输出文件
 
    private:
     DiskManager* disk_manager_;               // 磁盘管理器，负责文件系统操作

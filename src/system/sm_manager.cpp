@@ -200,7 +200,7 @@ void SmManager::close_db() {
  * @param {Context*} context 执行上下文
  */
 void SmManager::show_tables(Context* context) {
-    if(!is_output_file_) return ;
+    if (!is_output_file_) return;
     std::fstream outfile;
     outfile.open("output.txt", std::ios::out | std::ios::app);
     outfile << "| Tables |\n";
@@ -237,8 +237,8 @@ void SmManager::show_index(const std::string& tab_name, Context* context) {
     if (db_.tabs_.find(tab_name) == db_.tabs_.end()) {
         throw TableNotFoundError(tab_name);
     }
-    
-    if(!is_output_file_) return ;
+
+    if (!is_output_file_) return;
 
     TabMeta& tab = db_.get_table(tab_name);
 
@@ -607,9 +607,7 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
     return true;
 }
 
-void SmManager::set_output_file(bool enable) {
-    is_output_file_ = enable;
-}
+void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
 
 void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path) {
     // INFO("Loading CSV data into table: {}, from file: {}", table_name, file_path);
@@ -623,10 +621,10 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
     if (!file.is_open()) {
         throw RMDBError("Cannot open CSV file: " + file_path);
     }
-    TabMeta &tab_ = db_.get_table(table_name);
+    TabMeta& tab_ = db_.get_table(table_name);
     auto fh_ = fhs_[table_name].get();
     const size_t record_size = fh_->get_record_size();
-    
+
     // 4. 预分配记录缓冲区
     std::vector<char> record_buffer(record_size);
     char* record_data = record_buffer.data();

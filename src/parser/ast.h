@@ -92,7 +92,7 @@ struct LoadStmt : public TreeNode {
 
 // Set output_file command AST node
 struct SetOutputStmt : public TreeNode {
-    bool enable; // true for on, false for off
+    bool enable;  // true for on, false for off
 
     SetOutputStmt(bool enable_) : enable(enable_) {}
 };
