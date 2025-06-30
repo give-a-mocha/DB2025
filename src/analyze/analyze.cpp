@@ -149,7 +149,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
                 if (!sel_col.col_alias.empty() && sel_col.col_alias != sel_col.col_name) {
                     if (col_refs.count(sel_col.col_alias)) {
-                        throw AmbiguousColumnError(sel_col.col_alias);
+                        throw InternalError("Duplicate column alias '" + sel_col.col_alias + "'");
                     }
                     col_refs[sel_col.col_alias] = sel_col;  // 存储列别名映射
                 }
