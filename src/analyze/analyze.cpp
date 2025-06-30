@@ -147,11 +147,13 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
                 sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
                 convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
-                if (col_refs.count(sel_col.col_alias) && col_refs[sel_col.col_alias] != sel_col) {
-                    throw AmbiguousColumnError(sel_col.col_alias);
+                if (!sel_col.col_alias.empty()) {
+                    if (col_refs.count(sel_col.col_alias)) {
+                        throw AmbiguousColumnError(sel_col.col_alias);
+                    }
+                    col_refs[sel_col.col_alias] = sel_col;  // 存储列别名映射
                 }
-                col_refs[sel_col.col_alias] = sel_col;  // 存储列
-                query->cols.push_back(sel_col);         // 添加到查询列表
+                query->cols.push_back(sel_col);  // 添加到查询列表
             }
         }
 
