@@ -154,6 +154,10 @@ class RmFileHandle {
      */
     std::unique_ptr<RmRecord> get_record(const Rid &rid, Context *context) const;
 
+    int get_record_size() const {
+        return file_hdr_.record_size;  // 返回每条记录的大小
+    }
+
     /**
      * @brief 插入新记录
      * @param buf 记录数据缓冲区

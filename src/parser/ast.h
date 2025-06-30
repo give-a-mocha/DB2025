@@ -81,6 +81,22 @@ struct TxnRollback : public TreeNode {};
 
 struct CreateStaticCheckpoint : public TreeNode {};
 
+// Load command AST node
+struct LoadStmt : public TreeNode {
+    std::string file_name;
+    std::string table_name;
+
+    LoadStmt(std::string file_name_, std::string table_name_)
+        : file_name(std::move(file_name_)), table_name(std::move(table_name_)) {}
+};
+
+// Set output_file command AST node
+struct SetOutputStmt : public TreeNode {
+    bool enable;  // true for on, false for off
+
+    SetOutputStmt(bool enable_) : enable(enable_) {}
+};
+
 struct TypeLen : public TreeNode {
     SvType type;
     int len;

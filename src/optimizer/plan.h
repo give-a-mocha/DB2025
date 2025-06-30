@@ -49,6 +49,8 @@ enum class PlanTag {
     T_Group,
     T_Aggregate,
     T_Create_StaticCheckPoint,
+    T_LOAD,
+    T_SetOutput,  // Set output file
 };
 
 // 查询执行计划
@@ -291,6 +293,35 @@ class OtherPlan : public Plan {
      * @param tab_name 目标表名
      */
     OtherPlan(PlanTag tag, std::string tab_name) : Plan(tag), tab_name_(std::move(tab_name)) {}
+};
+
+class LoadPlan : public Plan {
+   public:
+    std::string table_name_;  //< 要加载数据的表名
+    std::string file_path_;   //< 数据文件路径
+
+    ~LoadPlan() = default;
+
+    /**
+     * @brief 构造Load计划节点
+     * @param table_name 要加载数据的表名
+     * @param file_path 数据文件路径
+     */
+    LoadPlan(PlanTag tag, std::string table_name, std::string file_path)
+        : Plan(tag), table_name_(std::move(table_name)), file_path_(std::move(file_path)) {}
+};
+
+class SetOutputPlan : public Plan {
+   public:
+    bool enable_;  ///< 是否启用输出文件
+
+    ~SetOutputPlan() = default;
+
+    /**
+     * @brief 构造SetOutput计划节点
+     * @param enable 是否启用输出文件
+     */
+    SetOutputPlan(PlanTag tag, bool enable) : Plan(tag), enable_(enable) {}
 };
 
 /**
