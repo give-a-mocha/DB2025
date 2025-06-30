@@ -147,7 +147,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
                 sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
                 convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
-                if (!sel_col.col_alias.empty()) {
+                if (!sel_col.col_alias.empty() && sel_col.col_alias != sel_col.col_name) {
                     if (col_refs.count(sel_col.col_alias)) {
                         throw AmbiguousColumnError(sel_col.col_alias);
                     }
@@ -160,7 +160,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 检查别名是否与原有列冲突
         for (const auto &col : all_cols) {
             if (col_refs.count(col.name)) {
-                throw AmbiguousColumnError(col.name);
+                throw InternalError("Column alias '" + col.name + "' conflicts with existing column");
             }
         }
 
