@@ -86,7 +86,6 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 开始元组遍历，执行聚合操作
      */
     void beginTuple() override {
-        
         prev_->beginTuple();
 
         // 检查前一个执行器是否为分组执行器
@@ -118,7 +117,6 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 移动到下一个元组
      */
     void nextTuple() override {
-        
         if (current_record_ != aggregated_records_.end()) {
             ++current_record_;
         }
@@ -161,7 +159,6 @@ class AggregateExecutor : public AbstractExecutor {
      * @return 聚合后的记录，如果为空则返回nullptr
      */
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
-        
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
         std::vector<Value> values(agg_types_.size());

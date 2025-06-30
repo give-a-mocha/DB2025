@@ -109,9 +109,11 @@ class AbstractExecutor {
      * @return 列的迭代器位置
      * @throw ColumnNotFoundError 当列不存在时
      */
-    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target, bool cmp_agg_type = false) {
+    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
+                                                 bool cmp_agg_type = false) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
-            return col.tab_name == target.tab_name && col.name == target.col_name && (!cmp_agg_type || col.agg_type == target.agg_type);
+            return col.tab_name == target.tab_name && col.name == target.col_name &&
+                   (!cmp_agg_type || col.agg_type == target.agg_type);
         });
         if (pos == rec_cols.end()) {
             throw ColumnNotFoundError(target.tab_name + '.' + target.col_name + " at " + getType());
@@ -241,7 +243,7 @@ class AbstractExecutor {
      * @return 计算得到的聚合值
      */
     Value get_aggr_value(const std::vector<ColMeta> &rec_cols, const std::vector<std::unique_ptr<RmRecord>> &rec,
-                                const TabCol &tab_col, AggregateType agg_type) {
+                         const TabCol &tab_col, AggregateType agg_type) {
         TRACE_FUNCTION
         Value val;         // 存储最终的聚合结果
         ColMeta col_meta;  // 目标列的元数据信息

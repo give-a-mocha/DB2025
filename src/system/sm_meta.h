@@ -24,12 +24,12 @@ See the Mulan PSL v2 for more details. */
  * @note 支持序列化和反序列化，用于元数据持久化
  */
 struct ColMeta {
-    std::string tab_name;  // 字段所属表名称
-    std::string name;      // 字段名称
-    ColType type;          // 字段类型
-    int len;               // 字段长度
-    int offset;            // 字段位于记录中的偏移量
-    bool index;            /** unused */
+    std::string tab_name;                         // 字段所属表名称
+    std::string name;                             // 字段名称
+    ColType type;                                 // 字段类型
+    int len;                                      // 字段长度
+    int offset;                                   // 字段位于记录中的偏移量
+    bool index;                                   /** unused */
     AggregateType agg_type{AggregateType::NONE};  // 聚合类型，默认为NONE
 
     friend std::ostream &operator<<(std::ostream &os, const ColMeta &col) {

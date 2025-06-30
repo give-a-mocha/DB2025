@@ -39,7 +39,7 @@ class ProjectionExecutor : public AbstractExecutor {
         // 转移前序执行器的所有权到当前执行器
         prev_ = std::move(prev);
         if (prev_ != nullptr && (prev_->getType() == "AggregateExecutor" || prev_->getType() == "SortExecutor" ||
-            prev_->getType() == "GroupExecutor")) {
+                                 prev_->getType() == "GroupExecutor")) {
             prev_is_aggr_ = true;
         }
 

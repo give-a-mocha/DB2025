@@ -401,9 +401,7 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
     for (const auto &col : query_cols) {
         agg_types.push_back(col.agg_type);
     }
-    if(all_of(agg_types.begin(), agg_types.end(), [](AggregateType type) {
-           return type == AggregateType::NONE;
-       })) {
+    if (all_of(agg_types.begin(), agg_types.end(), [](AggregateType type) { return type == AggregateType::NONE; })) {
         // 如果没有聚合函数，则不需要生成聚合计划
         return plan;
     }
