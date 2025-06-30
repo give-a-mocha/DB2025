@@ -406,7 +406,7 @@ int DiskManager::read_log(char *log_data, int size, int offset) {
  * @param {char} *log_data 要写入的日志内容
  * @param {int} size 要写入的内容大小
  */
-void DiskManager::write_log(char *log_data, int size) {
+void DiskManager::write_log(const char *log_data, int size) {
     if (log_fd_ == -1) {
         log_fd_ = open_file(LOG_FILE_NAME);
     }

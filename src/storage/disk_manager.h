@@ -84,7 +84,7 @@ class DiskManager {
      */
     int read_log(char *log_data, int size, int offset);
 
-    void write_log(char *log_data, int size);
+    void write_log(const char *log_data, int size);
 
     void SetLogFd(int log_fd) { log_fd_ = log_fd; }
 

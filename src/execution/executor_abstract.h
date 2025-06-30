@@ -198,7 +198,7 @@ class AbstractExecutor {
             throw IncompatibleTypeError(coltype2str(lhs_col->type), coltype2str(rhs_type));
         }
 
-        int cmp;
+        int cmp = 0;
         if (is_numeric) {
             Value lhs_val = Value::get_value(lhs_col->type, lhs_data);
             Value rhs_val = Value::get_value(rhs_type, rhs_data);

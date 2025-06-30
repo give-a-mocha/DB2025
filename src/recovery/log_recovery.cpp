@@ -110,7 +110,7 @@ void RecoveryManager::recovery() {
 
 void RecoveryManager::flush_to_disk() {
     sm_manager_->flush_to_disk();
-    char *STATIC_CHECK_POINT_STR = "[[STATIC_CHECK_POINT]]\n\n";
+    const char *STATIC_CHECK_POINT_STR = "[[STATIC_CHECK_POINT]]\n\n";
     disk_manager_->write_log(STATIC_CHECK_POINT_STR, std::strlen(STATIC_CHECK_POINT_STR));
     sm_manager_->set_log_offset(disk_manager_->get_file_size(LOG_FILE_NAME));
 }

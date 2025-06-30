@@ -292,7 +292,7 @@ struct Value {
         if (lhs.type != rhs.type && !is_numeric) {
             throw IncompatibleTypeError(coltype2str(lhs.type), coltype2str(rhs.type));
         }
-        int cmp;
+        int cmp = 0;
         if (is_numeric) {
             // 整数比较
             if (lhs.type == ColType::TYPE_INT && rhs.type == ColType::TYPE_INT) {

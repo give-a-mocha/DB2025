@@ -191,5 +191,5 @@ std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t o
         }
     }
 
-    return std::move(log_records_);
+    return log_records_;
 }
