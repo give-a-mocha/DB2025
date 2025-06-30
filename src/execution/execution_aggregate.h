@@ -55,8 +55,11 @@ class AggregateExecutor : public AbstractExecutor {
         for (size_t i = beginIndex; i < output_cols_.size(); ++i) {
             // 根据聚合类型设置输出类型
             switch (agg_types[i]) {
+                // 保持原始列类型
+                case AggregateType::SUM:
+                case AggregateType::MIN:
+                case AggregateType::MAX:
                 case AggregateType::NONE:
-                    // 如果没有聚合，保持原始类型
                     output_cols_[i].type = cols_[i].type;
                     output_cols_[i].len = cols_[i].len;
                     break;
@@ -68,16 +71,6 @@ class AggregateExecutor : public AbstractExecutor {
                     // AVG结果总是FLOAT类型
                     output_cols_[i].type = ColType::TYPE_FLOAT;
                     output_cols_[i].len = sizeof(float);
-                    break;
-                case AggregateType::SUM:
-                    // 如果原始类型是FLOAT，结果也是FLOAT
-                    if (output_cols_[i].type == ColType::TYPE_FLOAT) {
-                        output_cols_[i].len = sizeof(float);
-                    }
-                    break;
-                // MIN和MAX保持原始类型
-                case AggregateType::MIN:
-                case AggregateType::MAX:
                     break;
                 default:
                     throw InternalError("Unknown aggregate type");

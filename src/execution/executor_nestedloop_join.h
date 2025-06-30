@@ -120,7 +120,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
         // 检查空指针，如果任一记录为空则返回空指针
         if (!left_rec || !right_rec) {
-            std::cerr << "Error: One of the records is null at " + getType() << std::endl;
+            ERROR("Error: One of the records is null at {}", getType());
             return nullptr;
         }
 

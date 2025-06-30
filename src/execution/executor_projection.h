@@ -109,7 +109,7 @@ class ProjectionExecutor : public AbstractExecutor {
         // 获取输入记录
         auto prev_rec = prev_->Next();
         if (!prev_rec) {
-            std::cerr << "Error: Previous record is null at " + getType() << std::endl;
+            ERROR("Error: Previous record is null at {}", getType());
             return nullptr;
         }
 

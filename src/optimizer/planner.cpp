@@ -377,13 +377,6 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
     if (!x->has_sort) {
         return plan;
     }
-    std::vector<std::string> tables = query->tables;
-    std::vector<ColMeta> all_cols;
-    for (auto &sel_tab_name : tables) {
-        // 这里db_不能写成get_db(), 注意要传指针
-        const auto &sel_tab_cols = sm_manager_->db_.get_table(sel_tab_name).cols;
-        all_cols.insert(all_cols.end(), sel_tab_cols.begin(), sel_tab_cols.end());
-    }
     std::vector<TabCol> sel_cols;
     std::vector<bool> is_desc_list;
 
