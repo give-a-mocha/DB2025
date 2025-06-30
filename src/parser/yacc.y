@@ -31,14 +31,15 @@ using namespace ast;
 %token WHERE UPDATE SET SELECT INT CHAR FLOAT DATETIME INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ENABLE_NESTLOOP ENABLE_SORTMERGE
 %token LIMIT OFFSET
 %token EXPLAIN AS
-%token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON SEMI
+%token INNER_JOIN LEFT_JOIN RIGHT_JOIN FULL_JOIN ON SEMI OFF
 %token STATIC_CHECKPOINT
+%token LOAD OUTPUT_FILE
 
 // 复合操作符 - 由多个字符组成的操作符
 %token LEQ NEQ GEQ T_EOF
 
 // 带语义值的Token - 这些Token携带具体的数据
-%token <sv_str> IDENTIFIER VALUE_STRING     // 标识符和字符串字面量
+%token <sv_str> IDENTIFIER VALUE_STRING VALUE_PATH    // 标识符和字符串字面量
 %token <sv_int> VALUE_INT                             // 整数字面量
 %token <sv_float> VALUE_FLOAT                         // 浮点数字面量
 %token <sv_bool> VALUE_BOOL                           // 布尔字面量
@@ -49,7 +50,7 @@ using namespace ast;
 %left '*' '/'
 
 // 语句类型 - 所有返回TreeNode的语法规则
-%type <sv_node> stmt dbStmt ddl dml txnStmt setStmt
+%type <sv_node> stmt dbStmt ddl dml txnStmt setStmt loadStmt setOutputStmt
 %type <sv_limit> opt_limit_clause
 
 // 表结构相关
@@ -66,7 +67,7 @@ using namespace ast;
 %type <sv_vals> valueList                   // 值列表
 
 // 标识符
-%type <sv_str> tbName colName               // 表名和列名
+%type <sv_str> tbName colName filePath              // 表名和列名
 
 // 列表类型
 %type <sv_strs> colNameList                 // 列名列表
@@ -126,6 +127,11 @@ start:
         parse_tree = nullptr;
         YYACCEPT;
     }
+    |   setOutputStmt                       // 设置输出文件
+    {
+        parse_tree = $1;                    // 设置解析结果为输出设置语句
+        YYACCEPT;
+    }
     ;
 
 /* 语句分类 - SQL语句的顶层分类 */
@@ -135,6 +141,7 @@ stmt:
     |   dml                                 // 数据操作语言（DML）
     |   txnStmt                             // 事务控制语句
     |   setStmt                             // 配置设置语句
+    |   loadStmt                            // LOAD命令
     ;
 
 /* 事务控制语句 */
@@ -174,6 +181,26 @@ setStmt:
         SET set_knob_type '=' VALUE_BOOL    // 设置配置选项
     {
         $$ = std::make_shared<SetStmt>($2, $4);
+    }
+    ;
+
+/* LOAD命令 */
+loadStmt:
+        LOAD filePath INTO tbName
+    {
+        $$ = std::make_shared<LoadStmt>($2, $4);
+    }
+    ;
+
+/* SET OUTPUT_FILE命令 */
+setOutputStmt:
+        SET OUTPUT_FILE ON
+    {
+        $$ = std::make_shared<SetOutputStmt>(true);
+    }
+    |   SET OUTPUT_FILE OFF
+    {
+        $$ = std::make_shared<SetOutputStmt>(false);
     }
     ;
 
@@ -740,5 +767,5 @@ set_knob_type:
 /* 基本标识符规则 */
 tbName: IDENTIFIER;                         // 表名就是标识符
 colName: IDENTIFIER;                        // 列名就是标识符
-
+filePath: VALUE_PATH;                     // 文件路径就是字符串字面量
 %%

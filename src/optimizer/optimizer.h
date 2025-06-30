@@ -65,6 +65,11 @@ class Optimizer {
                 return std::make_shared<OtherPlan>(PlanTag::T_ShowIndex, x->tab_name);
             } else if (auto x = std::dynamic_pointer_cast<ast::DescTable>(query->parse)) {
                 return std::make_shared<OtherPlan>(PlanTag::T_DescTable, x->tab_name);
+            } else if (auto x = std::dynamic_pointer_cast<ast::LoadStmt>(query->parse)) {
+                // LoadStmt load file_name into table_name;
+                return std::make_shared<LoadPlan>(PlanTag::T_LOAD, x->table_name, x->file_name);
+            } else if (auto x = std::dynamic_pointer_cast<ast::SetOutputStmt>(query->parse)) {
+                return std::make_shared<SetOutputPlan>(PlanTag::T_SetOutput, x->enable);
             }
             // 2. 事务控制语句处理
             else if (auto x = std::dynamic_pointer_cast<ast::TxnBegin>(query->parse)) {

@@ -200,6 +200,7 @@ void SmManager::close_db() {
  * @param {Context*} context 执行上下文
  */
 void SmManager::show_tables(Context* context) {
+    if(!is_output_file_) return ;
     std::fstream outfile;
     outfile.open("output.txt", std::ios::out | std::ios::app);
     outfile << "| Tables |\n";
@@ -236,6 +237,8 @@ void SmManager::show_index(const std::string& tab_name, Context* context) {
     if (db_.tabs_.find(tab_name) == db_.tabs_.end()) {
         throw TableNotFoundError(tab_name);
     }
+    
+    if(!is_output_file_) return ;
 
     TabMeta& tab = db_.get_table(tab_name);
 
@@ -602,4 +605,71 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
         ih->delete_entry(key.get(), rid, txn);
     }
     return true;
+}
+
+void SmManager::set_output_file(bool enable) {
+    is_output_file_ = enable;
+}
+
+void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path) {
+    // INFO("Loading CSV data into table: {}, from file: {}", table_name, file_path);
+    // 1. 检查表是否存在
+    if (!db_.is_table(table_name)) {
+        throw TableNotFoundError(table_name);
+    }
+
+    // 2. 打开CSV文件并验证
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        throw RMDBError("Cannot open CSV file: " + file_path);
+    }
+    TabMeta &tab_ = db_.get_table(table_name);
+    auto fh_ = fhs_[table_name].get();
+    const size_t record_size = fh_->get_record_size();
+    
+    // 4. 预分配记录缓冲区
+    std::vector<char> record_buffer(record_size);
+    char* record_data = record_buffer.data();
+    // 5. 跳过头部行
+    std::string line;
+    std::getline(file, line, '\n');
+    // INFO("Skipping header line: {}", line);
+    // 6. 逐行读取和处理数据
+    while (std::getline(file, line, '\n')) {
+        // INFO("Loading line: {}", line);
+        // 7. 解析CSV行
+        std::stringstream line_stream(line);
+        std::string cell;
+        size_t offset = 0;
+        // 清零记录缓冲区
+        memset(record_data, 0, record_size);
+        // 8. 处理每一列
+        for (const auto& col : tab_.cols) {
+            // 读取下一个CSV字段
+            std::getline(line_stream, cell, ',');
+            switch (col.type) {
+                case ColType::TYPE_INT: {
+                    int int_val = std::stoi(cell);
+                    memcpy(record_data + offset, &int_val, col.len);
+                    break;
+                }
+                case ColType::TYPE_FLOAT: {
+                    float float_val = std::stof(cell);
+                    memcpy(record_data + offset, &float_val, col.len);
+                    break;
+                }
+                case ColType::TYPE_STRING: {
+                    // 将字符串复制到记录缓冲区，剩余空间填充0
+                    memcpy(record_data + offset, cell.c_str(), col.len);
+                    break;
+                }
+                default:
+                    throw RMDBError("Unsupported column type");
+            }
+            offset += col.len;
+        }
+        // 11. 插入记录到表中
+        fh_->insert_record(record_data, nullptr);
+    }
+    file.close();
 }

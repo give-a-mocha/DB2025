@@ -200,11 +200,12 @@ void *client_handler(void *sock_fd) {
                     //     txn_manager->GarbageCollection();
                     // }
                     std::cout << e.GetInfo() << std::endl;
-
-                    std::fstream outfile;
-                    outfile.open("output.txt", std::ios::out | std::ios::app);
-                    outfile << str;
-                    outfile.close();
+                    if (sm_manager->is_output_file_) {
+                        std::fstream outfile;
+                        outfile.open("output.txt", std::ios::out | std::ios::app);
+                        outfile << str;
+                        outfile.close();
+                    }
                 } catch (RMDBError &e) {
                     // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
                     // 遇到异常，打印异常信息
@@ -214,11 +215,13 @@ void *client_handler(void *sock_fd) {
                     data_send[e.get_msg_len() + 1] = '\0';
                     offset = e.get_msg_len() + 1;
 
+                    if (sm_manager->is_output_file_) {
                     // 将报错信息写入output.txt
-                    std::fstream outfile;
-                    outfile.open("output.txt", std::ios::out | std::ios::app);
-                    outfile << "failure\n";
-                    outfile.close();
+                        std::fstream outfile;
+                        outfile.open("output.txt", std::ios::out | std::ios::app);
+                        outfile << "failure\n";
+                        outfile.close();
+                    }
                 }
             }
         } else {
@@ -228,11 +231,13 @@ void *client_handler(void *sock_fd) {
             data_send[str.length()] = '\0';
             offset = str.length();
 
-            // 将报错信息写入output.txt
-            std::fstream outfile;
-            outfile.open("output.txt", std::ios::out | std::ios::app);
-            outfile << "failure\n";
-            outfile.close();
+            if (sm_manager->is_output_file_) {
+                // 将报错信息写入output.txt
+                std::fstream outfile;
+                outfile.open("output.txt", std::ios::out | std::ios::app);
+                outfile << "failure\n";
+                outfile.close();
+            }
         }
         if (finish_analyze == false) {
             yy_delete_buffer(buf, scanner);
