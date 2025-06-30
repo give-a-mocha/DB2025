@@ -21,7 +21,7 @@
 #include <memory>
 #include <unordered_set>
 
-// #include "common/TraceStack.hpp"
+#include "common/TraceStack.hpp"
 #include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
 #include "execution/executor_insert.h"

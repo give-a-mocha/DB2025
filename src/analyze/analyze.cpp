@@ -10,7 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "analyze.h"
 
-// #include "common/TraceStack.hpp"
+#include "common/TraceStack.hpp"
 #include "common/print.hpp"
 
 namespace {

@@ -26,7 +26,7 @@
 #include <unistd.h>
 
 #include "analyze/analyze.h"
-// #include "common/TraceStack.hpp"
+#include "common/TraceStack.hpp"
 #include "common/print.hpp"
 #include "errors.h"
 #include "optimizer/optimizer.h"
