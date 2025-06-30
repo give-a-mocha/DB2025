@@ -424,9 +424,10 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
     }
 }
 
-void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs, const std::unordered_map<std::string, TabCol> &col_refs) {
+void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &target, const std::vector<TabRef> &tab_refs,
+                              const std::unordered_map<std::string, TabCol> &col_refs) {
     TRACE_FUNCTION
-    if(target.tab_alias.empty() && target.tab_name.empty() && convert_col_alias(col_refs, target)) {
+    if (target.tab_alias.empty() && target.tab_name.empty() && convert_col_alias(col_refs, target)) {
         return;  // 如果列别名转换成功，直接返回
     }
     // 如果列别名转换失败，继续使用原有的 convert_tabname 逻辑
@@ -435,7 +436,7 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
 
 bool Analyze::convert_col_alias(const std::unordered_map<std::string, TabCol> &col_refs, TabCol &target) {
     TRACE_FUNCTION
-    if (col_refs.count(target.col_name)){
+    if (col_refs.count(target.col_name)) {
         // 如果列名在别名映射中存在，直接使用对应的列引用
         target = col_refs.at(target.col_name);
         return true;
