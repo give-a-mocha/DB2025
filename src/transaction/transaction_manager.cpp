@@ -69,6 +69,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     }
 
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
+    std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
     txn_map.emplace(txn->get_transaction_id(), txn);
     timestamp_t start_ts = get_next_timestamp();
     txn->set_start_ts(start_ts);        // 设置事务开始时间戳
