@@ -49,10 +49,11 @@ class SortExecutor : public AbstractExecutor {
      */
     SortExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
                  const std::vector<bool>& is_desc) {
+        TRACE_FUNCTION
         prev_ = std::move(prev);
         // 获取所有排序列的元数据
         for (size_t i = 0; i < sel_cols.size(); i++) {
-            auto col_meta = get_col(prev_->cols(), sel_cols[i]);
+            auto col_meta = get_col(prev_->cols(), sel_cols[i], true);
             sort_cols_.emplace_back(*col_meta, is_desc[i]);
         }
         current_index_ = 0;

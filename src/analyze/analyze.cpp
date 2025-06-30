@@ -10,7 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "analyze.h"
 
-#include "common/TraceStack.hpp"
+// #include "common/TraceStack.hpp"
 #include "common/print.hpp"
 
 namespace {
@@ -222,6 +222,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 
                 TabCol order_by_col = {"", sv_order_by->cols->col_name, sv_order_by->cols->tab_name};
                 convert_tabname(all_cols, order_by_col, tab_refs);
+                order_by_col.set_agg_type(sv_order_by->cols->aggregate_type);
                 order_by_info.col = check_column(all_cols, order_by_col);
                 query->order_bys.push_back(order_by_info);
             }

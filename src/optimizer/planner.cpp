@@ -21,7 +21,7 @@
 #include <memory>
 #include <unordered_set>
 
-#include "common/TraceStack.hpp"
+// #include "common/TraceStack.hpp"
 #include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
 #include "execution/executor_insert.h"
@@ -392,18 +392,22 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
 std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-
-    // 检查是否所有选定列都没有聚合类型
-    if (std::all_of(x->cols.begin(), x->cols.end(),
-                    [](const auto &sel) { return sel->aggregate_type == ast::SvAggregateType::NONE; })) {
-        return plan;
+    auto query_cols = query->cols;
+    for (const auto &order_col : query->order_bys) {
+        query_cols.push_back(order_col.col);
     }
     std::vector<AggregateType> agg_types;
-    agg_types.reserve(x->cols.size());
-    for (const auto &agg : x->cols) {
-        agg_types.push_back(SvAggregateType2AggregateType(agg->aggregate_type));
+    agg_types.reserve(query_cols.size());
+    for (const auto &col : query_cols) {
+        agg_types.push_back(col.agg_type);
     }
-    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query->cols, agg_types);
+    if(all_of(agg_types.begin(), agg_types.end(), [](AggregateType type) {
+           return type == AggregateType::NONE;
+       })) {
+        // 如果没有聚合函数，则不需要生成聚合计划
+        return plan;
+    }
+    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query_cols, agg_types);
 }
 
 // GROUP
@@ -413,7 +417,11 @@ std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query,
     if (x->group.empty()) {
         return plan;
     }
-    return std::make_shared<GroupPlan>(PlanTag::T_Group, std::move(plan), query->cols, query->group_cols,
+    auto query_cols = query->cols;
+    for (auto &order_col : query->order_bys) {
+        query_cols.push_back(order_col.col);
+    }
+    return std::make_shared<GroupPlan>(PlanTag::T_Group, std::move(plan), query_cols, query->group_cols,
                                        query->having_conds);
 }
 
