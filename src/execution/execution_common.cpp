@@ -64,6 +64,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
                                           TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_) {
     TRACE_FUNCTION
     auto rec = fh_->get_record(rid, context_);
+    bool is_deleted = false;
 
     auto pre_undo_link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
     while (pre_undo_link.has_value()) {
@@ -71,30 +72,36 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
         // 如果是自己修改的直接返回
         if (pre_undo_link.value().prev_txn_ == context_->txn_->get_transaction_id()) {
             if (undo_log.is_deleted_) {
-                rec = nullptr;
+                is_deleted = true;
             }
-            return rec;
+            break;
         }
         // 如果是已提交事物
         if (undo_log.ts_ <= context_->txn_->get_read_ts()) {
             if (undo_log.is_deleted_) {
-                rec = nullptr;
+                is_deleted = true;
             }
-            return rec;
+            break;
         }
-        for (size_t i = 0; i < cols_.size(); i++) {
-            if (undo_log.modified_fields_[i]) {
-                if (!undo_log.tuple_[i].raw) {
-                    undo_log.tuple_[i].init_raw(cols_[i].len);
+        if (undo_log.is_inserted_) {
+            is_deleted = true;
+        } else {
+            for (size_t i = 0; i < cols_.size(); i++) {
+                if (undo_log.modified_fields_[i]) {
+                    if (!undo_log.tuple_[i].raw) {
+                        undo_log.tuple_[i].init_raw(cols_[i].len);
+                    }
+                    memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
                 }
-                memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
             }
         }
         pre_undo_link = undo_log.prev_version_;
         if (!pre_undo_link->IsValid()) {
-            rec = nullptr;
             break;
         }
+    }
+    if (is_deleted) {
+        return nullptr;
     }
     return rec;
 }

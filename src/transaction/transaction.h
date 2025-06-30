@@ -43,6 +43,8 @@ struct UndoLink {
 struct UndoLog {
     /* 此日志是否为删除标记 */
     bool is_deleted_;
+
+    bool is_inserted_;
     /* 此撤销日志修改的字段 */
     std::vector<bool> modified_fields_;
     /* 修改前的字段 */

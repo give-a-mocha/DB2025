@@ -477,6 +477,7 @@ bool TransactionManager::should_perform_gc() {
 void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, std::vector<Value> values) {
     UndoLog log;
     log.is_deleted_ = false;
+    log.is_inserted_ = true;  // 标记为插入操作
     log.modified_fields_ = std::vector<bool>(values.size(), true);
     log.tuple_ = std::move(values);
     log.ts_ = get_next_timestamp();
@@ -496,6 +497,7 @@ void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Ri
                                              std::vector<bool> modified_fields) {
     UndoLog log;
     log.is_deleted_ = false;
+    log.is_inserted_ = false;
     log.modified_fields_ = std::move(modified_fields);
     log.tuple_ = std::move(values);
     log.ts_ = get_next_timestamp();
@@ -513,6 +515,7 @@ void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Ri
 void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid rid, std::vector<Value> values) {
     UndoLog log;
     log.is_deleted_ = true;
+    log.is_inserted_ = false;
     log.modified_fields_ = std::vector<bool>(values.size(), true);
     log.tuple_ = std::move(values);
     log.ts_ = get_next_timestamp();
