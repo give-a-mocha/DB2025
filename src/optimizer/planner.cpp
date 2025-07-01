@@ -372,7 +372,8 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
  */
 std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
-    if (!query->order_bys.empty()) {
+    if (query->order_bys.empty()) {
+        // 如果没有ORDER BY子句，则不需要排序
         return plan;
     }
     if (query->group_cols.empty() && query->cols.front().agg_type != AggregateType::NONE) {
