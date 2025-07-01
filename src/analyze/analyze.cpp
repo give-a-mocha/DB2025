@@ -15,16 +15,17 @@ See the Mulan PSL v2 for more details. */
 
 namespace {
 /**
- * @brief 辅助函数：检查列是否在GROUP BY中
+ * @brief 辅助函数：检查列是否在cols中
  *
- * @param col 需要检查的列
- * @param group_cols GROUP BY子句中的列集合
- * @return true 如果列在GROUP BY中
- * @return false 如果列不在GROUP BY中
+ * @param check_col 需要检查的列
+ * @param cols 列集合
+ * @return true 如果列在cols中
+ * @return false 如果列不在cols中
  */
-bool is_column_in_group(const TabCol &col, const std::vector<TabCol> &group_cols) {
-    return std::any_of(group_cols.begin(), group_cols.end(), [&](const TabCol &group_col) {
-        return col.col_name == group_col.col_name && col.tab_name == group_col.tab_name;
+bool is_column_in_cols(const TabCol &check_col, const std::vector<TabCol> &cols) {
+    return std::any_of(cols.begin(), cols.end(), [&](const TabCol &col) {
+        return std::tie(col.tab_name, col.col_name, col.agg_type) ==
+               std::tie(check_col.tab_name, check_col.col_name, check_col.agg_type);
     });
 }
 
@@ -240,6 +241,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 order_by_info.col = check_column(all_cols, order_by_col);
                 query->order_bys.push_back(order_by_info);
             }
+            check_orderby_with_group(query->order_bys, query->cols, query->group_cols);
         }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
@@ -799,13 +801,13 @@ void Analyze::check_having_conds(const std::vector<Condition> &conds, const std:
     TRACE_FUNCTION
     for (auto &cond : conds) {
         if (cond.lhs_col.agg_type == AggregateType::NONE) {
-            bool found = is_column_in_group(cond.lhs_col, group_cols);
+            bool found = is_column_in_cols(cond.lhs_col, group_cols);
             if (!found) {
                 throw AggregateError("having_cond: Non aggregate column not in group by");
             }
         }
         if (cond.rhs_type == ConditionRhsType::RHS_COLUMN && cond.rhs_col.agg_type == AggregateType::NONE) {
-            bool found = is_column_in_group(cond.rhs_col, group_cols);
+            bool found = is_column_in_cols(cond.rhs_col, group_cols);
             if (!found) {
                 throw AggregateError("having_cond: Non aggregate column not in group by");
             }
@@ -828,13 +830,31 @@ void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std:
             if (col.agg_type != AggregateType::NONE) {
                 continue;
             }
-            bool found = is_column_in_group(col, group_cols);
+            bool found = is_column_in_cols(col, group_cols);
             if (!found) {
                 throw AggregateError("SELECT column not in GROUP BY: " + col.col_name);
             }
         }
     }
 }
+
+void Analyze::check_orderby_with_group(const std::vector<OrderbyInfo> &order_bys,
+                                       const std::vector<TabCol> &select_cols, const std::vector<TabCol> &group_cols) {
+    TRACE_FUNCTION
+    if (group_cols.empty()) {
+        return;
+    }
+    for (const auto &order_by_info : order_bys) {
+        const auto &order_col = order_by_info.col;
+        bool found_in_select = is_column_in_cols(order_col, select_cols);
+        bool found_in_group = is_column_in_cols(order_col, group_cols);
+
+        if (!found_in_select && !found_in_group) {
+            throw AggregateError("ORDER BY column not in SELECT list or GROUP BY clause: " + order_col.col_name);
+        }
+    }
+}
+
 /**
  * @brief 将语法树中的算术操作符转换为系统内部的 ArithOp
  * @param op 语法树中的算术操作符

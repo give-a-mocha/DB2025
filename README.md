@@ -31,6 +31,7 @@ RMDB由中国人民大学数据库教学团队开发，同时得到教育部-华
 - [RMDB环境配置文档](docs/RMDB环境配置文档.pdf)
 - [RMDB使用文档](docs/RMDB使用文档.pdf)
 - [RMDB项目结构](docs/RMDB项目结构.pdf)
+- [CHANGELOG](CHANGELOG.md)
 
 ## 推荐参考资料
 

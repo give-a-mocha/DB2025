@@ -236,4 +236,7 @@ class Analyze {
     void check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols);
 
     void check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols);
+
+    void check_orderby_with_group(const std::vector<OrderbyInfo> &order_bys, const std::vector<TabCol> &select_cols,
+                                  const std::vector<TabCol> &group_cols);
 };
