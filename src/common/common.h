@@ -83,8 +83,7 @@ struct TabCol {
      * @return 如果x等于y则返回true
      */
     friend bool operator==(const TabCol &x, const TabCol &y) {
-        return x.tab_name == y.tab_name && x.col_name == y.col_name && x.tab_alias == y.tab_alias &&
-               x.col_alias == y.col_alias && x.agg_type == y.agg_type;
+        return std::tie(x.tab_name, x.col_name, x.tab_alias) == std::tie(y.tab_name, y.col_name, y.tab_alias);
     }
 
     friend bool operator!=(const TabCol &x, const TabCol &y) {

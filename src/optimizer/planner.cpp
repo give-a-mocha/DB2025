@@ -394,7 +394,13 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
     auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     auto query_cols = query->cols;
     for (const auto &order_col : query->order_bys) {
-        query_cols.push_back(order_col.col);
+        if (std::find_if(query_cols.begin(), query_cols.end(), [&](const TabCol &col) {
+                return std::tie(col.tab_name, col.col_name, col.agg_type) ==
+                       std::tie(order_col.col.tab_name, order_col.col.col_name, order_col.col.agg_type);
+            }) == query_cols.end()) {
+            // 如果排序列不在查询列中，则添加到查询列中
+            query_cols.emplace_back(order_col.col);
+        }
     }
     std::vector<AggregateType> agg_types;
     agg_types.reserve(query_cols.size());
@@ -417,7 +423,13 @@ std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query,
     }
     auto query_cols = query->cols;
     for (auto &order_col : query->order_bys) {
-        query_cols.push_back(order_col.col);
+        if (std::find_if(query_cols.begin(), query_cols.end(), [&](const TabCol &col) {
+                return std::tie(col.tab_name, col.col_name, col.agg_type) ==
+                       std::tie(order_col.col.tab_name, order_col.col.col_name, order_col.col.agg_type);
+            }) == query_cols.end()) {
+            // 如果排序列不在查询列中，则添加到查询列中
+            query_cols.emplace_back(order_col.col);
+        }
     }
     return std::make_shared<GroupPlan>(PlanTag::T_Group, std::move(plan), query_cols, query->group_cols,
                                        query->having_conds);
