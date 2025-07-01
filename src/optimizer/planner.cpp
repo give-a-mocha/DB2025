@@ -236,7 +236,6 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
  */
 std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
     TRACE_FUNCTION
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
     // Scan table , 生成表算子列表tab_nodes
     std::vector<std::shared_ptr<Plan>> table_scan_executors(tables.size());
@@ -372,9 +371,12 @@ std::shared_ptr<Plan> Planner::make_one_rel(std::shared_ptr<Query> query) {
  * @return 添加排序操作后的执行计划
  */
 std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     TRACE_FUNCTION
-    if (!x->has_sort) {
+    if (!query->order_bys.empty()) {
+        return plan;
+    }
+    if (query->group_cols.empty() && query->cols.front().agg_type != AggregateType::NONE) {
+        // 如果没有GROUP BY且查询列中有聚合值，则结果只包含一列，无需排序
         return plan;
     }
     std::vector<TabCol> sel_cols;
@@ -391,7 +393,6 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
 
 std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     auto query_cols = query->cols;
     for (const auto &group_col : query->group_cols) {
         if (std::find_if(query_cols.begin(), query_cols.end(), [&](const TabCol &col) {
@@ -417,8 +418,7 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
 // GROUP
 std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-    if (x->group.empty()) {
+    if (query->group_cols.empty()) {
         return plan;
     }
     auto query_cols = query->cols;
@@ -640,7 +640,6 @@ int Planner::get_table_col_num(const std::string &tab_name) {
 // Scan / Join
 std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> query) {
     TRACE_FUNCTION
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
     std::vector<std::string> tables = query->tables;
     std::list<JoinNode> semi_join;
     std::list<std::shared_ptr<Plan>> semi_join_plans;
