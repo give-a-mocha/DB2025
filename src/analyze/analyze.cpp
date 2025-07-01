@@ -842,6 +842,12 @@ void Analyze::check_orderby_with_group(const std::vector<OrderbyInfo> &order_bys
                                        const std::vector<TabCol> &select_cols, const std::vector<TabCol> &group_cols) {
     TRACE_FUNCTION
     if (group_cols.empty()) {
+        // 如果没有GROUP BY子句，ORDER BY只能包含无聚合值
+        bool has_aggr = std::any_of(order_bys.begin(), order_bys.end(),
+                                    [](const OrderbyInfo &info) { return info.col.agg_type != AggregateType::NONE; });
+        if (has_aggr) {
+            throw AggregateError("ORDER BY cannot contain aggregate columns without GROUP BY");
+        }
         return;
     }
     for (const auto &order_by_info : order_bys) {
