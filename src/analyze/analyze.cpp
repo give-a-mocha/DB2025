@@ -669,10 +669,10 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         } else {  // rhs_type == ConditionRhsType::RHS_EXPR
             // 检查表达式内部是否都是数值类型
             // TODO: 暂时表达式涉及的列只能是左边表中的列
-            std::vector<ColMeta> ltable_cols;
-            get_all_cols({cond.lhs_col.tab_name}, ltable_cols);
-            CheckArithExprType(cond.rhs_expr->lhs, ltable_cols);
-            CheckArithExprType(cond.rhs_expr->rhs, ltable_cols);
+            // std::vector<ColMeta> ltable_cols;
+            // get_all_cols({cond.lhs_col.tab_name}, ltable_cols);
+            // CheckArithExprType(cond.rhs_expr->lhs, ltable_cols);
+            // CheckArithExprType(cond.rhs_expr->rhs, ltable_cols);
             // 假设算术表达式的结果总是数值类型 (例如 FLOAT 用于比较)
             // 更精确的类型推断可以后续添加 (例如 INT + INT = INT, INT + FLOAT = FLOAT)
             rhs_type = ColType::TYPE_FLOAT;  // Assume float for comparison simplicity
