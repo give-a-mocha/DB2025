@@ -22,42 +22,47 @@ See the Mulan PSL v2 for more details. */
 #include "page.h"
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
-#include "buffer_pool_instance.h"
 
 /**
  * @brief 缓冲池管理器类
  */
-class BufferPoolManager {
+class BufferPoolInstance {
    private:
-    size_t pool_size_;                                                      // 缓冲池大小（帧数）
-    BufferPoolInstance* buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
-    // Page* pages_;                            // 缓冲池中的页面数组，连续分配
-    // std::unordered_map<PageId, frame_id_t, PageIdHash> page_table_;  // 页面到帧的映射表
-    // std::list<frame_id_t> free_list_;                                // 空闲帧链表
+    size_t pool_size_;                                               // 缓冲池大小（帧数）
+    Page* pages_;                                                    // 缓冲池中的页面数组，连续分配
+    std::unordered_map<PageId, frame_id_t, PageIdHash> page_table_;  // 页面到帧的映射表
+    std::list<frame_id_t> free_list_;                                // 空闲帧链表
     DiskManager* disk_manager_;                                      // 磁盘管理器
-    // Replacer* replacer_;                                             // 页面替换策略实现
-    // std::mutex latch_;                                               // 并发控制锁
+    Replacer* replacer_;                                             // 页面替换策略实现
+    std::mutex latch_;                                               // 并发控制锁
 
    public:
-    BufferPoolManager(size_t pool_size, DiskManager* disk_manager)
+    BufferPoolInstance(size_t pool_size, DiskManager* disk_manager)
         : pool_size_(pool_size), disk_manager_(disk_manager) {
         // 为buffer pool分配一块连续的内存空间
-        for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            buffer_pool_instances_[i] = new BufferPoolInstance(pool_size / BUFFER_POOL_INSTANCE_SIZE, disk_manager);
+        pages_ = new Page[pool_size_];
+        // 可以被Replacer改变
+        if (REPLACER_TYPE.compare("LRU") == 0) replacer_ = new LRUReplacer(pool_size_);
+        else if (REPLACER_TYPE.compare("CLOCK") == 0) replacer_ = new LRUReplacer(pool_size_);
+        else {
+            replacer_ = new LRUReplacer(pool_size_);
+        }
+        // 初始化时，所有的page都在free_list_中
+        for (size_t i = 0; i < pool_size_; ++i) {
+            free_list_.emplace_back(static_cast<frame_id_t>(i));  // static_cast转换数据类型
         }
     }
 
-    ~BufferPoolManager() {
-        for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            delete buffer_pool_instances_[i];
-        }
+    ~BufferPoolInstance() {
+        delete[] pages_;
+        delete replacer_;
     }
 
     /**
      * @description: 将目标页面标记为脏页
      * @param {Page*} page 脏页
      */
-    // static void mark_dirty(Page* page) { page->is_dirty_ = true; }
+    static void mark_dirty(Page* page) { page->is_dirty_ = true; }
 
    public:
     /**
@@ -128,5 +133,26 @@ class BufferPoolManager {
      */
     void delete_all_pages(int fd);
 
-    size_t get_instance_no(const PageId &page_id) const { return std::hash<PageId>()(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
+   private:
+    /**
+     * @brief 查找牺牲页面
+     *
+     * 使用页面替换策略选择要被替换的页面
+     *
+     * @param frame_id 输出参数，返回选中的帧号
+     * @return true 成功找到牺牲页面
+     * @return false 没有可替换的页面
+     */
+    bool find_victim_page(frame_id_t* frame_id);
+
+    /**
+     * @brief 更新页面的元数据
+     *
+     * 更新页面的ID和帧号等信息
+     *
+     * @param page 要更新的页面
+     * @param new_page_id 新的页面ID
+     * @param new_frame_id 新的帧号
+     */
+    void update_page(Page* page, PageId new_page_id, frame_id_t new_frame_id);
 };

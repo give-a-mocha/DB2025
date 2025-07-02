@@ -48,7 +48,7 @@ struct std::hash<PageId> {
  * @brief 数据库的基本存储单元
  */
 class Page {
-    friend class BufferPoolManager;
+    friend class BufferPoolInstance;
 
    public:
     Page() { reset_memory(); }
