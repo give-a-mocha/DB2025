@@ -235,15 +235,16 @@ class AbstractExecutor {
     }
 
     /**
-     * @brief 计算指定列的聚合函数值
+     * @brief 计算指定列的聚合函数值（优化版本）
      * @param rec_cols 记录的列元数据信息，用于查找目标列的类型和偏移量
      * @param rec 参与聚合计算的记录集合
      * @param tab_col 目标列信息（包含表名和列名）
      * @param agg_type 聚合函数类型（COUNT、SUM、MAX、MIN、NONE等）
      * @return 计算得到的聚合值
      */
-    Value get_aggr_value(const std::vector<ColMeta> &rec_cols, const std::vector<std::unique_ptr<RmRecord>> &rec,
-                         const TabCol &tab_col, AggregateType agg_type) {
+    [[maybe_unused]] Value get_aggr_value(const std::vector<ColMeta> &rec_cols,
+                                          const std::vector<std::unique_ptr<RmRecord>> &rec, const TabCol &tab_col,
+                                          AggregateType agg_type) {
         TRACE_FUNCTION
         Value val;         // 存储最终的聚合结果
         ColMeta col_meta;  // 目标列的元数据信息
@@ -256,91 +257,365 @@ class AbstractExecutor {
             // 从记录列信息中查找指定的目标列
             col_meta = *get_col(rec_cols, tab_col);
         }
+
+        // 根据聚合类型赋值默认值
+        switch (agg_type) {
+            case AggregateType::NONE:
+                // 非聚合函数，赋值第一行的值
+                if (!rec.empty()) {
+                    for (const auto &col : rec_cols) {
+                        if (col.name == tab_col.col_name && col.tab_name == tab_col.tab_name) {
+                            val.set_col_data(col.type, rec[0]->data + col.offset, col.len);
+                            break;
+                        }
+                    }
+                }
+                break;
+            case AggregateType::COUNT:
+                val.set_int(0);
+                break;
+            case AggregateType::SUM:
+                if (col_meta.type == ColType::TYPE_INT) {
+                    val.set_int(0);
+                } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                    val.set_float(0.0f);
+                }
+                break;
+            case AggregateType::MIN:
+                if (col_meta.type == ColType::TYPE_INT) {
+                    val.set_int(std::numeric_limits<int>::max());
+                } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                    val.set_float(std::numeric_limits<float>::max());
+                }
+                break;
+            case AggregateType::MAX:
+                if (col_meta.type == ColType::TYPE_INT) {
+                    val.set_int(std::numeric_limits<int>::min());
+                } else if (col_meta.type == ColType::TYPE_FLOAT) {
+                    val.set_float(std::numeric_limits<float>::lowest());
+                }
+                break;
+            case AggregateType::AVG:
+                val.set_float(0.0f);
+                break;
+            default:
+                throw InternalError("Unknown aggregate type at " + getType());
+        }
+
+        if (rec.empty()) {
+            // 如果没有记录，直接返回默认值
+            return val;
+        }
+
         // 根据聚合函数类型进行不同的计算
-        if (agg_type == AggregateType::NONE) {
-            // 非聚合情况：直接返回第一条记录中该列的值
-            for (auto &col_meta : rec_cols) {
-                if (col_meta.name == tab_col.col_name && col_meta.tab_name == tab_col.tab_name) {
-                    val.set_col_data(col_meta.type, rec[0]->data + col_meta.offset, col_meta.len);
-                    break;
+        switch (agg_type) {
+            case AggregateType::NONE:
+                break;
+
+            case AggregateType::COUNT:
+                // COUNT 聚合：返回记录总数
+                val.set_int(static_cast<int>(rec.size()));
+                break;
+
+            case AggregateType::SUM:
+                // SUM 聚合：计算指定列所有值的总和
+                switch (col_meta.type) {
+                    case ColType::TYPE_INT: {
+                        int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
+                            return acc + *reinterpret_cast<const int *>(record->data + col_meta.offset);
+                        });
+                        val.set_int(sum);
+                        break;
+                    }
+                    case ColType::TYPE_FLOAT: {
+                        float sum =
+                            std::accumulate(rec.begin(), rec.end(), 0.0f, [&col_meta](float acc, const auto &record) {
+                                return acc + *reinterpret_cast<const float *>(record->data + col_meta.offset);
+                            });
+                        val.set_float(sum);
+                        break;
+                    }
+                    case ColType::TYPE_STRING:
+                        throw AggregateError("Aggregate function SUM is not supported for string type column.");
+                    default:
+                        throw InternalError("Unsupported column type for SUM aggregation");
                 }
-            }
-        } else if (agg_type == AggregateType::COUNT) {
-            // COUNT 聚合：返回记录总数
-            val.set_int(rec.size());
-        } else if (agg_type == AggregateType::SUM) {
-            // SUM 聚合：计算指定列所有值的总和
-            if (col_meta.type == ColType::TYPE_INT) {
-                // 整数求和
-                int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
-                    return acc + *(int *)(record->data + col_meta.offset);
-                });
-                val.set_int(sum);
-            } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                // 浮点数求和
-                float sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
-                    return acc + *(float *)(record->data + col_meta.offset);
-                });
-                val.set_float(sum);
-            } else if (col_meta.type == ColType::TYPE_STRING) {
-                throw AggregateError("Aggregate function SUM is not supported for string type column.");
-            }
-        } else if (agg_type == AggregateType::MAX) {
-            // MAX 聚合：找出指定列的最大值
-            if (col_meta.type == ColType::TYPE_INT) {
-                // 整数最大值计算
-                int max = std::numeric_limits<int>::min();  // 初始化为整数最小值
-                for (const auto &record : rec) {
-                    max = std::max(max, *(int *)(record->data + col_meta.offset));
+                break;
+
+            case AggregateType::MAX:
+                // MAX 聚合：找出指定列的最大值
+                switch (col_meta.type) {
+                    case ColType::TYPE_INT: {
+                        int max_val = *reinterpret_cast<const int *>(rec[0]->data + col_meta.offset);
+                        for (size_t i = 1; i < rec.size(); ++i) {
+                            max_val = std::max(max_val, *reinterpret_cast<const int *>(rec[i]->data + col_meta.offset));
+                        }
+                        val.set_int(max_val);
+                        break;
+                    }
+                    case ColType::TYPE_FLOAT: {
+                        float max_val = *reinterpret_cast<const float *>(rec[0]->data + col_meta.offset);
+                        for (size_t i = 1; i < rec.size(); ++i) {
+                            max_val =
+                                std::max(max_val, *reinterpret_cast<const float *>(rec[i]->data + col_meta.offset));
+                        }
+                        val.set_float(max_val);
+                        break;
+                    }
+                    case ColType::TYPE_STRING:
+                        throw AggregateError("Aggregate function MAX is not supported for string type column.");
+                    default:
+                        throw InternalError("Unsupported column type for MAX aggregation");
                 }
-                val.set_int(max);
-            } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                // 浮点数最大值计算
-                float max = std::numeric_limits<float>::lowest();  // 初始化为浮点数最小值
-                for (const auto &record : rec) {
-                    max = std::max(max, *(float *)(record->data + col_meta.offset));
+                break;
+
+            case AggregateType::MIN:
+                // MIN 聚合：找出指定列的最小值
+                switch (col_meta.type) {
+                    case ColType::TYPE_INT: {
+                        int min_val = *reinterpret_cast<const int *>(rec[0]->data + col_meta.offset);
+                        for (size_t i = 1; i < rec.size(); ++i) {
+                            min_val = std::min(min_val, *reinterpret_cast<const int *>(rec[i]->data + col_meta.offset));
+                        }
+                        val.set_int(min_val);
+                        break;
+                    }
+                    case ColType::TYPE_FLOAT: {
+                        float min_val = *reinterpret_cast<const float *>(rec[0]->data + col_meta.offset);
+                        for (size_t i = 1; i < rec.size(); ++i) {
+                            min_val =
+                                std::min(min_val, *reinterpret_cast<const float *>(rec[i]->data + col_meta.offset));
+                        }
+                        val.set_float(min_val);
+                        break;
+                    }
+                    case ColType::TYPE_STRING:
+                        throw AggregateError("Aggregate function MIN is not supported for string type column.");
+                    default:
+                        throw InternalError("Unsupported column type for MIN aggregation");
                 }
-                val.set_float(max);
-            } else if (col_meta.type == ColType::TYPE_STRING) {
-                throw AggregateError("Aggregate function MAX is not supported for string type column.");
-            }
-        } else if (agg_type == AggregateType::MIN) {
-            // MIN 聚合：找出指定列的最小值
-            if (col_meta.type == ColType::TYPE_INT) {
-                // 整数最小值计算
-                int min = std::numeric_limits<int>::max();  // 初始化为整数最大值
-                for (const auto &record : rec) {
-                    min = std::min(min, *(int *)(record->data + col_meta.offset));
+                break;
+
+            case AggregateType::AVG:
+                // AVG 聚合：计算指定列所有值的平均值
+                switch (col_meta.type) {
+                    case ColType::TYPE_INT: {
+                        int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
+                            return acc + *reinterpret_cast<const int *>(record->data + col_meta.offset);
+                        });
+                        val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
+                        break;
+                    }
+                    case ColType::TYPE_FLOAT: {
+                        float sum =
+                            std::accumulate(rec.begin(), rec.end(), 0.0f, [&col_meta](float acc, const auto &record) {
+                                return acc + *reinterpret_cast<const float *>(record->data + col_meta.offset);
+                            });
+                        val.set_float(sum / static_cast<float>(rec.size()));
+                        break;
+                    }
+                    case ColType::TYPE_STRING:
+                        throw AggregateError("Aggregate function AVG is not supported for string type column.");
+                    default:
+                        throw InternalError("Unsupported column type for AVG aggregation");
                 }
-                val.set_int(min);
-            } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                // 浮点数最小值计算
-                float min = std::numeric_limits<float>::max();  // 初始化为浮点数最大值
-                for (const auto &record : rec) {
-                    min = std::min(min, *(float *)(record->data + col_meta.offset));
-                }
-                val.set_float(min);
-            } else if (col_meta.type == ColType::TYPE_STRING) {
-                throw AggregateError("Aggregate function MIN is not supported for string type column.");
-            }
-        } else if (agg_type == AggregateType::AVG) {
-            // SUM 聚合：计算指定列所有值的总和
-            if (col_meta.type == ColType::TYPE_INT) {
-                // 整数求和
-                int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
-                    return acc + *(int *)(record->data + col_meta.offset);
-                });
-                val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
-            } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                // 浮点数求和
-                float sum = std::accumulate(rec.begin(), rec.end(), 0.0, [&col_meta](float acc, const auto &record) {
-                    return acc + *(float *)(record->data + col_meta.offset);
-                });
-                val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
-            } else if (col_meta.type == ColType::TYPE_STRING) {
-                throw AggregateError("Aggregate function AVG is not supported for string type column.");
-            }
+                break;
+
+            default:
+                throw InternalError("Unknown aggregate type at " + getType());
         }
         return val;  // 返回计算得到的聚合值
+    }
+
+    /**
+     * @brief 批量计算多个列的聚合函数值
+     * @param rec_cols 记录的列元数据信息，用于查找目标列的类型和偏移量
+     * @param rec 参与聚合计算的记录集合
+     * @param ab_cols 目标列信息列表（包含表名和列名）
+     * @param agg_types 聚合函数类型列表（COUNT、SUM、MAX、MIN、NONE等）
+     * @return 计算得到的聚合值向量
+     */
+    std::vector<Value> get_aggr_values(const std::vector<ColMeta> &rec_cols,
+                                       const std::vector<std::unique_ptr<RmRecord>> &rec,
+                                       const std::vector<TabCol> &tab_cols,
+                                       const std::vector<AggregateType> &agg_types) {
+        TRACE_FUNCTION
+
+        // 验证输入参数
+        if (tab_cols.size() != agg_types.size()) {
+            throw InternalError("Column list size does not match aggregate type list size");
+        }
+
+        std::vector<Value> vals(tab_cols.size());         // 存储计算得到的聚合值
+        std::vector<ColMeta> col_metas(tab_cols.size());  // 存储目标列的元数据信息
+
+        // 获取所有目标列的元数据信息
+        for (size_t i = 0; i < tab_cols.size(); ++i) {
+            const auto &tab_col = tab_cols[i];
+            if (tab_col.col_name == "*" && agg_types[i] == AggregateType::COUNT) {
+                // 特殊处理 COUNT(*) 情况
+                col_metas[i] =
+                    ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0};
+            } else {
+                // 从记录列信息中查找指定的目标列
+                col_metas[i] = *get_col(rec_cols, tab_col);
+            }
+        }
+
+        for (size_t i = 0; i < tab_cols.size(); ++i) {
+            switch (agg_types[i]) {
+                case AggregateType::NONE:
+                    // 非聚合函数，赋值第一行的值
+                    if (!rec.empty()) {
+                        for (const auto &col : rec_cols) {
+                            if (col.name == tab_cols[i].col_name && col.tab_name == tab_cols[i].tab_name) {
+                                vals[i].set_col_data(col.type, rec[0]->data + col.offset, col.len);
+                                break;
+                            }
+                        }
+                    }
+                    break;
+                case AggregateType::COUNT:
+                    vals[i].set_int(0);
+                    break;
+                case AggregateType::SUM:
+                    if (col_metas[i].type == ColType::TYPE_INT) {
+                        vals[i].set_int(0);
+                    } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
+                        vals[i].set_float(0.0f);
+                    }
+                    break;
+                case AggregateType::MIN:
+                    if (col_metas[i].type == ColType::TYPE_INT) {
+                        vals[i].set_int(std::numeric_limits<int>::max());
+                    } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
+                        vals[i].set_float(std::numeric_limits<float>::max());
+                    }
+                    break;
+                case AggregateType::MAX:
+                    if (col_metas[i].type == ColType::TYPE_INT) {
+                        vals[i].set_int(std::numeric_limits<int>::min());
+                    } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
+                        vals[i].set_float(std::numeric_limits<float>::lowest());
+                    }
+                    break;
+                case AggregateType::AVG:
+                    vals[i].set_float(0.0f);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (rec.empty()) {
+            // 如果没有记录，直接返回默认值
+            return vals;
+        }
+
+        // 计算每个目标列的聚合值, 遍历records为外层循环以优化大表性能
+        for (const auto &record : rec) {
+            for (size_t i = 0; i < tab_cols.size(); i++) {
+                switch (agg_types[i]) {
+                    case AggregateType::NONE:
+                        // 非聚合函数，已经在上面处理
+                        break;
+                    case AggregateType::COUNT:
+                        // COUNT 聚合：返回记录总数
+                        vals[i].set_int(static_cast<int>(rec.size()));
+                        break;
+                    case AggregateType::SUM:
+                        // SUM 聚合：计算指定列所有值的总和
+                        switch (col_metas[i].type) {
+                            case ColType::TYPE_INT: {
+                                int sum = vals[i].int_val +
+                                          *reinterpret_cast<const int *>(record->data + col_metas[i].offset);
+                                vals[i].set_int(sum);
+                                break;
+                            }
+                            case ColType::TYPE_FLOAT: {
+                                float sum = vals[i].float_val +
+                                            *reinterpret_cast<const float *>(record->data + col_metas[i].offset);
+                                vals[i].set_float(sum);
+                                break;
+                            }
+                            case ColType::TYPE_STRING:
+                                throw AggregateError("Aggregate function SUM is not supported for string type column.");
+                        }
+                    case AggregateType::AVG:
+                        switch (col_metas[i].type) {
+                            case ColType::TYPE_INT: {
+                                int sum = vals[i].int_val +
+                                          *reinterpret_cast<const int *>(record->data + col_metas[i].offset);
+                                vals[i].set_int(sum);
+                                break;
+                            }
+                            case ColType::TYPE_FLOAT: {
+                                float sum = vals[i].float_val +
+                                            *reinterpret_cast<const float *>(record->data + col_metas[i].offset);
+                                vals[i].set_float(sum);
+                                break;
+                            }
+                            case ColType::TYPE_STRING:
+                                throw AggregateError("Aggregate function AVG is not supported for string type column.");
+                        }
+                        break;
+                    case AggregateType::MIN:
+                        // MIN 聚合：找出指定列的最小值
+                        switch (col_metas[i].type) {
+                            case ColType::TYPE_INT: {
+                                int min_val =
+                                    std::min(vals[i].int_val,
+                                             *reinterpret_cast<const int *>(record->data + col_metas[i].offset));
+                                vals[i].set_int(min_val);
+                                break;
+                            }
+                            case ColType::TYPE_FLOAT: {
+                                float min_val =
+                                    std::min(vals[i].float_val,
+                                             *reinterpret_cast<const float *>(record->data + col_metas[i].offset));
+                                vals[i].set_float(min_val);
+                                break;
+                            }
+                            case ColType::TYPE_STRING:
+                                throw AggregateError("Aggregate function MIN is not supported for string type column.");
+                        }
+                        break;
+                    case AggregateType::MAX:
+                        // MAX 聚合：找出指定列的最大值
+                        switch (col_metas[i].type) {
+                            case ColType::TYPE_INT: {
+                                int max_val =
+                                    std::max(vals[i].int_val,
+                                             *reinterpret_cast<const int *>(record->data + col_metas[i].offset));
+                                vals[i].set_int(max_val);
+                                break;
+                            }
+                            case ColType::TYPE_FLOAT: {
+                                float max_val =
+                                    std::max(vals[i].float_val,
+                                             *reinterpret_cast<const float *>(record->data + col_metas[i].offset));
+                                vals[i].set_float(max_val);
+                                break;
+                            }
+                            case ColType::TYPE_STRING:
+                                throw AggregateError("Aggregate function MAX is not supported for string type column.");
+                        }
+                        break;
+                    default:
+                        throw InternalError("Unknown aggregate type at " + getType());
+                }
+            }
+        }
+        // 计算 AVG 聚合的最终值
+        for (size_t i = 0; i < tab_cols.size(); ++i) {
+            if (agg_types[i] == AggregateType::AVG) {
+                if (col_metas[i].type == ColType::TYPE_INT) {
+                    vals[i].set_float(static_cast<float>(vals[i].int_val) / static_cast<float>(rec.size()));
+                } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
+                    vals[i].set_float(vals[i].float_val / static_cast<float>(rec.size()));
+                }
+            }
+        }
+        return vals;  // 返回计算得到的聚合值向量
     }
 };

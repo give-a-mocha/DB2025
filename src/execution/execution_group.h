@@ -160,10 +160,64 @@ class GroupExecutor : public AbstractExecutor {
     bool eval_aggr_conds(const std::vector<ColMeta>& rec_cols, const std::vector<Condition>& conds,
                          const std::vector<std::unique_ptr<RmRecord>>& records) {
         TRACE_FUNCTION
-        return std::all_of(conds.begin(), conds.end(), [&](const Condition& cond) {
-            // 对每个条件调用 eval_aggr_cond
-            return eval_aggr_cond(rec_cols, cond, records);
+        // return std::all_of(conds.begin(), conds.end(), [&](const Condition& cond) {
+        //     // 对每个条件调用 eval_aggr_cond
+        //     return eval_aggr_cond(rec_cols, cond, records);
+        // });
+        std::vector<TabCol> lhs_cols;
+        std::vector<AggregateType> lhs_agg_types;
+        lhs_cols.reserve(conds.size());
+        lhs_agg_types.reserve(conds.size());
+        std::for_each(conds.begin(), conds.end(), [&](const Condition& cond) {
+            lhs_cols.emplace_back(cond.lhs_col);
+            lhs_agg_types.emplace_back(cond.lhs_col.agg_type);
         });
+        std::vector<Value> lhs_vals = get_aggr_values(rec_cols, records, lhs_cols, lhs_agg_types);
+        std::vector<Value> rhs_vals(conds.size());
+        std::vector<TabCol> rhs_cols;
+        std::vector<AggregateType> rhs_agg_types;
+        rhs_cols.reserve(conds.size());
+        rhs_agg_types.reserve(conds.size());
+        std::for_each(conds.begin(), conds.end(), [&](const Condition& cond) {
+            switch (cond.rhs_type) {
+                case ConditionRhsType::RHS_VALUE:
+                    break;
+                case ConditionRhsType::RHS_COLUMN:
+                    rhs_cols.emplace_back(cond.rhs_col);
+                    rhs_agg_types.emplace_back(cond.rhs_col.agg_type);
+                    break;
+                case ConditionRhsType::RHS_EXPR:
+                    // TODO: 实现 EvaluateAggrExpr 来处理包含聚合的表达式
+                    // rhs_val = EvaluateAggrExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
+                    // 暂时抛出错误，因为 EvaluateExpr 不适用于聚合上下文
+                    throw RMDBError(
+                        "Arithmetic expressions involving aggregates in HAVING clause RHS not yet fully supported.");
+                    break;
+                default:
+                    throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
+            }
+        });
+        std::vector<Value> rhs_aggr_vals = get_aggr_values(rec_cols, records, rhs_cols, rhs_agg_types);
+        for (size_t i = 0, j = 0; i < conds.size(); i++) {
+            switch (conds[i].rhs_type) {
+                case ConditionRhsType::RHS_VALUE:
+                    rhs_vals[i] = conds[i].rhs_val;  // 直接使用 RHS_VALUE
+                    break;
+                case ConditionRhsType::RHS_COLUMN:
+                    rhs_vals[i] = rhs_aggr_vals[j];  // 使用聚合计算的值
+                    j++;
+                    break;
+                default:
+                    throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
+            }
+        }
+        // 遍历所有条件，检查是否满足
+        for (size_t i = 0; i < conds.size(); i++) {
+            if (!Value::compare(lhs_vals[i], rhs_vals[i], conds[i].op)) {
+                return false;  // 如果有一个条件不满足，则返回 false
+            }
+        }
+        return true;
     }
 
     /**
@@ -173,11 +227,10 @@ class GroupExecutor : public AbstractExecutor {
      * @param rec 当前分组的所有记录
      * @return 如果条件满足，则返回 true；否则返回 false。
      */
-    bool eval_aggr_cond(const std::vector<ColMeta>& rec_cols, const Condition& cond,
-                        const std::vector<std::unique_ptr<RmRecord>>& rec) {
-        auto copy_cond = cond;  // 创建条件的副本以防修改原始条件
+    [[maybe_unused]] bool eval_aggr_cond(const std::vector<ColMeta>& rec_cols, const Condition& cond,
+                                         const std::vector<std::unique_ptr<RmRecord>>& rec) {
         // 计算条件的左侧聚合值
-        Value lhs_val = get_aggr_value(rec_cols, rec, copy_cond.lhs_col, cond.lhs_col.agg_type);
+        Value lhs_val = get_aggr_value(rec_cols, rec, cond.lhs_col, cond.lhs_col.agg_type);
         Value rhs_val;  // 条件的右侧值
         // 根据 rhs_type 获取右侧值
         switch (cond.rhs_type) {
@@ -185,11 +238,11 @@ class GroupExecutor : public AbstractExecutor {
                 rhs_val = cond.rhs_val;
                 break;
             case ConditionRhsType::RHS_COLUMN:  // 假设 RHS_COLUMN 在 HAVING 中意味着聚合
-                if (copy_cond.rhs_col.col_name.empty()) {
+                if (cond.rhs_col.col_name.empty()) {
                     throw InternalError("Aggregate column name cannot be empty in HAVING clause RHS");
                 }
                 // 计算条件的右侧聚合值
-                rhs_val = get_aggr_value(rec_cols, rec, copy_cond.rhs_col, cond.rhs_col.agg_type);
+                rhs_val = get_aggr_value(rec_cols, rec, cond.rhs_col, cond.rhs_col.agg_type);
                 break;
             case ConditionRhsType::RHS_EXPR:
                 // TODO: 实现 EvaluateAggrExpr 来处理包含聚合的表达式

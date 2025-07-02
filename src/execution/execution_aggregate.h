@@ -161,34 +161,15 @@ class AggregateExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
-        std::vector<Value> values(agg_types_.size());
+        std::vector<TabCol> tab_cols(agg_types_.size());
+        for (size_t i = 0; i < agg_types_.size(); i++) {
+            tab_cols[i] = TabCol(cols_[i].tab_name, cols_[i].name);
+        }
+        std::vector<Value> values = get_aggr_values(cols_, records, tab_cols, agg_types_);
         for (size_t i = 0; i < agg_types_.size(); ++i) {
             // 调用聚合函数计算结果
-            Value res;
-            if (!records.empty()) {
-                res = get_aggr_value(cols_, records, TabCol(cols_[i].tab_name, cols_[i].name), agg_types_[i]);
-            } else {
-                // 处理NULL值情况
-                switch (agg_types_[i]) {
-                    case AggregateType::COUNT:
-                        res.set_int(0);
-                        break;
-                    case AggregateType::MIN:
-                    case AggregateType::MAX:
-                    case AggregateType::SUM:
-                        if (output_cols_[i].type == ColType::TYPE_INT) res.set_int(0);
-                        else res.set_float(0.0);
-                        break;
-                    case AggregateType::AVG:
-                        res.set_float(0.0);
-                        break;
-                    default:
-                        throw InternalError("Unknown aggregate type");
-                }
-            }
-            res.init_raw();
-            size += res.raw->size;
-            values[i] = std::move(res);
+            values[i].init_raw();
+            size += values[i].raw->size;
         }
         auto result = std::make_unique<RmRecord>(size);
         size_t offset = 0;
