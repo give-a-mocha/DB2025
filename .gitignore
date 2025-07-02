@@ -63,3 +63,4 @@ uv.lock
 main.py
 pyproject.toml
 .python-version
+src/test/performance_test/table_data/
