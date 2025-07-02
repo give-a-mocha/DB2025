@@ -42,8 +42,8 @@ class BufferPoolManager {
         // 为buffer pool分配一块连续的内存空间
         pages_ = new Page[pool_size_];
         // 可以被Replacer改变
-        if (REPLACER_TYPE.compare("LRU")) replacer_ = new LRUReplacer(pool_size_);
-        else if (REPLACER_TYPE.compare("CLOCK")) replacer_ = new LRUReplacer(pool_size_);
+        if (REPLACER_TYPE.compare("LRU") == 0) replacer_ = new LRUReplacer(pool_size_);
+        else if (REPLACER_TYPE.compare("CLOCK") == 0) replacer_ = new LRUReplacer(pool_size_);
         else {
             replacer_ = new LRUReplacer(pool_size_);
         }
