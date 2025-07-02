@@ -136,7 +136,8 @@ class AbstractExecutor {
      * @return true表示满足所有条件
      * @throw ExecutionError 当评估过程出错时
      */
-    bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds, const RmRecord *rec) {
+    bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds,
+                    const std::unique_ptr<RmRecord> &rec) {
         for (const auto &cond : conds) {
             if (!eval_cond(rec_cols, cond, rec)) {
                 return false;
@@ -154,7 +155,7 @@ class AbstractExecutor {
      * @throw IncompatibleTypeError 当类型不兼容时
      * @throw InternalError 当遇到非法操作符时
      */
-    bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const RmRecord *rec) {
+    bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const std::unique_ptr<RmRecord> &rec) {
         TRACE_FUNCTION
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
         char *lhs_data = rec->data + lhs_col->offset;
@@ -180,7 +181,7 @@ class AbstractExecutor {
             case ConditionRhsType::RHS_EXPR:
                 // 计算表达式的值
                 // 注意：需要将 ArithExpr 包装在 ExprTerm 中传递
-                rhs_expr_val = EvaluateExpr(ExprTerm(cond.rhs_expr), *rec, rec_cols);
+                rhs_expr_val = EvaluateExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
                 // 检查计算结果的 raw 是否有效
                 rhs_expr_val.raw.reset();  // 确保 raw 被正确初始化
                 rhs_expr_val.init_raw();   // 初始化 raw 缓冲区

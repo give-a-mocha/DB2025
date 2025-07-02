@@ -25,7 +25,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
 
 bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh_, const Rid &rid);
 
-bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *context_, TransactionManager *txn_mgr,
+bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_, TransactionManager *txn_mgr,
                        SmManager *sm_manager);
 
 /**
@@ -35,6 +35,6 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
  * @param cols 表的所有列元数据
  * @return 计算得到的 Value
  */
-Value EvaluateExpr(const ExprTerm &term, const RmRecord &record, const std::vector<ColMeta> &cols);
+Value EvaluateExpr(const ExprTerm &term, const std::unique_ptr<RmRecord> &record, const std::vector<ColMeta> &cols);
 
-Value GetColumnValue(const RmRecord &record, const ColMeta &col);
+Value GetColumnValue(const std::unique_ptr<RmRecord> &record, const ColMeta &col);

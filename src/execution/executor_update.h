@@ -177,7 +177,7 @@ class UpdateExecutor : public AbstractExecutor {
                     ExprTerm temp_expr_term(set_clause.rhs_expr);
                     // 计算表达式的值 (使用 old_rec)
                     // 注意：需要包含 execution_common.h 才能调用 EvaluateExpr 和 GetColumnValue
-                    value = EvaluateExpr(temp_expr_term, *old_rec, tab_.cols);
+                    value = EvaluateExpr(temp_expr_term, old_rec, tab_.cols);
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                     // 从旧记录中获取列的值 (使用 old_rec)
                     const ColMeta *rhs_col_meta = nullptr;
@@ -191,7 +191,7 @@ class UpdateExecutor : public AbstractExecutor {
                         throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." +
                                         set_clause.rhs_col.col_name);
                     }
-                    value = GetColumnValue(*old_rec, *rhs_col_meta);
+                    value = GetColumnValue(old_rec, *rhs_col_meta);
                 } else {
                     throw RMDBError("Unsupported SetRhsType");
                 }

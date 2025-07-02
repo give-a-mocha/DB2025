@@ -187,14 +187,9 @@ class GroupExecutor : public AbstractExecutor {
                     rhs_agg_types.emplace_back(cond.rhs_col.agg_type);
                     break;
                 case ConditionRhsType::RHS_EXPR:
-                    // TODO: 实现 EvaluateAggrExpr 来处理包含聚合的表达式
-                    // rhs_val = EvaluateAggrExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
-                    // 暂时抛出错误，因为 EvaluateExpr 不适用于聚合上下文
-                    throw RMDBError(
-                        "Arithmetic expressions involving aggregates in HAVING clause RHS not yet fully supported.");
                     break;
                 default:
-                    throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
+                    throw InternalError("Unsupported ConditionRhsType in HAVING clause");
             }
         });
         std::vector<Value> rhs_aggr_vals = get_aggr_values(rec_cols, records, rhs_cols, rhs_agg_types);
@@ -207,8 +202,11 @@ class GroupExecutor : public AbstractExecutor {
                     rhs_vals[i] = rhs_aggr_vals[j];  // 使用聚合计算的值
                     j++;
                     break;
+                case ConditionRhsType::RHS_EXPR:
+                    rhs_vals[i] = EvaluateExpr(ExprTerm(conds[i].rhs_expr), nullptr, rec_cols);
+                    break;
                 default:
-                    throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
+                    throw InternalError("Unsupported ConditionRhsType in HAVING clause");
             }
         }
         // 遍历所有条件，检查是否满足
@@ -245,14 +243,10 @@ class GroupExecutor : public AbstractExecutor {
                 rhs_val = get_aggr_value(rec_cols, rec, cond.rhs_col, cond.rhs_col.agg_type);
                 break;
             case ConditionRhsType::RHS_EXPR:
-                // TODO: 实现 EvaluateAggrExpr 来处理包含聚合的表达式
-                // rhs_val = EvaluateAggrExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
-                // 暂时抛出错误，因为 EvaluateExpr 不适用于聚合上下文
-                throw RMDBError(
-                    "Arithmetic expressions involving aggregates in HAVING clause RHS not yet fully supported.");
+                rhs_val = EvaluateExpr(ExprTerm(cond.rhs_expr), nullptr, rec_cols);
                 break;
             default:
-                throw RMDBError("Unsupported ConditionRhsType in HAVING clause");
+                throw InternalError("Unsupported ConditionRhsType in HAVING clause");
         }
         // 比较左右两侧的值
         return Value::compare(lhs_val, rhs_val, cond.op);

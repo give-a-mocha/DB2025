@@ -91,7 +91,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                     ExprTerm temp_expr_term(set_clause.rhs_expr);
                     // 计算表达式的值
                     // 注意：这里需要传入当前的旧记录 old_rec 来获取列值
-                    value = EvaluateExpr(temp_expr_term, *old_rec, tab_.cols);
+                    value = EvaluateExpr(temp_expr_term, old_rec, tab_.cols);
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                     // 从旧记录中获取列的值
                     // 找到对应的列元数据
@@ -106,7 +106,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                         throw RMDBError("RHS column not found in SET clause: " + set_clause.rhs_col.tab_name + "." +
                                         set_clause.rhs_col.col_name);
                     }
-                    value = GetColumnValue(*old_rec, *rhs_col_meta);
+                    value = GetColumnValue(old_rec, *rhs_col_meta);
 
                 } else {
                     throw RMDBError("Unsupported SetRhsType");
@@ -152,13 +152,13 @@ class MvccUpdateExecutor : public AbstractExecutor {
             // 获取全局条件
             std::vector<Condition> conds =
                 txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
-            if (!conds.empty() && eval_conds(tab_.cols, conds, new_rec.get())) {
+            if (!conds.empty() && eval_conds(tab_.cols, conds, new_rec)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             auto rid_ = fh_->insert_record(new_rec->data, context_);
             txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
             // 添加日志要在插入索引之后，因为abort会回滚索引
-            if (!mvcc_insert_index(tab_, *new_rec, rid_, context_, txn_mgr_, sm_manager_)) {
+            if (!mvcc_insert_index(tab_, new_rec, rid_, context_, txn_mgr_, sm_manager_)) {
                 fh_->delete_record(rid_, context_);
                 txn_mgr_->abort(context_, context_->log_mgr_);
                 throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());

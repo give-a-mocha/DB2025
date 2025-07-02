@@ -203,7 +203,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         while (!is_end()) {
             rid_ = scan_->rid();
             std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
+            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
             scan_->next();
@@ -225,7 +225,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
+            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
             scan_->next();
