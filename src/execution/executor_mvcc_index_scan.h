@@ -208,6 +208,9 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             }
             scan_->next();
         }
+        if (scan_->is_end()) {
+            scan_->unlatch();
+        }
     }
 
     /**
