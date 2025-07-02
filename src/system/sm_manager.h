@@ -229,5 +229,5 @@ class SmManager {
 
     void set_output_file(bool enable);
 
-    void load_csv_data(const std::string& table_name, const std::string& file_path);
+    void load_csv_data(const std::string& table_name, const std::string& file_path, Transaction* txn);
 };

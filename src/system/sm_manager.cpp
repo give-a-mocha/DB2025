@@ -609,8 +609,9 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
 
-void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path) {
+void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path, Transaction* txn) {
     // INFO("Loading CSV data into table: {}, from file: {}", table_name, file_path);
+    // std::cerr << "system path: " << get_current_dir_name() << std::endl;
     // 1. 检查表是否存在
     if (!db_.is_table(table_name)) {
         throw TableNotFoundError(table_name);
@@ -667,7 +668,14 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
             offset += col.len;
         }
         // 11. 插入记录到表中
-        fh_->insert_record(record_data, nullptr);
+        auto rid_ = fh_->insert_record(record_data, nullptr);
+        RmRecord rec(record_size, record_data);
+        insert_index(table_name, rec, rid_, txn);
     }
     file.close();
+    // for(const auto &index : tab_.indexes) {
+    //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
+    //     ih->debug_print_tree();
+    // }
+    
 }

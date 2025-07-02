@@ -357,6 +357,25 @@ struct Value {
         }
         return res;
     }
+
+    std::string to_string() {
+        switch (type) {
+            case ColType::TYPE_INT: {
+                return std::to_string(int_val);
+            }
+
+            case ColType::TYPE_FLOAT: {
+                return std::to_string(float_val);
+            }
+
+            case ColType::TYPE_STRING: {
+                return str_val;
+            }
+            default: {
+                return "unknow";
+            }
+        }
+    }
 };
 
 // 前向声明 ArithExpr

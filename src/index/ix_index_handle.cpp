@@ -1208,10 +1208,15 @@ Iid IxIndexHandle::lower_bound(const char *key) {
     auto leaf_page = find_leaf_page(key, Operation::FIND, nullptr);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     int pos = leaf_node->lower_bound(key);
-    Iid res = {.page_no = leaf_node->get_page_no(), .slot_no = pos};
+    Iid res{};
     if (pos == leaf_node->get_size()) {
-        // 如果pos等于size，说明没有找到大于等于key的键值对
-        res = leaf_end();  // 返回叶子结点的结束位置
+        if (leaf_node->get_page_no() == file_hdr_->last_leaf_) {
+            res = leaf_end();  // 返回叶子结点的结束位置
+        } else {
+            res = {leaf_node->get_next_leaf(), 0};
+        }
+    } else {
+        res = {leaf_node->get_page_no(), pos};
     }
     leaf_page->runlatch();
     buffer_pool_manager_->unpin_page(leaf_page->get_page_id(), false);
@@ -1234,10 +1239,15 @@ Iid IxIndexHandle::upper_bound(const char *key) {
     auto leaf_page = find_leaf_page(key, Operation::FIND, nullptr);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     int pos = leaf_node->upper_bound(key);
-    Iid res = {.page_no = leaf_node->get_page_no(), .slot_no = pos};
+    Iid res{};
     if (pos == leaf_node->get_size()) {
-        // 如果pos等于size，说明没有找到大于等于key的键值对
-        res = leaf_end();  // 返回叶子结点的结束位置
+        if (leaf_node->get_page_no() == file_hdr_->last_leaf_) {
+            res = leaf_end();  // 返回叶子结点的结束位置
+        } else {
+            res = {leaf_node->get_next_leaf(), 0};
+        }
+    } else {
+        res = {leaf_node->get_page_no(), pos};
     }
     leaf_page->runlatch();
     buffer_pool_manager_->unpin_page(leaf_page->get_page_id(), false);

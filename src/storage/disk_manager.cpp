@@ -95,7 +95,7 @@ void DiskManager::read_page(int fd, page_id_t page_no, char *offset, int num_byt
     ssize_t bytes_read = pread(fd, offset, num_bytes, offset_in_file);
 
     if (bytes_read != num_bytes) {
-        throw InternalError("Failed to read page");
+        throw InternalError("DiskManager::read_page Error");
     }
 }
 
