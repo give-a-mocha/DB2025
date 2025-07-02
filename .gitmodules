@@ -1,0 +1,3 @@
+[submodule "TPCC-Tester"]
+	path = TPCC-Tester
+	url = https://github.com/give-a-mocha/TPCC-Tester.git
