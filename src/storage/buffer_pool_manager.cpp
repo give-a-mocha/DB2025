@@ -70,7 +70,6 @@ void BufferPoolManager::update_page(Page* page, PageId new_page_id, frame_id_t n
     // 如果是脏页,写回磁盘
     if (page->is_dirty_) {
         disk_manager_->write_page(page->id_.fd, page->id_.page_no, page->data_, PAGE_SIZE);
-        page->is_dirty_ = false;
     }
 
     // 从页表中删除旧映射
@@ -362,30 +361,15 @@ void BufferPoolManager::delete_all_pages(int fd) {
     TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
-    // 收集需要删除的页面ID
-    std::vector<PageId> pages_to_delete;
-    for (const auto& pair : page_table_) {
-        if (pair.first.fd == fd) {
-            pages_to_delete.push_back(pair.first);
-        }
-    }
-
-    // 删除收集到的页面
-    for (const auto& page_id : pages_to_delete) {
-        auto iter = page_table_.find(page_id);
-        if (iter != page_table_.end()) {
-            frame_id_t frame_id = iter->second;
+    for (auto it = page_table_.begin(); it != page_table_.end();) {
+        if (it->first.fd == fd) {
+            // 获取frame和页面
+            frame_id_t frame_id = it->second;
             Page* page = &pages_[frame_id];
 
-            // 如果页面被pin，强制解除pin
-            if (page->pin_count_ > 0) {
-                page->pin_count_ = 0;
-                replacer_->unpin(frame_id);
-            }
-
-            // 如果是脏页，写回磁盘
+            // 如果是脏页写回磁盘
             if (page->is_dirty_) {
-                disk_manager_->write_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
+                disk_manager_->write_page(fd, page->id_.page_no, page->data_, PAGE_SIZE);
             }
 
             // 重置页面元数据
@@ -395,10 +379,12 @@ void BufferPoolManager::delete_all_pages(int fd) {
             page->reset_memory();
 
             // 从页表中删除
-            page_table_.erase(iter);
+            it = page_table_.erase(it);
 
             // 将frame加入空闲列表
             free_list_.push_back(frame_id);
+        } else {
+            ++it;
         }
     }
 }
