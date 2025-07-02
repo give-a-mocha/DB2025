@@ -541,6 +541,7 @@ class AbstractExecutor {
                             case ColType::TYPE_STRING:
                                 throw AggregateError("Aggregate function SUM is not supported for string type column.");
                         }
+                        break;
                     case AggregateType::AVG:
                         switch (col_metas[i].type) {
                             case ColType::TYPE_INT: {
