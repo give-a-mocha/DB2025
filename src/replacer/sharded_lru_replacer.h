@@ -30,7 +30,7 @@
  * 可以高效执行，从而显著缩短外部锁的持有时间，最终提升整个系统的并发吞吐量。
  */
 class ShardedLRUReplacer : public Replacer {
-public:
+   public:
     /**
      * @brief Create a new ShardedLRUReplacer.
      * @param num_shards the number of shards to use.
@@ -64,7 +64,7 @@ public:
      */
     size_t Size() override;
 
-private:
+   private:
     struct LRUShard {
         std::list<frame_id_t> lru_list_;
         std::unordered_map<frame_id_t, std::list<frame_id_t>::iterator> lru_map_;
