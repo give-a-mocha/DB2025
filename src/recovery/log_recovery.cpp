@@ -205,8 +205,7 @@ void RecoveryManager::create_static_check_point() {
     // （4）将当前数据库缓冲区中的内容写到数据库中；
     // （5）把日志文件中检查点记录的地址写到“重新启动文件”中。
 
-    std::unique_lock lock_(latch_);
-    std::unique_lock lock(log_mgr_->latch_);
+    std::scoped_lock lock{latch_, log_mgr_->latch_};
     auto log_records_ = log_mgr_->read_logs_from_disk(sm_manager_->db_.get_log_offset());
     log_mgr_->flush_log_to_disk_without_lock();
     flush_to_disk();

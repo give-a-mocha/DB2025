@@ -22,7 +22,7 @@ See the Mulan PSL v2 for more details. */
  * @thread_safety 通过互斥锁保护并发访问
  */
 void LogManager::add_log_to_buffer(LogRecord *log_record) {
-    std::lock_guard<std::mutex> lock(latch_);  // 加锁以确保线程安全
+    std::scoped_lock<std::mutex> lock(latch_);  // 加锁以确保线程安全
     add_log_to_buffer_without_lock(log_record);
 }
 
@@ -82,7 +82,7 @@ void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
  * 3. 确保在适当的时机触发刷盘以平衡性能和持久性
  */
 void LogManager::flush_log_to_disk() {
-    std::lock_guard<std::mutex> lock(latch_);
+    std::scoped_lock<std::mutex> lock(latch_);
     flush_log_to_disk_without_lock();
 }
 

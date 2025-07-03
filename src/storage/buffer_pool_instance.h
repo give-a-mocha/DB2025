@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "page.h"
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
+#include "replacer/sharded_lru_replacer.h"
 
 /**
  * @brief 缓冲池管理器类
@@ -43,7 +44,7 @@ class BufferPoolInstance {
         pages_ = new Page[pool_size_];
         // 可以被Replacer改变
         if (REPLACER_TYPE.compare("LRU") == 0) replacer_ = new LRUReplacer(pool_size_);
-        else if (REPLACER_TYPE.compare("CLOCK") == 0) replacer_ = new LRUReplacer(pool_size_);
+        else if (REPLACER_TYPE.compare("SHARED_LRU") == 0) replacer_ = new ShardedLRUReplacer(pool_size_);
         else {
             replacer_ = new LRUReplacer(pool_size_);
         }

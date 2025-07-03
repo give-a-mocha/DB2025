@@ -25,7 +25,7 @@ See the Mulan PSL v2 for more details. */
  * @param {int} tab_fd
  */
 bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
+    std::scoped_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
@@ -143,7 +143,7 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
  * @throws TransactionAbortException 如果事务状态不允许加锁
  */
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
+    std::scoped_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
@@ -307,7 +307,7 @@ bool LockManager::lock_IX_on_table(Transaction* txn, int tab_fd) { return true; 
  * @param {LockDataId} lock_data_id 要释放的锁ID
  */
 bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
-    std::unique_lock<std::mutex> lock(latch_);
+    std::scoped_lock<std::mutex> lock(latch_);
 
     auto lock_table_it = lock_table_.find(lock_data_id);
     if (lock_table_it == lock_table_.end()) {
@@ -343,7 +343,7 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 }
 
 bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
-    std::unique_lock<std::mutex> lock(latch_);
+    std::scoped_lock<std::mutex> lock(latch_);
 
     auto queue_it = gap_lock_table_.find(tab_fd);
     if (queue_it == gap_lock_table_.end()) {
@@ -358,7 +358,7 @@ bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> 
 }
 
 std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* txn) {
-    std::unique_lock<std::mutex> lock(latch_);
+    std::scoped_lock<std::mutex> lock(latch_);
     std::vector<Condition> gap_conditions;
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
@@ -375,7 +375,7 @@ std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* t
 }
 
 bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);
+    std::scoped_lock<std::mutex> lock(latch_);
 
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
