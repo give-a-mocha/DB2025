@@ -525,14 +525,14 @@ void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Ri
     UpdateUndoLink(fd, rid, undo_link);
 }
 
-std::pair<std::vector<UndoLog>, bool> TransactionManager::get_undologs_with_lock(int fd, Rid rid, Transaction *txn) {
+std::pair<std::vector<UndoLog>, bool> TransactionManager::get_undologs_with_lock(int fd, Rid rid, Transaction* txn) {
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     std::vector<UndoLog> undo_logs;
     auto pre_undo_link = GetUndoLink(fd, rid);
-    
+
     // 现在磁盘的是不是被标记删除
     bool is_deleted = false;
-    if(pre_undo_link.has_value()) {
+    if (pre_undo_link.has_value()) {
         auto undo_log = GetUndoLog(pre_undo_link.value());
         is_deleted = undo_log.is_deleted_;
     }

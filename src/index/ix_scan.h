@@ -66,9 +66,7 @@ class IxScan : public RecScan {
     /**
      * @brief 析构函数，确保正确释放页面资源
      */
-    ~IxScan() {
-        unlatch();
-    }
+    ~IxScan() { unlatch(); }
 
     /**
      * @brief 移动到下一条记录

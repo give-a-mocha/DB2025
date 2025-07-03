@@ -678,5 +678,4 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
     //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
     //     ih->debug_print_tree();
     // }
-    
 }

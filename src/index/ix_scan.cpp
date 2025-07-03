@@ -54,7 +54,7 @@ void IxScan::next_key_position() {
         iid_.page_no = node->get_next_leaf();
         Page* next_page = bpm_->fetch_page({ih_->fd_, iid_.page_no});
         next_page->rlatch();
-        unlatch();  // 释放当前页面
+        unlatch();        // 释放当前页面
         now = next_page;  // 更新当前页面为下一个叶节点
     }
     delete node;  // 释放内存
