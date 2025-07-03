@@ -613,6 +613,7 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
     // INFO("Loading CSV data into table: {}, from file: {}", table_name, file_path);
     // std::cerr << "system path: " << get_current_dir_name() << std::endl;
     // 1. 检查表是否存在
+    std::cerr << "system path: " << get_current_dir_name() << std::endl;
     if (!db_.is_table(table_name)) {
         throw TableNotFoundError(table_name);
     }

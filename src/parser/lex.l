@@ -43,9 +43,10 @@ alpha [a-zA-Z]
 digit [0-9]
 white_space [ \t]+
 new_line "\r"|"\n"|"\r\n"
+sign "+"|"-"
 identifier {alpha}(_|{alpha}|{digit})*
-value_int {digit}+
-value_float {digit}+\.({digit}+)?
+value_int {sign}?{digit}+
+value_float {sign}?{digit}+\.({digit}+)?
 value_string '[^']*'
 value_path [\.|\/][^ \t]+\.csv
 single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."|"+"|"-"|"/"
