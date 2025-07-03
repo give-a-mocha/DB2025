@@ -66,7 +66,7 @@ class SeqScanExecutor : public AbstractExecutor {
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
-            if (eval_conds(cols_, fed_conds_, rec.get())) {
+            if (eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
             scan_->next();
@@ -92,7 +92,7 @@ class SeqScanExecutor : public AbstractExecutor {
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
-            if (eval_conds(cols_, fed_conds_, rec.get())) {
+            if (eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
             scan_->next();

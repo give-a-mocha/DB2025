@@ -68,6 +68,11 @@ void LRUReplacer::unpin(frame_id_t frame_id) {
     // 支持并发锁
     std::scoped_lock lock{latch_};
 
+    // 满了
+    if (LRUlist_.size() >= max_size_) {
+        return;
+    }
+
     // 选择一个frame取消固定
     if (LRUhash_.find(frame_id) != LRUhash_.end()) return;
     LRUlist_.push_front(frame_id);                 // 加入链表头部(最近使用)

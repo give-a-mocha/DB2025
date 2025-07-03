@@ -106,8 +106,8 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
     return rec;
 }
 
-bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *context_, TransactionManager *txn_mgr,
-                       SmManager *sm_manager) {
+bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
+                       TransactionManager *txn_mgr, SmManager *sm_manager) {
     RmFileHandle *fh_ = sm_manager->fhs_.at(tab_.name).get();
     std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
     inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
@@ -118,7 +118,7 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
         for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
             offset += index.cols[j].len;
         }
         // 检查索引项是否已存在
@@ -165,13 +165,13 @@ bool mvcc_insert_index(const TabMeta &tab_, RmRecord &rec, Rid rid, Context *con
  * @param col 列元数据
  * @return 提取出的 Value
  */
-Value GetColumnValue(const RmRecord &record, const ColMeta &col) {
+Value GetColumnValue(const std::unique_ptr<RmRecord> &record, const ColMeta &col) {
     Value val;
-    val.set_col_data(col.type, record.data + col.offset, col.len);
+    val.set_col_data(col.type, record->data + col.offset, col.len);
     return val;
 }
 
-Value EvaluateExpr(const ExprTerm &term, const RmRecord &record, const std::vector<ColMeta> &cols) {
+Value EvaluateExpr(const ExprTerm &term, const std::unique_ptr<RmRecord> &record, const std::vector<ColMeta> &cols) {
     TRACE_FUNCTION
     switch (term.term_type) {
         case TermType::VALUE: {
@@ -180,11 +180,16 @@ Value EvaluateExpr(const ExprTerm &term, const RmRecord &record, const std::vect
         }
         case TermType::COLUMN: {
             // 查找列并返回值
+            if (record == nullptr) {
+                throw InternalError("Record is null in record evaluation for column: " + term.col.to_string());
+            }
             for (const auto &col_meta : cols) {
                 if (col_meta.name == term.col.col_name && col_meta.tab_name == term.col.tab_name) {
                     return GetColumnValue(record, col_meta);
                 }
             }
+            // 如果没有找到对应的列，抛出异常
+            throw InternalError("Column not found: " + term.col.to_string() + " in record evaluation");
         }
         case TermType::EXPR: {
             // 递归计算左右操作数

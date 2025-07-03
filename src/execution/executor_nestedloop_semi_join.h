@@ -104,7 +104,7 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
             auto rec = std::make_unique<RmRecord>(left_->tupleLen() + right_->tupleLen());
             memcpy(rec->data, left_rec->data, left_->tupleLen());
             memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
-            if (eval_conds(tot_cols_, fed_conds_, rec.get())) {
+            if (eval_conds(tot_cols_, fed_conds_, rec)) {
                 return;
             }
             right_->nextTuple();
