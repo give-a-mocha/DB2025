@@ -34,7 +34,7 @@ class BufferPoolManager {
     // Page* pages_;                            // 缓冲池中的页面数组，连续分配
     // std::unordered_map<PageId, frame_id_t, PageIdHash> page_table_;  // 页面到帧的映射表
     // std::list<frame_id_t> free_list_;                                // 空闲帧链表
-    DiskManager* disk_manager_;                                      // 磁盘管理器
+    DiskManager* disk_manager_;  // 磁盘管理器
     // Replacer* replacer_;                                             // 页面替换策略实现
     // std::mutex latch_;                                               // 并发控制锁
 
@@ -128,5 +128,7 @@ class BufferPoolManager {
      */
     void delete_all_pages(int fd);
 
-    size_t get_instance_no(const PageId &page_id) const { return std::hash<PageId>()(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
+    size_t get_instance_no(const PageId& page_id) const {
+        return std::hash<PageId>()(page_id) % BUFFER_POOL_INSTANCE_SIZE;
+    }
 };
