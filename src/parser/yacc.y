@@ -540,7 +540,7 @@ factor:
     {
         $$ = $2; // Pass through the inner expression
     }
-    |   '+' factor
+    /* |   '+' factor
     {
         $$ = $2; // 一元加不改变数值，直接返回操作数
     }
@@ -550,7 +550,7 @@ factor:
         auto zero_lit = std::make_shared<IntLit>(0);
         // 创建一个 ArithExpr 节点表示 0 - factor
         $$ = std::make_shared<ArithExpr>(zero_lit, SV_ARITH_MINUS, $2);
-    }
+    } */
     ;
 
 /* SET子句列表 - 用于UPDATE语句 */
