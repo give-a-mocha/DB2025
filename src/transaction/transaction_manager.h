@@ -213,6 +213,8 @@ class TransactionManager {
 
     void do_delete(Transaction *txn);
 
+    std::pair<std::vector<UndoLog>, bool> get_undologs_with_lock(int fd, Rid rid, Transaction *txn);
+
    private:
     /** @brief 检查事务是否可以被垃圾回收 */
     bool is_transaction_expired(Transaction *txn, timestamp_t watermark) const;
