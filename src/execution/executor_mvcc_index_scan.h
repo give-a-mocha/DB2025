@@ -113,6 +113,15 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     }
 
     /**
+     * @brief 析构函数，确保正确释放扫描器资源
+     */
+    ~MvccIndexScanExecutor() {
+        if (scan_) {
+            scan_->unlatch();  // 无论扫描是否结束，都释放持有的锁
+        }
+    }
+
+    /**
      * @brief 初始化索引扫描并定位第一条记录
      * @throw InternalError 当索引访问失败时
 
@@ -202,14 +211,14 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
+            // if(tab_.name == "warehouse") {
+            //     INFO("IndexScanExecutor: rid_ = {},{}", rid_.page_no, rid_.slot_no);
+            // }
             std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec.get())) {
                 return;
             }
             scan_->next();
-        }
-        if (scan_->is_end()) {
-            scan_->unlatch();
         }
     }
 
@@ -232,9 +241,6 @@ class MvccIndexScanExecutor : public AbstractExecutor {
                 return;
             }
             scan_->next();
-        }
-        if (scan_->is_end()) {
-            scan_->unlatch();
         }
     }
 
