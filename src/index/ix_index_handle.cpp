@@ -1343,14 +1343,16 @@ void IxIndexHandle::maintain_parent(IxNodeHandle *node) {
         char *parent_key = parent->get_key(rank);
         char *child_first_key = curr->get_key(0);
         if (memcmp(parent_key, child_first_key, file_hdr_->col_tot_len_) == 0) {
-            assert(buffer_pool_manager_->unpin_page(parent->get_page_id(), true));
+            // assert(buffer_pool_manager_->unpin_page(parent->get_page_id(), true));
+            buffer_pool_manager_->unpin_page(parent->get_page_id(), true);
             delete parent;
             break;
         }
         memcpy(parent_key, child_first_key, file_hdr_->col_tot_len_);  // 修改了parent node
         curr = parent;
 
-        assert(buffer_pool_manager_->unpin_page(parent->get_page_id(), true));
+        // assert(buffer_pool_manager_->unpin_page(parent->get_page_id(), true));
+        buffer_pool_manager_->unpin_page(parent->get_page_id(), true);
         delete parent;  // 释放parent内存
     }
 }

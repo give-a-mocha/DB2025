@@ -25,13 +25,11 @@ See the Mulan PSL v2 for more details. */
 inline AggregateType SvAggregateType2AggregateType(ast::SvAggregateType sv_type) {
     static AggregateType types[] = {AggregateType::NONE, AggregateType::COUNT, AggregateType::SUM,
                                     AggregateType::AVG,  AggregateType::MAX,   AggregateType::MIN};
-    assert(sv_type >= ast::SvAggregateType::NONE && sv_type <= ast::SvAggregateType::MIN);
     return types[static_cast<int>(sv_type)];
 }
 
 inline std::string coltype2str(ColType type) {
     static std::string strs[] = {"INT", "FLOAT", "STRING"};
-    assert(type >= ColType::TYPE_INT && type <= ColType::TYPE_STRING);
     return strs[static_cast<int>(type)];
 }
 

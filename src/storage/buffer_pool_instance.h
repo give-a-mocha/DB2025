@@ -52,6 +52,7 @@ class BufferPoolInstance {
         for (size_t i = 0; i < pool_size_; ++i) {
             free_list_.emplace_back(static_cast<frame_id_t>(i));  // static_cast转换数据类型
         }
+        page_table_.reserve(pool_size_);  // 预留空间，避免频繁扩容
     }
 
     ~BufferPoolInstance() {
