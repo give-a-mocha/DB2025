@@ -131,9 +131,9 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
             bool ok = true;
             for (const auto &rid_ : result) {
                 bool is_not_deleted = get_lock_and_check_conflict(context_->txn_, txn_mgr, fh_, rid_);
-                LockDataId lock_data_id(fh_->GetFd(), rid_, LockDataType::RECORD);
-                txn_mgr->get_lock_manager()->unlock(context_->txn_, lock_data_id);
                 if (is_not_deleted == true) {
+                    LockDataId lock_data_id(fh_->GetFd(), rid_, LockDataType::RECORD);
+                    txn_mgr->get_lock_manager()->unlock(context_->txn_, lock_data_id);
                     ok = false;
                     break;
                 }

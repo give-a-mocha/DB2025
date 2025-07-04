@@ -214,6 +214,7 @@ class TransactionManager {
     void do_delete(Transaction *txn);
 
     std::pair<std::vector<UndoLog>, bool> get_undologs_with_lock(int fd, Rid rid, Transaction *txn);
+    bool is_delete_record(int fd, Rid rid);
 
    private:
     /** @brief 检查事务是否可以被垃圾回收 */

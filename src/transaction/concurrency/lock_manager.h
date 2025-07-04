@@ -79,6 +79,8 @@ class LockManager {
 
     bool lock_exclusive_on_table(Transaction* txn, int tab_fd);
 
+    bool is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd);
+
     bool lock_IS_on_table(Transaction* txn, int tab_fd);
 
     bool lock_IX_on_table(Transaction* txn, int tab_fd);

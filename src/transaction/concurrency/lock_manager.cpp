@@ -268,6 +268,26 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
     }
 }
 
+bool LockManager::is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
+    std::scoped_lock<std::mutex> lock(latch_);
+
+    LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
+
+    auto queue_it = lock_table_.find(lock_data_id);
+    if (queue_it == lock_table_.end()) {
+        return false;
+    }
+    LockRequestQueue& request_queue = queue_it->second;
+
+    for (const auto& req : request_queue.request_queue_) {
+        if (req.granted_) {
+            if (req.txn_id_ != txn->get_transaction_id()) {
+                return false;
+            }
+        }
+    }
+}
+
 /**
  * @description: 申请表级读锁
  * @return {bool} 返回加锁是否成功
