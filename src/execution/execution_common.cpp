@@ -39,24 +39,29 @@ bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, 
     if (ok == false) {
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
     }
+    bool is_not_deleted = check_conflict(txn, txn_mgr, fh, rid);
+    if(is_not_deleted == false) {
+        LockDataId lock_data_id(fh->GetFd(), rid, LockDataType::RECORD);
+        txn_mgr->get_lock_manager()->unlock(txn, lock_data_id);
+        return false;
+    }
+    return true;
+}
 
+bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
     auto pre_undo_link = txn_mgr->GetUndoLink(fh->GetFd(), rid);
     if (pre_undo_link.has_value()) {
         auto pre_txn = pre_undo_link.value().prev_txn_;
         auto undo_log = txn_mgr->GetUndoLog(pre_undo_link.value());
-        // 检查是否有已提交事务更新它且提交时间大于当前事务读时间
-        if (txn_mgr->get_txn_state(pre_txn) == TransactionState::COMMITTED && undo_log.ts_ > txn->get_read_ts()) {
+        // 检查是否有事务更新它且提交时间大于当前事务读时间
+        if (pre_txn != txn->get_transaction_id() && undo_log.ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
 
-        // 如果是已提交且删除的记录，直接跳过
         if (undo_log.is_deleted_) {
-            LockDataId lock_data_id(fh->GetFd(), rid, LockDataType::RECORD);
-            txn_mgr->get_lock_manager()->unlock(txn, lock_data_id);
             return false;
         }
     }
-
     return true;
 }
 
@@ -130,10 +135,8 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
         } else {
             bool ok = true;
             for (const auto &rid_ : result) {
-                bool is_not_deleted = get_lock_and_check_conflict(context_->txn_, txn_mgr, fh_, rid_);
+                bool is_not_deleted = check_conflict(context_->txn_, txn_mgr, fh_, rid_);
                 if (is_not_deleted == true) {
-                    LockDataId lock_data_id(fh_->GetFd(), rid_, LockDataType::RECORD);
-                    txn_mgr->get_lock_manager()->unlock(context_->txn_, lock_data_id);
                     ok = false;
                     break;
                 }
