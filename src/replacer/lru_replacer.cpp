@@ -72,9 +72,9 @@ void LRUReplacer::unpin(frame_id_t frame_id) {
     // std::scoped_lock lock{latch_};
 
     // 满了
-    if (LRUlist_.size() >= max_size_) {
-        return;
-    }
+    // if (LRUlist_.size() >= max_size_) {
+    //     return;
+    // }
 
     // 选择一个frame取消固定
     if (LRUhash_.find(frame_id) != LRUhash_.end()) return;
