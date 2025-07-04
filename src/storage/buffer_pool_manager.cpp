@@ -63,7 +63,13 @@ bool BufferPoolManager::flush_page(PageId page_id) {
 Page* BufferPoolManager::new_page(PageId* page_id) {
     TRACE_FUNCTION
     page_id->page_no = disk_manager_->allocate_page(page_id->fd);
-    return buffer_pool_instances_[get_instance_no(*page_id)]->new_page(page_id);
+    auto res = buffer_pool_instances_[get_instance_no(*page_id)]->new_page(page_id);
+    if (res == nullptr) {
+        disk_manager_->rollback_page(page_id->fd);  // 如果新页面创建失败，回滚磁盘上的页面分配
+        page_id->page_no = INVALID_PAGE_ID;         // 重置页面编号为无效值
+        throw InternalError("Failed to create new page in buffer pool manager");
+    }
+    return res;
 }
 
 /**

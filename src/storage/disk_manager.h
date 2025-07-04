@@ -39,6 +39,8 @@ class DiskManager {
 
     page_id_t allocate_page(int fd);
 
+    void rollback_page(int fd);
+
     void deallocate_page(page_id_t page_id);
 
     /**

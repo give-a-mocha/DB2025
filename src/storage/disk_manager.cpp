@@ -110,6 +110,16 @@ page_id_t DiskManager::allocate_page(int fd) {
     return fd2pageno_[fd]++;
 }
 
+void DiskManager::rollback_page(int fd) {
+    // 回滚指定文件的页面编号，减少1
+    assert(fd >= 0 && fd < MAX_FD);
+    if (fd2pageno_[fd] > 0) {
+        fd2pageno_[fd]--;
+    } else {
+        throw InternalError("Cannot rollback page allocation below zero");
+    }
+}
+
 void DiskManager::deallocate_page(__attribute__((unused)) page_id_t page_id) {}
 
 bool DiskManager::is_dir(const std::string &path) {
