@@ -550,7 +550,7 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
         if (rhs_term->term_type == TermType::VALUE) {
             cond.rhs_type = ConditionRhsType::RHS_VALUE;
             cond.rhs_val = rhs_term->val;
-            if(cond.op == CompOp::OP_EQ) {
+            if (cond.op == CompOp::OP_EQ) {
                 col_values[cond.lhs_col] = cond.rhs_val;  // 记录列值
             }
         } else if (rhs_term->term_type == TermType::COLUMN) {
@@ -561,7 +561,7 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
             } else {
                 // 否则，设置为列引用
                 cond.rhs_type = ConditionRhsType::RHS_COLUMN;
-                cond.rhs_col = rhs_term->col;  // 已经由 AnalyzeExprTerm 处理过别名和检查  
+                cond.rhs_col = rhs_term->col;  // 已经由 AnalyzeExprTerm 处理过别名和检查
             }
         } else if (rhs_term->term_type == TermType::EXPR) {
             cond.rhs_type = ConditionRhsType::RHS_EXPR;

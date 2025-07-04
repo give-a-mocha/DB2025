@@ -132,9 +132,7 @@ struct TabCol {
  * @brief TabCol 的哈希函数对象，用于在 STL 哈希容器中使用
  */
 struct TabColHash {
-    size_t operator()(const TabCol& tab_col) const {
-        return tab_col.hash();
-    }
+    size_t operator()(const TabCol &tab_col) const { return tab_col.hash(); }
 };
 
 /**
