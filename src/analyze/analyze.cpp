@@ -243,6 +243,23 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             }
             check_orderby_with_group(query->order_bys, query->cols, query->group_cols);
         }
+
+        // 处理 limit
+        query->limit = std::make_pair(0, std::numeric_limits<int>::max());  // 默认不限制数量
+        if (x->limit) {
+            int offset = 0;
+            int count = std::numeric_limits<int>::max();  // 默认不限制数量
+            if (auto offset_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->offset)) {
+                offset = offset_val->val;
+            }
+            if (auto count_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->count)) {
+                count = count_val->val;
+            }
+            if (offset < 0 || count < 0) {
+                throw InternalError("LIMIT offset and count must be non-negative");
+            }
+            query->limit = std::make_pair(offset, count);  // 设置LIMIT偏移
+        }
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {  // 处理UPDATE查询
         // 添加被更新的表
         if (!sm_manager_->db_.is_table(x->tab_name->tab_name)) {  // 检查表是否存在

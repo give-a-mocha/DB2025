@@ -67,6 +67,8 @@ class Query {
     std::vector<Condition> having_conds;  // HAVING子句的条件
 
     std::vector<OrderbyInfo> order_bys;  // ORDER BY 子句
+
+    std::pair<int, int> limit;  // LIMIT子句的偏移和数量
     /**
      * @brief 默认构造函数
      * @note 创建一个空的查询对象，各容器保持为空

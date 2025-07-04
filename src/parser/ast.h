@@ -257,10 +257,10 @@ struct GroupBy : public TreeNode {
 };
 
 struct Limit : public TreeNode {
-    std::shared_ptr<Value> offset;
-    std::shared_ptr<Value> count;
+    std::shared_ptr<IntLit> offset;
+    std::shared_ptr<IntLit> count;
 
-    Limit(std::shared_ptr<Value> offset_, std::shared_ptr<Value> count_)
+    Limit(std::shared_ptr<IntLit> offset_, std::shared_ptr<IntLit> count_)
         : offset(std::move(offset_)), count(std::move(count_)) {}
 };
 

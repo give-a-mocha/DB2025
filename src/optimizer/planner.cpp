@@ -213,17 +213,8 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     plan = generate_sort_plan(query, std::move(plan));
 
     // 处理limit
-    auto x = std::dynamic_pointer_cast<ast::SelectStmt>(query->parse);
-    if (x->limit) {
-        int offset = 0;
-        int count = INT_MAX;
-        if (auto offset_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->offset)) {
-            offset = offset_val->val;
-        }
-        if (auto count_val = std::dynamic_pointer_cast<ast::IntLit>(x->limit->count)) {
-            count = count_val->val;
-        }
-        plan = std::make_shared<LimitPlan>(std::move(plan), offset, count);
+    if (query->limit != std::make_pair(0, std::numeric_limits<int>::max())) {
+        plan = std::make_shared<LimitPlan>(std::move(plan), query->limit.first, query->limit.second);
     }
 
     return plan;

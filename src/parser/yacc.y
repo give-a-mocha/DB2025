@@ -261,13 +261,13 @@ opt_limit_clause:
     {
         $$ = nullptr;
     }
-    |   LIMIT value
+    |   LIMIT VALUE_INT
     {
-        $$ = std::make_shared<Limit>(nullptr, $2);
+        $$ = std::make_shared<Limit>(std::make_shared<IntLit>(0), std::make_shared<IntLit>($2));
     }
-    |   LIMIT value OFFSET value
+    |   LIMIT VALUE_INT OFFSET VALUE_INT
     {
-        $$ = std::make_shared<Limit>($4, $2);
+        $$ = std::make_shared<Limit>(std::make_shared<IntLit>($4), std::make_shared<IntLit>($2));
     };
 
 /* 字段列表 - 用于CREATE TABLE */
