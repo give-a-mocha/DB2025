@@ -533,6 +533,7 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
     TRACE_FUNCTION
     conds.clear();                   // 清空输出条件向量
     conds.reserve(sv_conds.size());  // 预分配空间以提高性能
+    std::unordered_map<TabCol, Value, TabColHash> col_values;
     for (auto &expr : sv_conds) {
         Condition cond;
         // 处理条件左侧的列引用
@@ -544,13 +545,24 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
         cond.op = convert_sv_comp_op(expr->op);                // 转换比较操作符
 
         // 处理右侧操作数，可能是值、列引用或算术表达式
+        //! where条件暂时不涉及表达式计算
         auto rhs_term = AnalyzeExprTerm(expr->rhs, all_cols, tab_refs);
         if (rhs_term->term_type == TermType::VALUE) {
             cond.rhs_type = ConditionRhsType::RHS_VALUE;
             cond.rhs_val = rhs_term->val;
+            if(cond.op == CompOp::OP_EQ) {
+                col_values[cond.lhs_col] = cond.rhs_val;  // 记录列值
+            }
         } else if (rhs_term->term_type == TermType::COLUMN) {
-            cond.rhs_type = ConditionRhsType::RHS_COLUMN;
-            cond.rhs_col = rhs_term->col;  // 已经由 AnalyzeExprTerm 处理过别名和检查
+            if(cond.op == CompOp::OP_EQ && col_values.count(rhs_term->col)) {
+                // 如果是等于操作且右侧列已经有值，直接使用已记录的值
+                cond.rhs_type = ConditionRhsType::RHS_VALUE;
+                cond.rhs_val = col_values[rhs_term->col];
+            } else {
+                // 否则，设置为列引用
+                cond.rhs_type = ConditionRhsType::RHS_COLUMN;
+                cond.rhs_col = rhs_term->col;  // 已经由 AnalyzeExprTerm 处理过别名和检查  
+            }
         } else if (rhs_term->term_type == TermType::EXPR) {
             cond.rhs_type = ConditionRhsType::RHS_EXPR;
             cond.rhs_expr = rhs_term->expr;

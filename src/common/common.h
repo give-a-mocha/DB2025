@@ -110,6 +110,31 @@ struct TabCol {
     void set_col_alias(const std::string &alias) { col_alias = alias; }
 
     void set_agg_type(ast::SvAggregateType agg_type_) { agg_type = SvAggregateType2AggregateType(agg_type_); }
+
+    /**
+     * @brief 计算 TabCol 对象的哈希值
+     *
+     * 基于表名、列名和表别名计算哈希值，用于在哈希容器中存储 TabCol 对象
+     *
+     * @return 哈希值
+     */
+    size_t hash() const {
+        std::hash<std::string> str_hash;
+        size_t h1 = str_hash(tab_name);
+        size_t h2 = str_hash(col_name);
+        size_t h3 = str_hash(tab_alias);
+        // 使用简单的哈希组合方法
+        return h1 ^ (h2 << 1) ^ (h3 << 2);
+    }
+};
+
+/**
+ * @brief TabCol 的哈希函数对象，用于在 STL 哈希容器中使用
+ */
+struct TabColHash {
+    size_t operator()(const TabCol& tab_col) const {
+        return tab_col.hash();
+    }
 };
 
 /**
