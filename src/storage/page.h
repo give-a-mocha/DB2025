@@ -35,16 +35,16 @@ struct PageId {
 /**
  * @brief PageId的自定义哈希算法
  */
-struct PageIdHash {
-    size_t operator()(const PageId &x) const { return (x.fd << 16) | x.page_no; }
-};
+// struct PageIdHash {
+//     size_t operator()(const PageId &x) const { return (x.fd << 16) | x.page_no; }
+// };
 
 template <>
 struct std::hash<PageId> {
     size_t operator()(const PageId &obj) const {
         size_t h1 = std::hash<int>()(obj.fd);
         size_t h2 = std::hash<page_id_t>()(obj.page_no);
-        return (h1 << 1) ^ h2;
+        return h1 ^ (h2 << 1);
     }
 };
 
