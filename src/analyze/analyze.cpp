@@ -159,11 +159,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         }
 
         // 检查别名是否与原有列冲突
-        for (const auto &col : all_cols) {
-            if (col_refs.count(col.name)) {
-                throw InternalError("Column alias '" + col.name + "' conflicts with existing column");
-            }
-        }
+        // for (const auto &col : all_cols) {
+        //     if (col_refs.count(col.name)) {
+        //         throw InternalError("Column alias '" + col.name + "' conflicts with existing column");
+        //     }
+        // }
 
         // 处理WHERE条件子句
         get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
