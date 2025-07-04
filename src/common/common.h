@@ -72,7 +72,7 @@ struct TabCol {
      * @return 如果x小于y则返回true
      */
     friend bool operator<(const TabCol &x, const TabCol &y) {
-        return std::tie(x.tab_name, x.col_name) < std::tie(y.tab_name, y.col_name);
+        return std::tie(x.tab_name, x.col_name, x.agg_type) < std::tie(y.tab_name, y.col_name, y.agg_type);
     }
 
     /**
@@ -83,7 +83,7 @@ struct TabCol {
      * @return 如果x等于y则返回true
      */
     friend bool operator==(const TabCol &x, const TabCol &y) {
-        return std::tie(x.tab_name, x.col_name) == std::tie(y.tab_name, y.col_name);
+        return std::tie(x.tab_name, x.col_name, x.agg_type) == std::tie(y.tab_name, y.col_name, x.agg_type);
     }
 
     friend bool operator!=(const TabCol &x, const TabCol &y) {
@@ -114,7 +114,7 @@ struct TabCol {
     /**
      * @brief 计算 TabCol 对象的哈希值
      *
-     * 基于表名、列名和表别名计算哈希值，用于在哈希容器中存储 TabCol 对象
+     * 基于表名、列名和聚合类型计算哈希值，用于在哈希容器中存储 TabCol 对象
      *
      * @return 哈希值
      */
@@ -122,7 +122,8 @@ struct TabCol {
         std::hash<std::string> str_hash;
         size_t h1 = str_hash(tab_name);
         size_t h2 = str_hash(col_name);
-        return h1 ^ (h2 << 1);
+        size_t h3 = std::hash<int>()(static_cast<int>(agg_type));
+        return h1 ^ (h2 << 1) ^ (h3 << 2);
     }
 };
 
