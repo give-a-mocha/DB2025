@@ -554,7 +554,7 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
                 col_values[cond.lhs_col] = cond.rhs_val;  // 记录列值
             }
         } else if (rhs_term->term_type == TermType::COLUMN) {
-            if(cond.op == CompOp::OP_EQ && col_values.count(rhs_term->col)) {
+            if (col_values.count(rhs_term->col)) {
                 // 如果是等于操作且右侧列已经有值，直接使用已记录的值
                 cond.rhs_type = ConditionRhsType::RHS_VALUE;
                 cond.rhs_val = col_values[rhs_term->col];
