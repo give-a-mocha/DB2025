@@ -37,6 +37,7 @@ class BufferPoolManager {
     DiskManager* disk_manager_;  // 磁盘管理器
     // Replacer* replacer_;                                             // 页面替换策略实现
     // std::mutex latch_;                                               // 并发控制锁
+    std::hash<PageId> hasher_;  // 用于计算PageId的哈希值
 
    public:
     BufferPoolManager(size_t pool_size, DiskManager* disk_manager)
@@ -128,7 +129,5 @@ class BufferPoolManager {
      */
     void delete_all_pages(int fd);
 
-    size_t get_instance_no(const PageId& page_id) const {
-        return std::hash<PageId>()(page_id) % BUFFER_POOL_INSTANCE_SIZE;
-    }
+    size_t get_instance_no(const PageId& page_id) const { return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
 };

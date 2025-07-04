@@ -29,19 +29,23 @@ struct PageId {
 
     std::string toString() { return "{fd: " + std::to_string(fd) + " page_no: " + std::to_string(page_no) + "}"; }
 
-    inline int64_t Get() const { return (static_cast<int64_t>(fd << 16) | page_no); }
+    // inline int64_t Get() const { return (static_cast<int64_t>(fd << 16) | page_no); }
 };
 
 /**
  * @brief PageId的自定义哈希算法
  */
-struct PageIdHash {
-    size_t operator()(const PageId &x) const { return (x.fd << 16) | x.page_no; }
-};
+// struct PageIdHash {
+//     size_t operator()(const PageId &x) const { return (x.fd << 16) | x.page_no; }
+// };
 
 template <>
 struct std::hash<PageId> {
-    size_t operator()(const PageId &obj) const { return std::hash<int64_t>()(obj.Get()); }
+    size_t operator()(const PageId &obj) const {
+        size_t h1 = std::hash<int>()(obj.fd);
+        size_t h2 = std::hash<page_id_t>()(obj.page_no);
+        return (h1 << 1) ^ h2;
+    }
 };
 
 /**
