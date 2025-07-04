@@ -10,7 +10,10 @@ See the Mulan PSL v2 for more details. */
 
 #include "lru_replacer.h"
 
-LRUReplacer::LRUReplacer(size_t num_pages) { max_size_ = num_pages; }
+LRUReplacer::LRUReplacer(size_t num_pages) {
+    max_size_ = num_pages;
+    LRUhash_.reserve(num_pages);
+}
 
 LRUReplacer::~LRUReplacer() = default;
 
@@ -68,10 +71,10 @@ void LRUReplacer::unpin(frame_id_t frame_id) {
     // 支持并发锁
     std::scoped_lock lock{latch_};
 
-    // // 满了
-    // if (LRUlist_.size() >= max_size_) {
-    //     return;
-    // }
+    // 满了
+    if (LRUlist_.size() >= max_size_) {
+        return;
+    }
 
     // 选择一个frame取消固定
     if (LRUhash_.find(frame_id) != LRUhash_.end()) return;
