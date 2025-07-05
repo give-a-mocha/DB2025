@@ -30,7 +30,7 @@ bool LRUReplacer::victim(frame_id_t* frame_id) {
     // !利用lru_replacer中的LRUlist_,LRUHash_实现LRU策略
     // !选择合适的frame指定为淘汰页面,赋值给*frame_id
 
-    std::scoped_lock lock{latch_};
+    // std::scoped_lock lock{latch_};
     if (LRUlist_.empty()) {
         return false;
     }
@@ -53,7 +53,7 @@ void LRUReplacer::pin(frame_id_t frame_id) {
     // !固定指定id的frame
     // !在数据结构中移除该frame
 
-    std::scoped_lock lock{latch_};
+    // std::scoped_lock lock{latch_};
     auto iter = LRUhash_.find(frame_id);
     if (iter != LRUhash_.end()) {
         LRUlist_.erase(iter->second);  // 从链表中删除
@@ -69,7 +69,7 @@ void LRUReplacer::pin(frame_id_t frame_id) {
  */
 void LRUReplacer::unpin(frame_id_t frame_id) {
     // 支持并发锁
-    std::scoped_lock lock{latch_};
+    // std::scoped_lock lock{latch_};
 
     // 满了
     // if (LRUlist_.size() >= max_size_) {
