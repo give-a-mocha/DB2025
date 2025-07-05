@@ -82,7 +82,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
     std::shared_ptr<Query> query = std::make_shared<Query>();          // 创建查询对象
     if (auto x = std::dynamic_pointer_cast<ast::SelectStmt>(parse)) {  // 处理SELECT查询
         // 检查所有表是否存在并处理表名和别名
-        std::vector<TabRef> tab_refs;                      // 存储表引用及其别名
+        std::vector<TabRef> tab_refs;  // 存储表引用及其别名
         // std::unordered_map<std::string, TabCol> col_refs;  // 存储列别名及其对应列
         tab_refs.reserve(x->tabs.size());
         query->tables.reserve(x->tabs.size());
