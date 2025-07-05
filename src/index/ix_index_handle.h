@@ -371,6 +371,8 @@ class IxIndexHandle {
      */
     bool delete_entry(const char *key, Transaction *transaction);
 
+    bool delete_entry_without_lock(const char *key);
+
     /**
      * @brief 从B+树中删除指定键和RID对
      * @param key 要删除的键值
@@ -380,7 +382,7 @@ class IxIndexHandle {
      *         - true：成功删除目标RID
      *         - false：未找到目标键值对或RID
      */
-    bool delete_entry(const char *key, const Rid &rid, Transaction *transaction);
+    bool delete_entry_with_rid(const char *key, const Rid &rid, Transaction *transaction);
 
     /**
      * @brief 处理节点键值过少的情况
@@ -388,7 +390,7 @@ class IxIndexHandle {
      * @param transaction 当前事务
      * @return 是否需要继续处理
      */
-    bool coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction = nullptr);
+    bool coalesce_or_redistribute(IxNodeHandle *node);
 
     /**
      * @brief 调整根节点
@@ -416,8 +418,7 @@ class IxIndexHandle {
      * @param root_is_latched 根节点是否加锁
      * @return 是否成功合并
      */
-    bool coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index,
-                  Transaction *transaction);
+    bool coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index);
 
     /**
      * @brief 查找大于等于指定键的第一个位置

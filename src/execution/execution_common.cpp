@@ -152,7 +152,7 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
                 auto rollback_ih =
                     sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols))
                         .get();
-                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), rid, context_->txn_);
+                rollback_ih->delete_entry_with_rid(inserted_keys[rollback_i].get(), rid, context_->txn_);
             }
             return false;
         }

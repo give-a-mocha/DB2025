@@ -868,9 +868,36 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
 
     // 删除键
     leaf_node->erase_pair(pos);
-    coalesce_or_redistribute(leaf_node, transaction);
+    coalesce_or_redistribute(leaf_node);
     UnlockAncestors(transaction);
     leaf_page->wunlatch();
+    buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
+    delete leaf_node;
+    return true;
+}
+
+bool IxIndexHandle::delete_entry_without_lock(const char *key) {
+    TRACE_FUNCTION
+    // 1. 获取目标key值所在的叶子结点 (不带锁)
+    Page *leaf_page = find_leaf_page_without_lock(key, Operation::DELETE); // 使用DELETE操作类型
+    auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
+
+    // 2. 在叶子节点中查找目标key值的位置
+    int pos = leaf_node->lower_bound(key);
+
+    // 检查键是否存在
+    if (pos >= leaf_node->get_size() ||
+        ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) != 0) {
+        buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), false);
+        delete leaf_node;  // 释放叶子结点内存
+        return false;
+    }
+    // 键存在，获取对应的RID
+    auto rid_ = leaf_node->get_rid(pos);
+
+    // 删除键
+    leaf_node->erase_pair(pos);
+    coalesce_or_redistribute(leaf_node);
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
     delete leaf_node;
     return true;
@@ -884,7 +911,7 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
  * @warning
  * -
  */
-bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *transaction) {
+bool IxIndexHandle::delete_entry_with_rid(const char *key, const Rid &rid, Transaction *transaction) {
     TRACE_FUNCTION
     root_latch_.lock();
     if (is_empty()) {
@@ -925,7 +952,7 @@ bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *t
         // 删除键
         leaf_node->erase_pair(pos);
         is_dirty = true;  // 删除操作需要标记为脏页
-        coalesce_or_redistribute(leaf_node, transaction);
+        coalesce_or_redistribute(leaf_node);
     }
     UnlockAncestors(transaction);
     leaf_page->wunlatch();
@@ -942,7 +969,7 @@ bool IxIndexHandle::delete_entry(const char *key, const Rid &rid, Transaction *t
  * @param root_is_latched 传出参数：根节点是否上锁，用于并发操作
  * @return 是否需要删除结点
  */
-bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *transaction) {
+bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node) {
     TRACE_FUNCTION
     // Todo:
     // 1. 判断node结点是否为根节点
@@ -1013,7 +1040,7 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *tr
         IxNodeHandle *neighbor_node = new IxNodeHandle(file_hdr_, neighbor_page);
         // 如果可以合并，则调用coalesce函数
         neighbor_page->wlatch();
-        coalesce(&neighbor_node, &node, &parent_node, rank, transaction);
+        coalesce(&neighbor_node, &node, &parent_node, rank);
         neighbor_page->wunlatch();
         buffer_pool_manager_->unpin_page(neighbor_page->get_page_id(), true);
         buffer_pool_manager_->unpin_page(parent_node->get_page_id(), true);
@@ -1028,7 +1055,7 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node, Transaction *tr
         IxNodeHandle *neighbor_node = new IxNodeHandle(file_hdr_, neighbor_page);
         // 如果可以合并，则调用coalesce函数
         neighbor_page->wlatch();
-        coalesce(&neighbor_node, &node, &parent_node, rank, transaction);
+        coalesce(&neighbor_node, &node, &parent_node, rank);
         neighbor_page->wunlatch();
         buffer_pool_manager_->unpin_page(neighbor_page->get_page_id(), true);
         buffer_pool_manager_->unpin_page(parent_node->get_page_id(), true);
@@ -1125,8 +1152,7 @@ void IxIndexHandle::redistribute(IxNodeHandle *neighbor_node, IxNodeHandle *node
  * @return true means parent node should be deleted, false means no deletion happend
  * @note Assume that *neighbor_node is the left sibling of *node (neighbor -> node)
  */
-bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index,
-                             Transaction *transaction) {
+bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index) {
     TRACE_FUNCTION
     // Todo:
     // 1. 用index判断neighbor_node是否为node的前驱结点，若不是则交换两个结点，让neighbor_node作为左结点，node作为右结点
@@ -1159,7 +1185,7 @@ bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, 
     release_node_handle(**node);
     // 更新parent结点中的相关信息
     (*parent)->erase_pair(index);
-    return coalesce_or_redistribute(*parent, transaction);
+    return coalesce_or_redistribute(*parent);
 }
 
 /**
