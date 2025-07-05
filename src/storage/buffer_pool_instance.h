@@ -21,21 +21,20 @@ See the Mulan PSL v2 for more details. */
 #include "errors.h"
 #include "page.h"
 #include "replacer/lru_replacer.h"
-#include "replacer/replacer.h"
-#include "replacer/sharded_lru_replacer.h"
+#include "replacer/clock_replacer.h"
 
 /**
  * @brief 缓冲池管理器类
  */
 class BufferPoolInstance {
    private:
-    size_t pool_size_;                                   // 缓冲池大小（帧数）
-    Page* pages_;                                        // 缓冲池中的页面数组，连续分配
-    std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
-    std::list<frame_id_t> free_list_;                    // 空闲帧链表
-    DiskManager* disk_manager_;                          // 磁盘管理器
-    Replacer* replacer_;                                 // 页面替换策略实现
-    std::mutex latch_;                                   // 并发控制锁
+    size_t pool_size_;                                               // 缓冲池大小（帧数）
+    Page* pages_;                                                    // 缓冲池中的页面数组，连续分配
+    std::unordered_map<PageId, frame_id_t, PageIdHash> page_table_;  // 页面到帧的映射表
+    std::list<frame_id_t> free_list_;                                // 空闲帧链表
+    DiskManager* disk_manager_;                                      // 磁盘管理器
+    Replacer* replacer_;                                             // 页面替换策略实现
+    std::mutex latch_;                                               // 并发控制锁
 
    public:
     BufferPoolInstance(size_t pool_size, DiskManager* disk_manager)
@@ -44,7 +43,7 @@ class BufferPoolInstance {
         pages_ = new Page[pool_size_];
         // 可以被Replacer改变
         if (REPLACER_TYPE.compare("LRU") == 0) replacer_ = new LRUReplacer(pool_size_);
-        else if (REPLACER_TYPE.compare("SHARED_LRU") == 0) replacer_ = new ShardedLRUReplacer(pool_size_);
+        else if (REPLACER_TYPE.compare("CLOCK") == 0) replacer_ = new ClockReplacer(pool_size_);
         else {
             replacer_ = new LRUReplacer(pool_size_);
         }

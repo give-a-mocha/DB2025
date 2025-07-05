@@ -20,7 +20,11 @@ See the Mulan PSL v2 for more details. */
  */
 Page* BufferPoolManager::fetch_page(PageId page_id) {
     TRACE_FUNCTION
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page(page_id);
+    auto res = buffer_pool_instances_[get_instance_no(page_id)]->fetch_page(page_id);
+    if (res == nullptr) {
+        throw InternalError("Failed to fetch page from buffer pool manager");
+    }
+    return res;
 }
 
 /**
@@ -111,4 +115,8 @@ void BufferPoolManager::delete_all_pages(int fd) {
     for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
         buffer_pool_instances_[i]->delete_all_pages(fd);
     }
+}
+
+size_t BufferPoolManager::get_instance_no(const PageId& page_id) const {
+    return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE;
 }

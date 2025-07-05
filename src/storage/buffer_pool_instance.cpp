@@ -127,7 +127,7 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
     }
 
     // 页面不在缓冲池中,寻找可用frame
-    frame_id_t frame_id;
+    frame_id_t frame_id = INVALID_FRAME_ID;
     if (!find_victim_page(&frame_id)) {
         return nullptr;  // 没有可用frame
     }

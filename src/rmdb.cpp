@@ -209,6 +209,9 @@ void *client_handler(void *sock_fd) {
                 } catch (RMDBError &e) {
                     // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
                     // 遇到异常，打印异常信息
+
+                    // 回滚事务
+                    txn_manager->abort(context.get(), log_manager.get());
                     std::cerr << "RMDBError " << e.what() << std::endl;
                     memcpy(data_send, e.what(), e.get_msg_len());
                     data_send[e.get_msg_len()] = '\n';

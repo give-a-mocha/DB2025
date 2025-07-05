@@ -286,6 +286,7 @@ bool LockManager::is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd
             }
         }
     }
+    return true;
 }
 
 /**

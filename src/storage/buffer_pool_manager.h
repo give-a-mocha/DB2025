@@ -20,8 +20,6 @@ See the Mulan PSL v2 for more details. */
 #include "disk_manager.h"
 #include "errors.h"
 #include "page.h"
-#include "replacer/lru_replacer.h"
-#include "replacer/replacer.h"
 #include "buffer_pool_instance.h"
 
 /**
@@ -129,5 +127,5 @@ class BufferPoolManager {
      */
     void delete_all_pages(int fd);
 
-    size_t get_instance_no(const PageId& page_id) const { return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
+    size_t get_instance_no(const PageId& page_id) const;
 };

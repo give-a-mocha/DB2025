@@ -33,7 +33,7 @@ class AggregateExecutor : public AbstractExecutor {
             // 处理COUNT(*)的特殊情况
             if (sel_col.col_name == "*" && sel_col.agg_type == AggregateType::COUNT) {
                 cols_.push_back(
-                    ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0});
+                    ColMeta{"", "*", ColType::TYPE_INT, sizeof(int), 0, false, AggregateType::COUNT});
             } else {
                 // 从前一个执行器获取列元数据
                 cols_.push_back(*prev_->get_col(prev_->cols(), sel_col));
