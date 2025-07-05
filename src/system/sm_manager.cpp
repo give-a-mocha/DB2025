@@ -393,7 +393,6 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
  * @param {vector<string>&} col_names 索引包含的字段名称
  * @param {Context*} context 执行上下文
  * @throw IndexExistsError 如果索引已存在
- * @warning 应该在并发前建好
  */
 void SmManager::create_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
     // 1. 获取表的元数据并验证
@@ -439,7 +438,12 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
         // 将键值对插入B+树
         // 键：索引列值的组合
         // 值：记录的RID
-        auto&& res = ih_->insert_entry_without_lock(key, rmScan.rid());
+        page_id_t res = INVALID_PAGE_ID;  // 初始化结果为无效页ID
+        if (context == nullptr) {
+            res = ih_->insert_entry_without_lock(key, rmScan.rid());
+        } else {
+            res = ih_->insert_entry(key, rmScan.rid(), context->txn_);
+        }
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (res == INVALID_PAGE_ID) {
             drop_index(tab_name, col_names, context);
@@ -511,7 +515,7 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-bool SmManager::insert_index_without_lock(const std::string& tab_name, RmRecord& rec, Rid rid) {
+bool SmManager::insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
     inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
@@ -531,13 +535,13 @@ bool SmManager::insert_index_without_lock(const std::string& tab_name, RmRecord&
         }
 
         // 插入索引项
-        auto res = ih->insert_entry_without_lock(key.get(), rid);
+        auto res = ih->insert_entry(key.get(), rid, txn);
         if (res == INVALID_PAGE_ID) {
             // 插入失败，回滚已插入的索引
             for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
                 auto& rollback_index = tab_.indexes[rollback_i];
                 auto rollback_ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
-                rollback_ih->delete_entry_without_lock(inserted_keys[rollback_i].get());
+                rollback_ih->delete_entry(inserted_keys[rollback_i].get(), txn);
             }
             return false;
         }
@@ -567,7 +571,7 @@ bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, R
     return true;
 }
 
-bool SmManager::delete_index_without_lock(const std::string& tab_name, RmRecord& rec) {
+bool SmManager::delete_index(const std::string& tab_name, RmRecord& rec, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
@@ -580,7 +584,7 @@ bool SmManager::delete_index_without_lock(const std::string& tab_name, RmRecord&
             offset += index.cols[j].len;
         }
         // 删除索引项
-        ih->delete_entry_without_lock(key.get());
+        ih->delete_entry(key.get(), txn);
     }
     return true;
 }
@@ -667,7 +671,7 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
         // 11. 插入记录到表中
         auto rid_ = fh_->insert_record(record_data, nullptr);
         RmRecord rec(record_size, record_data);
-        insert_index_without_lock(table_name, rec, rid_);
+        insert_index(table_name, rec, rid_, txn);
     }
     file.close();
     // for(const auto &index : tab_.indexes) {
