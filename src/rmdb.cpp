@@ -36,12 +36,13 @@
 #include "recovery/log_recovery.h"
 
 #define SOCK_PORT 8765
-#define MAX_CONN_LIMIT 8
+#define MAX_CONN_LIMIT 2
 
 // 是否开启 std::cout
 // #define ENABLE_COUT
 
 static bool should_exit = false;
+static std::atomic<int> client_count{0};
 
 // 构建全局所需的管理器对象
 auto disk_manager = std::make_unique<DiskManager>();
@@ -291,6 +292,7 @@ void *client_handler(void *sock_fd) {
 #ifdef ENABLE_COUT
     std::cout << "Terminating current client_connection..." << std::endl;
 #endif
+    client_count--;      // 原子地减少客户端连接计数
     close(fd);           // close a file descriptor.
     pthread_exit(NULL);  // terminate calling thread!
 }
@@ -364,14 +366,27 @@ void start_server() {
 #ifdef ENABLE_COUT
             std::cout << "Accept error!" << std::endl;
 #endif
+            pthread_mutex_unlock(sockfd_mutex);
             continue;  // ignore current socket ,continue while loop.
         }
+
+        if (client_count >= MAX_CONN_LIMIT) {
+#ifdef ENABLE_COUT
+            std::cout << "Connection rejected: too many connections." << std::endl;
+#endif
+            close(sockfd);
+            pthread_mutex_unlock(sockfd_mutex);
+            continue;
+        }
+        client_count++;
 
         // 和客户端建立连接，并开启一个线程负责处理客户端请求
         if (pthread_create(&thread_id, nullptr, &client_handler, (void *)(&sockfd)) != 0) {
 #ifdef ENABLE_COUT
             std::cout << "Create thread fail!" << std::endl;
 #endif
+            client_count--;
+            pthread_mutex_unlock(sockfd_mutex);
             break;  // break while loop
         }
     }
