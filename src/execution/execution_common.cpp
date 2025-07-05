@@ -40,7 +40,7 @@ bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, 
         throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
     }
     bool is_not_deleted = check_conflict(txn, txn_mgr, fh, rid);
-    if(is_not_deleted == false) {
+    if (is_not_deleted == false) {
         LockDataId lock_data_id(fh->GetFd(), rid, LockDataType::RECORD);
         txn_mgr->get_lock_manager()->unlock(txn, lock_data_id);
         return false;
