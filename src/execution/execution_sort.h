@@ -75,7 +75,7 @@ class SortExecutor : public AbstractExecutor {
         }
 
         // 使用parallel::sort排序
-        parallel::sort(
+        std::sort(
             sorted_tuples_.begin(), sorted_tuples_.end(),
             [this](const std::unique_ptr<RmRecord>& a, const std::unique_ptr<RmRecord>& b) { return this->cmp(a, b); });
     }
