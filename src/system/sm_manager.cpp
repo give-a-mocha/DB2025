@@ -677,7 +677,12 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
         
         // 插入记录
         Rid rid_ = {page_handle.page->get_page_id().page_no, count};
-        count++;        
+        count++;
+                
+        // 插入索引
+        RmRecord rec(record_size, record_data + start_offset);
+        insert_index_without_lock(table_name, rec, rid_);
+
         // 检查是否需要创建新页
         if (count == max_record_num) {
             batch_copy();
@@ -686,9 +691,6 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
             page_handle = fh_->create_new_page_handle();  // 创建新页
         }
         
-        // 插入索引
-        RmRecord rec(record_size, record_data + start_offset);
-        insert_index_without_lock(table_name, rec, rid_);
     }
     
     // 确保最后一页被写入
