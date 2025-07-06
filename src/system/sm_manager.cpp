@@ -27,6 +27,8 @@
 
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <fcntl.h>
 
 #include <fstream>
 
@@ -605,87 +607,169 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
 
-//! 不支持并发
-void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path, Transaction* txn) {
-    // INFO("Loading CSV data into table: {}, from file: {}", table_name, file_path);
-    // std::cerr << "system path: " << get_current_dir_name() << std::endl;
-    // 1. 检查表是否存在
-    // std::cerr << "system path: " << get_current_dir_name() << std::endl;
-    if (!db_.is_table(table_name)) {
-        throw TableNotFoundError(table_name);
-    }
 
-    // 2. 打开CSV文件并验证
-    std::ifstream file(file_path);
-    if (!file.is_open()) {
-        throw RMDBError("Cannot open CSV file: " + file_path);
-    }
+void SmManager::load_data(char *start_pos, char *end_pos, const std::string& table_name, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(table_name);
     auto fh_ = fhs_[table_name].get();
     const size_t record_size = fh_->get_record_size();
 
-    // 4. 预分配记录缓冲区
+    // 预分配记录缓冲区
     std::vector<char> record_buffer(record_size);
     char* record_data = record_buffer.data();
-    // 5. 跳过头部行
-    std::string line;
-    std::getline(file, line, '\n');
-    // INFO("Skipping header line: {}", line);
-    // 6. 逐行读取和处理数据
+    
+    char* current_pos = std::find(start_pos, end_pos, '\n');  // 跳过第一行（表头）
+    current_pos++;  // 跳过换行符
+    
     auto page_handle = fh_->create_new_page_handle();
-    while (std::getline(file, line, '\n')) {
-        // INFO("Loading line: {}", line);
-        // 7. 解析CSV行
-        std::stringstream line_stream(line);
-        std::string cell;
-        size_t offset = 0;
-        // 清零记录缓冲区
+    
+    // 批量处理数据
+    while (current_pos < end_pos) {
+        // 构建记录
         memset(record_data, 0, record_size);
-        // 8. 处理每一列
-        for (const auto& col : tab_.cols) {
-            // 读取下一个CSV字段
-            std::getline(line_stream, cell, ',');
+        size_t offset = 0;
+        for (size_t i = 0; i < tab_.cols.size(); ++i) {
+            char* line_end = std::find_if(current_pos, end_pos, [](char c) {
+                return c == ',' || c == '\n';
+            });
+            const auto& col = tab_.cols[i];
+            int len = line_end - current_pos;
             switch (col.type) {
                 case ColType::TYPE_INT: {
-                    int int_val = std::stoi(cell);
+                    std::string field_value(current_pos, len);
+                    int int_val = std::stoi(field_value);
                     memcpy(record_data + offset, &int_val, col.len);
                     break;
                 }
                 case ColType::TYPE_FLOAT: {
-                    float float_val = std::stof(cell);
+                    std::string field_value(current_pos, len);
+                    float float_val = std::stof(field_value);
                     memcpy(record_data + offset, &float_val, col.len);
                     break;
                 }
                 case ColType::TYPE_STRING: {
                     // 将字符串复制到记录缓冲区，剩余空间填充0
-                    memcpy(record_data + offset, cell.c_str(), col.len);
+                    int copy_len = std::min(len, col.len);
+                    memcpy(record_data + offset, current_pos, copy_len);
                     break;
                 }
                 default:
                     throw RMDBError("Unsupported column type");
             }
             offset += col.len;
+            current_pos = line_end + 1;
         }
+        
+        // 插入记录
         Rid rid_ = {page_handle.page->get_page_id().page_no, page_handle.page_hdr->num_records};
         char* slot = page_handle.get_slot(rid_.slot_no);
         memcpy(slot, record_data, record_size);
         Bitmap::set(page_handle.bitmap, rid_.slot_no);
         page_handle.page_hdr->num_records++;
         fh_->file_hdr_.record_num++;
+        
+        // 检查是否需要创建新页
         if (page_handle.page_hdr->num_records == page_handle.file_hdr->num_records_per_page) {
             fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
-            // 整页满在一起刷入
-            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);  // 写入磁盘
-            page_handle = fh_->create_new_page_handle();  // 创建新的页处理器
+            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
+            page_handle = fh_->create_new_page_handle();  // 创建新页
         }
-
+        
+        // 插入索引
         RmRecord rec(record_size, record_data);
         insert_index_without_lock(table_name, rec, rid_);
     }
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);  // 写入磁盘
-    file.close();
+    
+    // 确保最后一页被写入
+    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
     // for(const auto &index : tab_.indexes) {
     //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
     //     ih->debug_print_tree();
     // }
+}
+
+//! 不支持并发
+void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path, Transaction* txn) {
+    // 打开CSV文件并验证
+    std::ifstream file(file_path, std::ios::binary);
+    if (!file.is_open()) {
+        throw RMDBError("Cannot open CSV file: " + file_path);
+    }
+    
+    // 获取文件大小
+    file.seekg(0, std::ios::end);
+    const size_t file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    // 预分配大缓冲区，一次性读取整个文件
+    std::vector<char> file_buffer(file_size + 1);
+    file.read(file_buffer.data(), file_size);
+    file_buffer[file_size] = '\0';  // 确保字符串结束
+    file.close();
+
+    load_data(file_buffer.data(), file_buffer.data() + file_size, table_name, txn);
+}
+
+//! 使用内存映射文件的高性能版本（适用于大文件）
+void SmManager::load_csv_data_mmap(const std::string& table_name, const std::string& file_path, Transaction* txn) {
+
+    // 打开文件获取文件描述符
+    int fd = open(file_path.c_str(), O_RDONLY);
+    if (fd == -1) {
+        throw RMDBError("Cannot open CSV file: " + file_path);
+    }
+
+    // 获取文件大小
+    struct stat file_stat;
+    if (fstat(fd, &file_stat) == -1) {
+        close(fd);
+        throw RMDBError("Cannot get file size: " + file_path);
+    }
+    
+    const size_t file_size = file_stat.st_size;
+    if (file_size == 0) {
+        close(fd);
+        return;  // 空文件
+    }
+
+    // 内存映射文件
+    char* file_data = static_cast<char*>(mmap(nullptr, file_size, PROT_READ, MAP_PRIVATE, fd, 0));
+    if (file_data == MAP_FAILED) {
+        close(fd);
+        throw RMDBError("Cannot memory map file: " + file_path);
+    }
+
+    // 建议内核顺序读取
+    madvise(file_data, file_size, MADV_SEQUENTIAL);
+
+    load_data(file_data, file_data + file_size, table_name, txn);
+
+    munmap(file_data, file_size);
+    close(fd);
+}
+
+//! 智能CSV加载函数，根据文件大小自动选择最优方式
+void SmManager::load_csv_data_auto(const std::string& table_name, const std::string& file_path, Transaction* txn) {
+    // 1. 检查表是否存在
+    if (!db_.is_table(table_name)) {
+        throw TableNotFoundError(table_name);
+    }
+
+    // 2. 获取文件大小
+    struct stat file_stat;
+    if (stat(file_path.c_str(), &file_stat) == -1) {
+        throw RMDBError("Cannot get file size: " + file_path);
+    }
+    
+    const size_t file_size = file_stat.st_size;
+    
+    // 3. 根据文件大小选择最优策略
+    const size_t FILE_THRESHOLD = 100 * 1024 * 1024;   // 100MB
+    
+    if (file_size < FILE_THRESHOLD) {
+        // 小文件：使用优化的批量读取
+        load_csv_data(table_name, file_path, txn);
+    } else  {
+        // 大文件：使用内存映射
+        load_csv_data_mmap(table_name, file_path, txn);
+    }
 }

@@ -184,7 +184,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
         }
     } else if (auto x = std::dynamic_pointer_cast<LoadPlan>(plan)) {
         // Load数据到表中
-        sm_manager_->load_csv_data(x->table_name_, x->file_path_, context->txn_);
+        sm_manager_->load_csv_data_auto(x->table_name_, x->file_path_, context->txn_);
     } else if (auto x = std::dynamic_pointer_cast<SetOutputPlan>(plan)) {
         // 设置输出文件
         sm_manager_->set_output_file(x->enable_);
