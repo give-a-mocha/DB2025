@@ -33,10 +33,8 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
     // }
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-    page_handle.page->RLatch();
     // 创建RmRecord并复制数据
     char* slot = page_handle.get_slot(rid.slot_no);
-    page_handle.page->RUnlatch();
     auto record = std::make_unique<RmRecord>(file_hdr_.record_size, slot);
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
