@@ -642,6 +642,7 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
     
     // 批量处理数据
     while (current_pos < end_pos) {
+        size_t start_offset = offset;
         for (size_t i = 0; i < tab_.cols.size(); ++i) {
             char* line_end = std::find_if(current_pos, end_pos, [](char c) {
                 return c == ',' || c == '\n';
@@ -686,7 +687,7 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
         }
         
         // 插入索引
-        RmRecord rec(record_size, record_data);
+        RmRecord rec(record_size, record_data + start_offset);
         insert_index_without_lock(table_name, rec, rid_);
     }
     
