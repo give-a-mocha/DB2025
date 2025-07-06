@@ -614,19 +614,34 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
     const size_t record_size = fh_->get_record_size();
 
     // 预分配记录缓冲区
-    std::vector<char> record_buffer(record_size);
+    int max_record_num = fh_->file_hdr_.num_records_per_page;
+    int len = max_record_num * record_size;
+    std::vector<char> record_buffer(len);
     char* record_data = record_buffer.data();
+
+    int count = 0;
+    size_t offset = 0;
+    memset(record_data, 0, len);  // 初始化记录缓冲区
     
     char* current_pos = std::find(start_pos, end_pos, '\n');  // 跳过第一行（表头）
     current_pos++;  // 跳过换行符
     
     auto page_handle = fh_->create_new_page_handle();
+
+    auto batch_copy = [&]() {
+        page_handle.page_hdr->num_records = count;
+        fh_->file_hdr_.record_num += count;
+        char *slot = page_handle.get_slot(0);
+        memcpy(slot, record_data, offset);
+        Bitmap::batch_set_fast(page_handle.bitmap, 0, count);
+        
+        memset(record_data, 0, len);
+        offset = 0;
+        count = 0;
+    };
     
     // 批量处理数据
     while (current_pos < end_pos) {
-        // 构建记录
-        memset(record_data, 0, record_size);
-        size_t offset = 0;
         for (size_t i = 0; i < tab_.cols.size(); ++i) {
             char* line_end = std::find_if(current_pos, end_pos, [](char c) {
                 return c == ',' || c == '\n';
@@ -660,15 +675,11 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
         }
         
         // 插入记录
-        Rid rid_ = {page_handle.page->get_page_id().page_no, page_handle.page_hdr->num_records};
-        char* slot = page_handle.get_slot(rid_.slot_no);
-        memcpy(slot, record_data, record_size);
-        Bitmap::set(page_handle.bitmap, rid_.slot_no);
-        page_handle.page_hdr->num_records++;
-        fh_->file_hdr_.record_num++;
-        
+        Rid rid_ = {page_handle.page->get_page_id().page_no, count};
+        count++;        
         // 检查是否需要创建新页
-        if (page_handle.page_hdr->num_records == page_handle.file_hdr->num_records_per_page) {
+        if (count == max_record_num) {
+            batch_copy();
             fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
             buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
             page_handle = fh_->create_new_page_handle();  // 创建新页
@@ -680,6 +691,7 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
     }
     
     // 确保最后一页被写入
+    batch_copy();
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
     // for(const auto &index : tab_.indexes) {
     //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
