@@ -57,7 +57,7 @@ class IxScan : public RecScan {
         : ih_(ih), iid_(lower), end_(upper), bpm_(bpm), now(nullptr), rid_index_(0), has_overflow_cache_(false) {
         if (!is_end()) {
             now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
-            now->rlatch();  // 获取读锁，确保扫描期间页面不被修改
+            now->RLatch();  // 获取读锁，确保扫描期间页面不被修改
             // 初始化RID缓存
             load_current_rids();
         }
@@ -99,7 +99,7 @@ class IxScan : public RecScan {
 
     void unlatch() {
         if (now != nullptr) {
-            now->runlatch();                              // 释放读锁
+            now->RUnlatch();                              // 释放读锁
             bpm_->unpin_page(now->get_page_id(), false);  // 解除页面固定状态
             now = nullptr;                                // 清空当前页面指针
         }

@@ -23,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
 #include "buffer_pool_instance.h"
+#include "page_guard.h"
 
 /**
  * @brief 缓冲池管理器类
@@ -130,4 +131,12 @@ class BufferPoolManager {
     void delete_all_pages(int fd);
 
     size_t get_instance_no(const PageId& page_id) const { return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
+
+    auto new_page_guarded(PageId *page_id) -> BasicPageGuard;
+
+    auto fetch_page_basic(PageId page_id) -> BasicPageGuard;
+
+    auto fetch_page_read(PageId page_id) -> ReadPageGuard;
+    
+    auto fetch_page_write(PageId page_id) -> WritePageGuard;
 };

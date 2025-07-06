@@ -112,3 +112,25 @@ void BufferPoolManager::delete_all_pages(int fd) {
         buffer_pool_instances_[i]->delete_all_pages(fd);
     }
 }
+
+
+auto BufferPoolManager::new_page_guarded(PageId *page_id) -> BasicPageGuard {
+    TRACE_FUNCTION
+    page_id->page_no = disk_manager_->allocate_page(page_id->fd);
+    return buffer_pool_instances_[get_instance_no(*page_id)]->new_page_guarded(page_id);
+}
+
+auto BufferPoolManager::fetch_page_basic(PageId page_id) -> BasicPageGuard {
+    TRACE_FUNCTION
+    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page_basic(page_id);
+}
+
+auto BufferPoolManager::fetch_page_read(PageId page_id) -> ReadPageGuard {
+    TRACE_FUNCTION
+    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page_read(page_id);
+}
+
+auto BufferPoolManager::fetch_page_write(PageId page_id) -> WritePageGuard {
+    TRACE_FUNCTION
+    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page_write(page_id);
+}

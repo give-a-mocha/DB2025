@@ -83,7 +83,6 @@ void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t 
     page->pin_count_ = 0;     // 重置pin_count
     page->is_dirty_ = false;  // 重置脏页标志
     page->reset_memory();
-    page->reset_latch();  // Reset the latch to an unlocked state
 }
 
 /**
@@ -385,4 +384,75 @@ void BufferPoolInstance::delete_all_pages(int fd) {
             ++it;
         }
     }
+}
+
+auto BufferPoolInstance::new_page_guarded(PageId *page_id) -> BasicPageGuard {
+    TRACE_FUNCTION
+    std::scoped_lock lock{latch_};
+    // 找一个可用frame
+    frame_id_t frame_id;
+    if (!find_victim_page(&frame_id)) {
+        return {this, nullptr};  // 没有可用frame
+    }
+
+    // 获取frame对应的页面
+    Page* page = &pages_[frame_id];
+    update_page(page, *page_id, frame_id);
+    page->pin_count_ = 1;
+    replacer_->pin(frame_id);
+
+    return {this, page};
+}
+
+auto BufferPoolInstance::fetch_page_basic(PageId page_id) -> BasicPageGuard {
+    TRACE_FUNCTION
+    std::scoped_lock lock{latch_};
+
+    // 在页表中查找目标页
+    auto iter = page_table_.find(page_id);
+    if (iter != page_table_.end()) {
+        // 页面在缓冲池中,增加pin_count并返回
+        frame_id_t frame_id = iter->second;
+        Page* page = &pages_[frame_id];
+        if (page->pin_count_ == 0) {
+            replacer_->pin(frame_id);
+        }
+        page->pin_count_++;
+        return {this, page};
+    }
+
+    // 页面不在缓冲池中,寻找可用frame
+    frame_id_t frame_id;
+    if (!find_victim_page(&frame_id)) {
+        return {this, nullptr};  // 没有可用frame
+    }
+
+    // 获取victim frame对应的页面
+    Page* page = &pages_[frame_id];
+    update_page(page, page_id, frame_id);
+    disk_manager_->read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
+    page->pin_count_ = 1;  // 固定该页
+    replacer_->pin(frame_id);
+
+    return {this, page};
+}
+
+auto BufferPoolInstance::fetch_page_read(PageId page_id) -> ReadPageGuard {
+    TRACE_FUNCTION
+    auto basic_guard = fetch_page_basic(page_id);
+    if (basic_guard.page_ == nullptr) {
+        return {this, nullptr};  // 没有可用页面
+    }
+    basic_guard.page_->RLatch();  // 获取读锁
+    return {this, basic_guard.page_};
+}
+    
+auto BufferPoolInstance::fetch_page_write(PageId page_id) -> WritePageGuard {
+    TRACE_FUNCTION
+    auto basic_guard = fetch_page_basic(page_id);
+    if (basic_guard.page_ == nullptr) {
+        return {this, nullptr};  // 没有可用页面
+    }
+    basic_guard.page_->WLatch();  // 获取写锁
+    return {this, basic_guard.page_};
 }

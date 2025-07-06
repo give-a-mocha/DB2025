@@ -13,6 +13,7 @@ See the Mulan PSL v2 for more details. */
 #include <shared_mutex>
 #include "common/config.h"
 #include "common/debug_shared_mutex.h"
+#include "storage/rwlatch.h"
 
 /**
  * @brief 页面标识符结构体
@@ -55,35 +56,18 @@ class Page {
     friend class BufferPoolInstance;
 
    public:
-    Page() { reset_memory(); }
+    Page() { 
+        data_ = new char[PAGE_SIZE];  // 分配PAGE_SIZE大小的内存
+        reset_memory();                // 初始化内存，将data_的PAGE_SIZE个字节填
+    }
 
-    ~Page() = default;
+    ~Page() { delete [] data_; }
 
     PageId get_page_id() const { return id_; }
 
     inline char *get_data() { return data_; }
 
     bool is_dirty() const { return is_dirty_; }
-
-    void wlatch() {
-        rw_latch_.lock();
-        // rw_latch_debug_->lock();
-    }
-
-    void wunlatch() {
-        rw_latch_.unlock();
-        // rw_latch_debug_->unlock();
-    }
-
-    void rlatch() {
-        rw_latch_.lock_shared();
-        // rw_latch_debug_->lock_shared();
-    }
-
-    void runlatch() {
-        rw_latch_.unlock_shared();
-        // rw_latch_debug_->unlock_shared();
-    }
 
     static constexpr size_t OFFSET_PAGE_START = 0;
     static constexpr size_t OFFSET_LSN = 0;
@@ -93,12 +77,17 @@ class Page {
 
     inline void set_page_lsn(lsn_t page_lsn) { memcpy(get_data() + OFFSET_LSN, &page_lsn, sizeof(lsn_t)); }
 
-    void reset_latch() {
-        rw_latch_.~shared_mutex();             // 销毁旧的锁
-        new (&rw_latch_) std::shared_mutex();  // 重新构造新的锁
-        // 重新初始化调试锁
-        // rw_latch_debug_ = std::make_unique<DebugSharedMutex>("page_" + std::to_string(id_.page_no));
-    }
+    /** Acquire the page write latch. */
+    inline void WLatch() { rwlatch_.WLock(); }
+
+    /** Release the page write latch. */
+    inline void WUnlatch() { rwlatch_.WUnlock(); }
+
+    /** Acquire the page read latch. */
+    inline void RLatch() { rwlatch_.RLock(); }
+
+    /** Release the page read latch. */
+    inline void RUnlatch() { rwlatch_.RUnlock(); }
 
    private:
     void reset_memory() { memset(data_, OFFSET_PAGE_START, PAGE_SIZE); }  // 将data_的PAGE_SIZE个字节填充为0
@@ -109,7 +98,7 @@ class Page {
     /** The actual data that is stored within a page.
      *  该页面在bufferPool中的偏移地址
      */
-    char data_[PAGE_SIZE] = {};
+    char *data_;
 
     /** 脏页判断 */
     bool is_dirty_ = false;
@@ -118,7 +107,5 @@ class Page {
     int pin_count_ = 0;
 
     /** The read-write latch of this page. */
-    std::shared_mutex rw_latch_;
-
-    // std::unique_ptr<DebugSharedMutex> rw_latch_debug_;
+    ReaderWriterLatch rwlatch_;
 };

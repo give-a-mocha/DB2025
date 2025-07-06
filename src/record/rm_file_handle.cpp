@@ -33,9 +33,10 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
     // }
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
+    page_handle.page->RLatch();
     // 创建RmRecord并复制数据
     char* slot = page_handle.get_slot(rid.slot_no);
+    page_handle.page->RUnlatch();
     auto record = std::make_unique<RmRecord>(file_hdr_.record_size, slot);
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
@@ -74,13 +75,10 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
 
     // 获取空闲页面
     RmPageHandle page_handle = create_page_handle();
+    page_handle.page->WLatch();
 
     // 找到空闲slot
     int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
-    // 复制数据到slot
-    char* slot = page_handle.get_slot(slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
-
     // 设置bitmap和更新记录数
     Bitmap::set(page_handle.bitmap, slot_no);
     page_handle.page_hdr->num_records++;
@@ -89,7 +87,10 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
-
+    page_handle.page->WUnlatch();
+    // 复制数据到slot
+    char* slot = page_handle.get_slot(slot_no);
+    memcpy(slot, buf, file_hdr_.record_size);
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 
     return Rid{page_handle.page->get_page_id().page_no, slot_no};
@@ -103,16 +104,11 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
 void RmFileHandle::insert_record(const Rid& rid, char* buf) {
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
     // 检查slot是否已被占用
     if (Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
-    // 复制数据到指定slot
-    char* slot = page_handle.get_slot(rid.slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
-
     // 设置bitmap和更新记录数
     Bitmap::set(page_handle.bitmap, rid.slot_no);
     page_handle.page_hdr->num_records++;
@@ -121,17 +117,15 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
 
+    // 复制数据到指定slot
+    char* slot = page_handle.get_slot(rid.slot_no);
+    memcpy(slot, buf, file_hdr_.record_size);
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
 void RmFileHandle::insert_record_force(const Rid& rid, char* buf) {
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
-    // 复制数据到指定slot
-    char* slot = page_handle.get_slot(rid.slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
-
     // 设置bitmap和更新记录数
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         Bitmap::set(page_handle.bitmap, rid.slot_no);
@@ -141,6 +135,9 @@ void RmFileHandle::insert_record_force(const Rid& rid, char* buf) {
     if (page_handle.page_hdr->num_records == page_handle.file_hdr->num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
+    // 复制数据到指定slot
+    char* slot = page_handle.get_slot(rid.slot_no);
+    memcpy(slot, buf, file_hdr_.record_size);
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
@@ -174,7 +171,6 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
 
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
     // 检查record是否存在
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
@@ -190,7 +186,6 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
     if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page - 1) {
         release_page_handle(page_handle);
     }
-
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
@@ -222,7 +217,6 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
 
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-
     // 检查record是否存在
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);

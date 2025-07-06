@@ -23,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
 #include "replacer/sharded_lru_replacer.h"
+#include "page_guard.h"
 
 /**
  * @brief 缓冲池管理器类
@@ -134,6 +135,14 @@ class BufferPoolInstance {
      * @param fd 文件描述符
      */
     void delete_all_pages(int fd);
+
+    auto new_page_guarded(PageId *page_id) -> BasicPageGuard;
+
+    auto fetch_page_basic(PageId page_id) -> BasicPageGuard;
+
+    auto fetch_page_read(PageId page_id) -> ReadPageGuard;
+    
+    auto fetch_page_write(PageId page_id) -> WritePageGuard;
 
    private:
     /**
