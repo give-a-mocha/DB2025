@@ -631,8 +631,8 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
     auto batch_copy = [&]() {
         page_handle.page_hdr->num_records = count;
         fh_->file_hdr_.record_num += count;
-        char *slot = page_handle.get_slot(0);
-        memcpy(slot, record_data, offset);
+        // char *slot = page_handle.get_slot(0);
+        // memcpy(slot, record_data, offset);
         Bitmap::batch_set_fast(page_handle.bitmap, 0, count);
         
         memset(record_data, 0, len);
