@@ -605,6 +605,7 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
 
+//! 不支持并发
 void SmManager::load_csv_data(const std::string& table_name, const std::string& file_path, Transaction* txn) {
     // INFO("Loading CSV data into table: {}, from file: {}", table_name, file_path);
     // std::cerr << "system path: " << get_current_dir_name() << std::endl;
@@ -631,6 +632,7 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
     std::getline(file, line, '\n');
     // INFO("Skipping header line: {}", line);
     // 6. 逐行读取和处理数据
+    auto page_handle = fh_->create_new_page_handle();
     while (std::getline(file, line, '\n')) {
         // INFO("Loading line: {}", line);
         // 7. 解析CSV行
@@ -664,11 +666,22 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
             }
             offset += col.len;
         }
-        // 11. 插入记录到表中
-        auto rid_ = fh_->insert_record(record_data, nullptr);
+        Rid rid_ = {page_handle.page->get_page_id().page_no, page_handle.page_hdr->num_records};
+        
+        Bitmap::set(page_handle.bitmap, rid_.slot_no);
+        page_handle.page_hdr->num_records++;
+        fh_->file_hdr_.record_num++;
+        if (page_handle.page_hdr->num_records == page_handle.file_hdr->num_records_per_page) {
+            fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
+            // 整页满在一起刷入
+            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);  // 写入磁盘
+            page_handle = fh_->create_new_page_handle();  // 创建新的页处理器
+        }
+
         RmRecord rec(record_size, record_data);
         insert_index_without_lock(table_name, rec, rid_);
     }
+    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);  // 写入磁盘
     file.close();
     // for(const auto &index : tab_.indexes) {
     //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
