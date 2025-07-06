@@ -47,6 +47,14 @@ class LockManager {
         std::condition_variable cv_;
         // 加锁队列的锁模式
         GroupLockMode group_lock_mode_ = GroupLockMode::NON_LOCK;
+        // 当前持有排他锁的事务ID，如果没有则为-1
+        txn_id_t exclusive_holder_ = -1;
+        // 当前持有排他锁的迭代器，如果没有则为end()
+        std::list<LockRequest>::iterator exclusive_holder_it_;
+        
+        LockRequestQueue() {
+            exclusive_holder_it_ = request_queue_.end();
+        }
     };
 
     // GapLockRequest is now defined in "transaction/txn_defs.h"
