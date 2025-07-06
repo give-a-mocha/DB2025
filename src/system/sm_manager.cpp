@@ -667,7 +667,8 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
             offset += col.len;
         }
         Rid rid_ = {page_handle.page->get_page_id().page_no, page_handle.page_hdr->num_records};
-        
+        char* slot = page_handle.get_slot(rid_.slot_no);
+        memcpy(slot, record_data, record_size);
         Bitmap::set(page_handle.bitmap, rid_.slot_no);
         page_handle.page_hdr->num_records++;
         fh_->file_hdr_.record_num++;
