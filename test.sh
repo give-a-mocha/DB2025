@@ -94,7 +94,7 @@ echo "\n🚀 正在后台启动 server..."
 server_pid=$(pgrep rmdb)
 echo "✅ server 已启动，PID: $server_pid"
 # 等待片刻，确保 server 完全启动
-sleep 3
+sleep 5
 
 # --- 6. 编译 Client ---
 echo "\n🛠️ 正在编译 client..."

@@ -22,7 +22,6 @@ See the Mulan PSL v2 for more details. */
 #include "page.h"
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
-#include "replacer/sharded_lru_replacer.h"
 #include "page_guard.h"
 
 /**
@@ -44,11 +43,7 @@ class BufferPoolInstance {
         // 为buffer pool分配一块连续的内存空间
         pages_ = new Page[pool_size_];
         // 可以被Replacer改变
-        if (REPLACER_TYPE.compare("LRU") == 0) replacer_ = new LRUReplacer(pool_size_);
-        else if (REPLACER_TYPE.compare("SHARED_LRU") == 0) replacer_ = new ShardedLRUReplacer(pool_size_);
-        else {
-            replacer_ = new LRUReplacer(pool_size_);
-        }
+        replacer_ = new LRUReplacer(pool_size_);  // 使用LRU替换策略
         // 初始化时，所有的page都在free_list_中
         for (size_t i = 0; i < pool_size_; ++i) {
             free_list_.emplace_back(static_cast<frame_id_t>(i));  // static_cast转换数据类型
@@ -136,12 +131,12 @@ class BufferPoolInstance {
      */
     void delete_all_pages(int fd);
 
-    auto new_page_guarded(PageId *page_id) -> BasicPageGuard;
+    auto new_page_guarded(PageId* page_id) -> BasicPageGuard;
 
     auto fetch_page_basic(PageId page_id) -> BasicPageGuard;
 
     auto fetch_page_read(PageId page_id) -> ReadPageGuard;
-    
+
     auto fetch_page_write(PageId page_id) -> WritePageGuard;
 
    private:
