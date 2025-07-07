@@ -43,8 +43,7 @@ class GroupExecutor : public AbstractExecutor {
 
         std::for_each(sel_cols.begin(), sel_cols.end(), [this](const auto& sel_col) {
             if (sel_col.col_name == "*" && sel_col.agg_type == AggregateType::COUNT) {
-                cols_.push_back(
-                    ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0});
+                cols_.push_back(ColMeta{"", "*", ColType::TYPE_INT, sizeof(int), 0, false, AggregateType::COUNT});
             } else {
                 cols_.push_back(*get_col(prev_->cols(), sel_col));
             }
