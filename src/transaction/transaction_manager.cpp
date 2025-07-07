@@ -532,6 +532,7 @@ bool TransactionManager::is_delete_record(int fd, Rid rid) {
         auto undo_log = GetUndoLog(pre_undo_link.value());
         is_deleted = undo_log.is_deleted_;
     }
+    return is_deleted;
 }
 
 std::pair<std::vector<UndoLog>, bool> TransactionManager::get_undologs_with_lock(int fd, Rid rid, Transaction* txn) {
