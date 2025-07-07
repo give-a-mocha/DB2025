@@ -94,9 +94,6 @@ class TransactionManager {
     // 用于分发事务时间戳
     std::atomic<timestamp_t> next_timestamp_{0};
 
-    // 用于txn_map的并发
-    std::mutex latch_;
-
     SmManager *sm_manager_;
 
     LockManager *lock_manager_;
@@ -144,7 +141,7 @@ class TransactionManager {
      */
     Transaction *get_transaction(txn_id_t txn_id) {
         if (txn_id == INVALID_TXN_ID) return nullptr;
-        std::unique_lock<std::mutex> lock(latch_);
+        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
         assert(TransactionManager::txn_map.find(txn_id) != TransactionManager::txn_map.end());
         auto *res = TransactionManager::txn_map[txn_id];
         lock.unlock();
@@ -168,11 +165,15 @@ class TransactionManager {
      */
     bool UpdateUndoLink(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
 
+    bool update_undolink_without_lock(const int& fd, Rid rid, std::optional<UndoLink> prev_link);
+    
     /**
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
     bool UpdateVersionLink(const int &fd, Rid rid, std::optional<VersionUndoLink> prev_version);
+
+    bool update_versionlink_without_lock(const int& fd, Rid rid, std::optional<VersionUndoLink> prev_version);
 
     /**
      * @brief 删除txn的撤销链接
@@ -204,10 +205,9 @@ class TransactionManager {
     /** @brief 检查是否需要执行垃圾回收 */
     bool should_perform_gc();
 
-    void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
+    void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid);
 
-    void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values,
-                             std::vector<bool> modified_fields);
+    void add_update_undo_log(Transaction* txn, const int& fd, Rid &delete_rid, Rid &insert_rid);
 
     void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid);
 

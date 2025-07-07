@@ -132,41 +132,32 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            std::vector<Value> values(tab_.cols.size());
-            for (int i = 0; i < (int)tab_.cols.size(); ++i) {
-                if (is_modify[i]) {
-                    values[i].set_col_data(tab_.cols[i].type, old_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
-                    values[i].init_raw(tab_.cols[i].len);
-                }
-            }
-
-            // update = delete + insert
-
-            // fh_->delete_record(rid, context_);
-            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
-            context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);
-
             // 获取全局条件
             std::vector<Condition> conds =
                 txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
             if (!conds.empty() && eval_conds(tab_.cols, conds, new_rec)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
-            auto rid_ = fh_->insert_record(new_rec->data, context_);
-            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
+
+            // update = delete + insert
+            
+            auto insert_rid = fh_->insert_record(new_rec->data, context_);
+            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd());
+            txn_mgr_->add_update_undo_log(context_->txn_, fh_->GetFd(), rid, insert_rid);
+
             // 添加日志要在插入索引之后，因为abort会回滚索引
-            if (!mvcc_insert_index(tab_, new_rec, rid_, context_, txn_mgr_, sm_manager_)) {
-                fh_->delete_record(rid_, context_);
+            if (!mvcc_insert_index(tab_, new_rec, insert_rid, context_, txn_mgr_, sm_manager_)) {
+                fh_->delete_record(insert_rid, context_);
                 txn_mgr_->abort(context_, context_->log_mgr_);
                 throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
             }
-            std::vector<Value> values_ = convert_record_to_values(new_rec, tab_.cols);
-            txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, std::move(values_));
+
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, *new_rec));
-            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, rid_, tab_.name);
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec));
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, insert_rid, *new_rec));
+            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, insert_rid, tab_.name);
         }
         return nullptr;
     }

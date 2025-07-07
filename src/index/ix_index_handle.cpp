@@ -12,10 +12,6 @@ See the Mulan PSL v2 for more details. */
 #include "ix_scan.h"
 #include "common/TraceStack.hpp"
 
-#include <queue>
-#include <fstream>
-#include <string>
-
 /**
  * @brief 在当前节点中查找第一个大于等于target的key的位置
  * @details 使用二分查找算法在当前节点中寻找第一个大于等于目标值的键的位置

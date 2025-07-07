@@ -28,7 +28,7 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
     std::unique_lock<std::mutex> lock(latch_);  // 使用unique_lock以支持condition_variable
 
     // 创建锁数据标识符( 行级锁
-    LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
+    LockDataId lock_data_id(tab_fd, rid);
 
     auto queue_it = lock_table_.find(lock_data_id);
     if (queue_it == lock_table_.end()) {
@@ -125,7 +125,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
     std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
 
     // 创建锁数据标识符( 行级锁
-    LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
+    LockDataId lock_data_id(tab_fd, rid);
 
     auto queue_it = lock_table_.find(lock_data_id);
     if (queue_it == lock_table_.end()) {
@@ -266,7 +266,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
 bool LockManager::is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::scoped_lock<std::mutex> lock(latch_);
 
-    LockDataId lock_data_id(tab_fd, rid, LockDataType::RECORD);
+    LockDataId lock_data_id(tab_fd, rid);
 
     auto queue_it = lock_table_.find(lock_data_id);
     if (queue_it == lock_table_.end()) {

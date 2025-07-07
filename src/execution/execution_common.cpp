@@ -41,7 +41,7 @@ bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, 
     }
     bool is_not_deleted = check_conflict(txn, txn_mgr, fh, rid);
     if (is_not_deleted == false) {
-        LockDataId lock_data_id(fh->GetFd(), rid, LockDataType::RECORD);
+        LockDataId lock_data_id(fh->GetFd(), rid);
         txn_mgr->get_lock_manager()->unlock(txn, lock_data_id);
         return false;
     }

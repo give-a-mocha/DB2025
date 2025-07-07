@@ -82,20 +82,18 @@ class LockDataId {
     Rid rid_;
     LockDataType type_;
     /* 表级锁 */
-    LockDataId(int fd, LockDataType type) {
-        assert(type == LockDataType::TABLE);
+    LockDataId(int fd) {
         fd_ = fd;
-        type_ = type;
+        type_ = LockDataType::TABLE;
         rid_.page_no = -1;
         rid_.slot_no = -1;
     }
 
     /* 行级锁 */
-    LockDataId(int fd, const Rid &rid, LockDataType type) {
-        assert(type == LockDataType::RECORD);
+    LockDataId(int fd, const Rid &rid) {
         fd_ = fd;
         rid_ = rid;
-        type_ = type;
+        type_ = LockDataType::RECORD;
     }
 
     inline int64_t Get() const {
