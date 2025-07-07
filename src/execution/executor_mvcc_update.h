@@ -143,8 +143,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             // update = delete + insert
 
             // fh_->delete_record(rid, context_);
-            std::vector<Value> values_temp = convert_record_to_values(old_rec, tab_.cols);
-            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid, std::move(values_temp));
+            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec));
             context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);

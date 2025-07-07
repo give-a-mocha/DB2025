@@ -513,12 +513,13 @@ void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Ri
  * @param rid 要删除的记录的RID
  * @param values 删除前的记录值
  */
-void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid rid, std::vector<Value> values) {
+void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid rid) {
     UndoLog log;
     log.is_deleted_ = true;
     log.is_inserted_ = false;
-    log.modified_fields_ = std::vector<bool>(values.size(), true);
-    log.tuple_ = std::move(values);
+    // !删除是标记删除，拿到的值应该直接就是上一个版本
+    // log.modified_fields_ = std::vector<bool>(values.size(), true);
+    // log.tuple_ = std::move(values);
     log.ts_ = get_next_timestamp();
     log.prev_version_ = DeleteUpdateVersionLink(fd, rid, txn);
     auto undo_link = txn->AppendUndoLog(log);

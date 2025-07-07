@@ -259,6 +259,36 @@ class IxNodeHandle {
         assert(rid_idx < page_hdr->num_key);
         return rid_idx;
     }
+
+    std::string get_key_value(int key_idx) const {
+        std::string key_value = "";
+        int i = 0;
+        char *key_ptr = get_key(key_idx);
+        size_t offset = 0;
+        for(const auto &type : file_hdr->col_types_) {
+            switch (type) {
+                case ColType::TYPE_INT: {
+                    int value = *reinterpret_cast<const int *>(key_ptr + offset);
+                    key_value += std::to_string(value) + " ";
+                    break;
+                }
+                case ColType::TYPE_FLOAT: {
+                    float value = *reinterpret_cast<const float *>(key_ptr + offset);
+                    key_value += std::to_string(value) + " ";
+                    break;
+                }
+                case ColType::TYPE_STRING: {
+                    key_value += std::string(key_ptr + offset, file_hdr->col_lens_[i]) + " ";
+                    break;
+                }
+                default:
+                    throw InternalError("Unexpected data type in get_key_value");
+            }
+            offset += file_hdr->col_lens_[i];
+            i++;
+        }
+        return key_value;
+    }
 };
 
 /**
@@ -467,6 +497,8 @@ class IxIndexHandle {
      */
     void debug_print_leaf_chain();
 
+    void Draw(const std::string &outf);
+
    private:
     //===== 树结构维护函数 =====
 
@@ -602,4 +634,6 @@ class IxIndexHandle {
     bool is_page_safe(IxNodeHandle *node, Operation operation);
 
     void UnlockAncestors(Transaction *transaction);
+
+    void ToGraph(int page_id, std::ofstream &out);
 };

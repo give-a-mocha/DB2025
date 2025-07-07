@@ -91,12 +91,15 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
         if (undo_log.is_inserted_) {
             is_deleted = true;
         } else {
-            for (size_t i = 0; i < cols_.size(); i++) {
-                if (undo_log.modified_fields_[i]) {
-                    if (!undo_log.tuple_[i].raw) {
-                        undo_log.tuple_[i].init_raw(cols_[i].len);
+            is_deleted = false;
+            if (!undo_log.is_deleted_) {
+                for (size_t i = 0; i < cols_.size(); i++) {
+                    if (undo_log.modified_fields_[i]) {
+                        if (!undo_log.tuple_[i].raw) {
+                            undo_log.tuple_[i].init_raw(cols_[i].len);
+                        }
+                        memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
                     }
-                    memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
                 }
             }
         }

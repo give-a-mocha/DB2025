@@ -12,6 +12,10 @@ See the Mulan PSL v2 for more details. */
 #include "ix_scan.h"
 #include "common/TraceStack.hpp"
 
+#include <queue>
+#include <fstream>
+#include <string>
+
 /**
  * @brief 在当前节点中查找第一个大于等于target的key的位置
  * @details 使用二分查找算法在当前节点中寻找第一个大于等于目标值的键的位置
@@ -246,6 +250,7 @@ IxIndexHandle::IxIndexHandle(DiskManager *disk_manager, BufferPoolManager *buffe
     disk_manager_->set_fd2pageno(fd, now_page_no + 1);
     delete[] buf;
 }
+
 
 /**
  * @brief 用于查找指定键所在的叶子结点
@@ -1553,4 +1558,110 @@ void IxIndexHandle::debug_print_leaf_chain() {
     res += "[" + std::to_string(now->get_page_no()) + "]";
     res += "\n";
     INFO(res);
+}
+
+// Draw the B+ tree
+// 可视化网站 http://dreampuf.github.io/GraphvizOnline/
+// Draw the B+ tree
+void IxIndexHandle::Draw(const std::string &outf = "bplustree.dot") {
+    TRACE_FUNCTION
+    if (file_hdr_->root_page_ == INVALID_PAGE_ID) { // Assuming INVALID_PAGE_ID indicates an empty tree
+        // LOG_WARN("Drawing an empty tree"); // Assuming a logging mechanism exists
+        return;
+    }
+
+    std::ofstream out(outf);
+    out << "digraph G {" << std::endl;
+    ToGraph(file_hdr_->root_page_, out);
+    out << "}" << std::endl;
+    out.close();
+}
+
+// Helper method to recursively draw the B+ tree
+void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
+    TRACE_FUNCTION
+    std::string leaf_prefix("LEAF_");
+    std::string internal_prefix("INT_");
+
+    PageId page_id_struct = {fd_, page_id};
+    Page *page = buffer_pool_manager_->fetch_page(page_id_struct);
+    if (page == nullptr) {
+        // Handle error: unable to fetch page
+        return;
+    }
+
+    auto node = new IxNodeHandle(file_hdr_, page);
+
+    if (node->is_leaf_page()) {
+        // Print node name
+        out << leaf_prefix << page_id;
+        // Print node properties
+        out << "[shape=plain color=green ";
+        // Print data of the node
+        out << "label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n";
+        // Print data
+        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">P=" << page_id << "</TD></TR>\n";
+        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">"
+            << "max_size=" << node->get_max_size() << ",min_size=" << node->get_min_size() << ",size=" << node->get_size()
+            << "</TD></TR>\n";
+        out << "<TR>";
+        for (int i = 0; i < node->get_size(); i++) {
+            auto rid_ = node->get_rid(i);
+            out << "<TD>Key[" + node->get_key_value(i) << "] " << "Rid[(" << rid_->page_no << ", " << rid_->slot_no << ")]</TD>\n";
+        }
+        out << "</TR>";
+        // Print table end
+        out << "</TABLE>>];\n";
+        // Print Leaf node link if there is a next page
+        if (node->get_next_leaf() != INVALID_PAGE_ID) {
+            out << leaf_prefix << page_id << " -> " << leaf_prefix << node->get_next_leaf() << ";\n";
+            out << "{rank=same " << leaf_prefix << page_id << " " << leaf_prefix << node->get_next_leaf() << "};\n";
+        }
+    } else {
+        // Internal node
+        out << internal_prefix << page_id;
+        out << "[shape=plain color=pink ";
+        out << "label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n";
+        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">P=" << page_id << "</TD></TR>\n";
+        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">"
+            << "max_size=" << node->get_max_size() << ",min_size=" << node->get_min_size() << ",size=" << node->get_size()
+            << "</TD></TR>\n";
+        out << "<TR>";
+        for (int i = 0; i < node->get_size(); i++) {
+            // Assuming get_rid(i)->page_no gives child page id
+            out << "<TD PORT=\"p" << node->get_rid(i)->page_no << "\">";
+            out << "Key[" << node->get_key_value(i) << "]"; 
+            out << "</TD>\n";
+        }
+        out << "</TR>";
+        out << "</TABLE>>];\n";
+
+        // Print children
+        for (int i = 0; i < node->get_size(); i++) {
+            int child_page_id = node->get_rid(i)->page_no;
+            ToGraph(child_page_id, out); // Recursive call
+
+            // Draw edge to child
+            out << internal_prefix << page_id << ":p" << child_page_id << " -> ";
+            // Determine if child is leaf or internal to use correct prefix
+            PageId child_page_id_struct = {fd_, child_page_id};
+            Page *child_page = buffer_pool_manager_->fetch_page(child_page_id_struct);
+             if (child_page != nullptr) {
+                auto child_node = new IxNodeHandle(file_hdr_, child_page);
+                if (child_node->is_leaf_page()) {
+                    out << leaf_prefix << child_page_id << ";\n";
+                } else {
+                    out << internal_prefix << child_page_id << ";\n";
+                }
+                buffer_pool_manager_->unpin_page(child_page->get_page_id(), false);
+                delete child_node; // Release child node memory
+             } else {
+                 // Handle error fetching child page
+                 out << "page" << child_page_id << " [color=red];\n"; // Indicate error in graph
+             }
+        }
+    }
+
+    buffer_pool_manager_->unpin_page(page->get_page_id(), false);
+    delete node; // Release node memory
 }

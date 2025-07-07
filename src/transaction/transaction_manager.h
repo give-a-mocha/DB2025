@@ -209,7 +209,7 @@ class TransactionManager {
     void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values,
                              std::vector<bool> modified_fields);
 
-    void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid, std::vector<Value> values);
+    void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid);
 
     void do_delete(Transaction *txn);
 

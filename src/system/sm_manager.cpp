@@ -782,4 +782,17 @@ void SmManager::load_csv_data_auto(const std::string& table_name, const std::str
         // 大文件：使用内存映射
         load_csv_data_mmap(table_name, file_path, txn);
     }
+    // draw_bplustree_graph();
+}
+
+void SmManager::draw_bplustree_graph() {
+    for (const auto& [index_name, index_handle] : ihs_) {
+        int pos = index_name.find_last_of('_');
+        std::string filename = "";
+        for(int i = 0; i < pos; ++i) {
+            filename += index_name[i];
+        }
+        filename += ".dot";  // 输出文件名为索引名.dot
+        index_handle->Draw(filename);
+    }
 }
