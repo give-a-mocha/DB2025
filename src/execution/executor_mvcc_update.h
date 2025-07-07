@@ -140,7 +140,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
 
             // update = delete + insert
-            
+
             auto insert_rid = fh_->insert_record(new_rec->data, context_);
             txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd());
             txn_mgr_->add_update_undo_log(context_->txn_, fh_->GetFd(), rid, insert_rid);

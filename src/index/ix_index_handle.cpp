@@ -247,7 +247,6 @@ IxIndexHandle::IxIndexHandle(DiskManager *disk_manager, BufferPoolManager *buffe
     delete[] buf;
 }
 
-
 /**
  * @brief 用于查找指定键所在的叶子结点
  * @param key 要查找的目标key值
@@ -1561,7 +1560,7 @@ void IxIndexHandle::debug_print_leaf_chain() {
 // Draw the B+ tree
 void IxIndexHandle::Draw(const std::string &outf = "bplustree.dot") {
     TRACE_FUNCTION
-    if (file_hdr_->root_page_ == INVALID_PAGE_ID) { // Assuming INVALID_PAGE_ID indicates an empty tree
+    if (file_hdr_->root_page_ == INVALID_PAGE_ID) {  // Assuming INVALID_PAGE_ID indicates an empty tree
         // LOG_WARN("Drawing an empty tree"); // Assuming a logging mechanism exists
         return;
     }
@@ -1597,13 +1596,13 @@ void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
         out << "label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n";
         // Print data
         out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">P=" << page_id << "</TD></TR>\n";
-        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">"
-            << "max_size=" << node->get_max_size() << ",min_size=" << node->get_min_size() << ",size=" << node->get_size()
-            << "</TD></TR>\n";
+        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">" << "max_size=" << node->get_max_size()
+            << ",min_size=" << node->get_min_size() << ",size=" << node->get_size() << "</TD></TR>\n";
         out << "<TR>";
         for (int i = 0; i < node->get_size(); i++) {
             auto rid_ = node->get_rid(i);
-            out << "<TD>Key[" + node->get_key_value(i) << "] " << "Rid[(" << rid_->page_no << ", " << rid_->slot_no << ")]</TD>\n";
+            out << "<TD>Key[" + node->get_key_value(i) << "] " << "Rid[(" << rid_->page_no << ", " << rid_->slot_no
+                << ")]</TD>\n";
         }
         out << "</TR>";
         // Print table end
@@ -1619,14 +1618,13 @@ void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
         out << "[shape=plain color=pink ";
         out << "label=<<TABLE BORDER=\"0\" CELLBORDER=\"1\" CELLSPACING=\"0\" CELLPADDING=\"4\">\n";
         out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">P=" << page_id << "</TD></TR>\n";
-        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">"
-            << "max_size=" << node->get_max_size() << ",min_size=" << node->get_min_size() << ",size=" << node->get_size()
-            << "</TD></TR>\n";
+        out << "<TR><TD COLSPAN=\"" << node->get_size() << "\">" << "max_size=" << node->get_max_size()
+            << ",min_size=" << node->get_min_size() << ",size=" << node->get_size() << "</TD></TR>\n";
         out << "<TR>";
         for (int i = 0; i < node->get_size(); i++) {
             // Assuming get_rid(i)->page_no gives child page id
             out << "<TD PORT=\"p" << node->get_rid(i)->page_no << "\">";
-            out << "Key[" << node->get_key_value(i) << "]"; 
+            out << "Key[" << node->get_key_value(i) << "]";
             out << "</TD>\n";
         }
         out << "</TR>";
@@ -1635,14 +1633,14 @@ void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
         // Print children
         for (int i = 0; i < node->get_size(); i++) {
             int child_page_id = node->get_rid(i)->page_no;
-            ToGraph(child_page_id, out); // Recursive call
+            ToGraph(child_page_id, out);  // Recursive call
 
             // Draw edge to child
             out << internal_prefix << page_id << ":p" << child_page_id << " -> ";
             // Determine if child is leaf or internal to use correct prefix
             PageId child_page_id_struct = {fd_, child_page_id};
             Page *child_page = buffer_pool_manager_->fetch_page(child_page_id_struct);
-             if (child_page != nullptr) {
+            if (child_page != nullptr) {
                 auto child_node = new IxNodeHandle(file_hdr_, child_page);
                 if (child_node->is_leaf_page()) {
                     out << leaf_prefix << child_page_id << ";\n";
@@ -1650,14 +1648,14 @@ void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
                     out << internal_prefix << child_page_id << ";\n";
                 }
                 buffer_pool_manager_->unpin_page(child_page->get_page_id(), false);
-                delete child_node; // Release child node memory
-             } else {
-                 // Handle error fetching child page
-                 out << "page" << child_page_id << " [color=red];\n"; // Indicate error in graph
-             }
+                delete child_node;  // Release child node memory
+            } else {
+                // Handle error fetching child page
+                out << "page" << child_page_id << " [color=red];\n";  // Indicate error in graph
+            }
         }
     }
 
     buffer_pool_manager_->unpin_page(page->get_page_id(), false);
-    delete node; // Release node memory
+    delete node;  // Release node memory
 }

@@ -165,15 +165,15 @@ class TransactionManager {
      */
     bool UpdateUndoLink(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
 
-    bool update_undolink_without_lock(const int& fd, Rid rid, std::optional<UndoLink> prev_link);
-    
+    bool update_undolink_without_lock(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
+
     /**
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
     bool UpdateVersionLink(const int &fd, Rid rid, std::optional<VersionUndoLink> prev_version);
 
-    bool update_versionlink_without_lock(const int& fd, Rid rid, std::optional<VersionUndoLink> prev_version);
+    bool update_versionlink_without_lock(const int &fd, Rid rid, std::optional<VersionUndoLink> prev_version);
 
     /**
      * @brief 删除txn的撤销链接
@@ -207,7 +207,7 @@ class TransactionManager {
 
     void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid);
 
-    void add_update_undo_log(Transaction* txn, const int& fd, Rid &delete_rid, Rid &insert_rid);
+    void add_update_undo_log(Transaction *txn, const int &fd, Rid &delete_rid, Rid &insert_rid);
 
     void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid);
 

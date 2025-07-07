@@ -237,7 +237,8 @@ bool TransactionManager::UpdateVersionLink(const int& fd, Rid rid, std::optional
     return true;  // 更新成功，返回 true
 }
 
-bool TransactionManager::update_versionlink_without_lock(const int& fd, Rid rid, std::optional<VersionUndoLink> prev_version) {
+bool TransactionManager::update_versionlink_without_lock(const int& fd, Rid rid,
+                                                         std::optional<VersionUndoLink> prev_version) {
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
     if (it == version_info_.end()) {
@@ -522,7 +523,7 @@ void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Ri
  * @param values 修改前的记录值
  * @param modified_fields 修改的字段
  */
-void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid &delete_rid, Rid &insert_rid) {
+void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid& delete_rid, Rid& insert_rid) {
     UndoLog delete_log;
     delete_log.is_deleted_ = true;
     delete_log.is_inserted_ = false;
@@ -536,7 +537,7 @@ void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Ri
     insert_log.ts_ = get_next_timestamp();
     insert_log.prev_version_ = UndoLink{};  // insert undo log 没有前一个版本
     auto insert_undo_link = txn->AppendUndoLog(insert_log);
-    
+
     // 确保是同时操作完成
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     update_undolink_without_lock(fd, delete_rid, delete_undo_link);

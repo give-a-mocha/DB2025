@@ -265,7 +265,7 @@ class IxNodeHandle {
         int i = 0;
         char *key_ptr = get_key(key_idx);
         size_t offset = 0;
-        for(const auto &type : file_hdr->col_types_) {
+        for (const auto &type : file_hdr->col_types_) {
             switch (type) {
                 case ColType::TYPE_INT: {
                     int value = *reinterpret_cast<const int *>(key_ptr + offset);
