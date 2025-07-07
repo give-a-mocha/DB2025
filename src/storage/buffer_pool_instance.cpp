@@ -386,7 +386,7 @@ void BufferPoolInstance::delete_all_pages(int fd) {
     }
 }
 
-auto BufferPoolInstance::new_page_guarded(PageId *page_id) -> BasicPageGuard {
+auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     TRACE_FUNCTION
     std::scoped_lock lock{latch_};
     // 找一个可用frame
@@ -446,7 +446,7 @@ auto BufferPoolInstance::fetch_page_read(PageId page_id) -> ReadPageGuard {
     basic_guard.page_->RLatch();  // 获取读锁
     return {this, basic_guard.page_};
 }
-    
+
 auto BufferPoolInstance::fetch_page_write(PageId page_id) -> WritePageGuard {
     TRACE_FUNCTION
     auto basic_guard = fetch_page_basic(page_id);

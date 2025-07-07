@@ -76,7 +76,7 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
                 // 存在更老的事务持有排他锁，当前事务应该死亡
                 should_die = true;
             }
-            
+
             if (should_die) {
                 // 移除当前请求并返回false
                 if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
@@ -89,13 +89,13 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
                 if (txn->get_state() == TransactionState::ABORTED) {
                     return true;
                 }
-                
+
                 // 检查是否可以授予共享锁（只有排他锁会阻塞共享锁）
                 return request_queue.exclusive_holder_ == -1;
             });
 
             // 检查事务是否被中止
-            if(txn->get_state() == TransactionState::ABORTED) {
+            if (txn->get_state() == TransactionState::ABORTED) {
                 if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
                     request_queue.request_queue_.erase(current_request_it);
                 }
@@ -140,7 +140,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
     LockRequestQueue& request_queue = queue_it->second;
 
     // 检查是否已经获得锁
-    if(request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ == txn->get_transaction_id()) {
+    if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ == txn->get_transaction_id()) {
         return true;
     }
 
@@ -158,7 +158,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
     //         }
     //     }
     // }
-    //!MVCC 不加读锁
+    //! MVCC 不加读锁
     bool conflict = request_queue.exclusive_holder_ == -1 ? false : true;
 
     LockRequest current_request(txn->get_transaction_id(), LockManager::LockMode::EXCLUSIVE);
@@ -184,18 +184,19 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
             // 检查排他锁持有者
             if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id()) {
                 should_die = true;
-            } 
-            //!MVCC没有读锁
+            }
+            //! MVCC没有读锁
             // else {
             //     // 检查共享锁持有者
             //     for (const auto& req : request_queue.request_queue_) {
-            //         if (req.granted_ && req.lock_mode_ == LockManager::LockMode::SHARED && req.txn_id_ < txn->get_transaction_id()) {
+            //         if (req.granted_ && req.lock_mode_ == LockManager::LockMode::SHARED && req.txn_id_ <
+            //         txn->get_transaction_id()) {
             //             should_die = true;
             //             break;
             //         }
             //     }
             // }
-            
+
             if (should_die) {
                 // 移除当前请求并返回false
                 if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
@@ -208,7 +209,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
                 if (txn->get_state() == TransactionState::ABORTED) {
                     return true;
                 }
-                
+
                 // 检查是否可以授予锁
                 // bool can_grant = true;
                 // for (const auto& req : request_queue.request_queue_) {
@@ -229,7 +230,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
             });
 
             // 检查事务是否被中止
-            if(txn->get_state() == TransactionState::ABORTED) {
+            if (txn->get_state() == TransactionState::ABORTED) {
                 if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
                     request_queue.request_queue_.erase(current_request_it);
                 }
@@ -328,7 +329,8 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
     bool is_find = false;
 
     // 如果要释放的是排他锁，直接使用保存的迭代器
-    if (request_queue.exclusive_holder_ == txn_id && request_queue.exclusive_holder_it_ != request_queue.request_queue_.end()) {
+    if (request_queue.exclusive_holder_ == txn_id &&
+        request_queue.exclusive_holder_it_ != request_queue.request_queue_.end()) {
         request_queue.request_queue_.erase(request_queue.exclusive_holder_it_);
         request_queue.exclusive_holder_ = -1;
         request_queue.exclusive_holder_it_ = request_queue.request_queue_.end();

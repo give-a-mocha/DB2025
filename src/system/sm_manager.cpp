@@ -607,8 +607,7 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
 
-
-void SmManager::load_data(char *start_pos, char *end_pos, const std::string& table_name, Transaction* txn) {
+void SmManager::load_data(char* start_pos, char* end_pos, const std::string& table_name, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(table_name);
     auto fh_ = fhs_[table_name].get();
     const size_t record_size = fh_->get_record_size();
@@ -622,10 +621,10 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
     int count = 0;
     size_t offset = 0;
     memset(record_data, 0, len);  // 初始化记录缓冲区
-    
+
     char* current_pos = std::find(start_pos, end_pos, '\n');  // 跳过第一行（表头）
-    current_pos++;  // 跳过换行符
-    
+    current_pos++;                                            // 跳过换行符
+
     auto page_handle = fh_->create_new_page_handle();
 
     auto batch_copy = [&]() {
@@ -634,19 +633,17 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
         // char *slot = page_handle.get_slot(0);
         // memcpy(slot, record_data, offset);
         Bitmap::batch_set_fast(page_handle.bitmap, 0, count);
-        
+
         memset(record_data, 0, len);
         offset = 0;
         count = 0;
     };
-    
+
     // 批量处理数据
     while (current_pos < end_pos) {
         size_t start_offset = offset;
         for (size_t i = 0; i < tab_.cols.size(); ++i) {
-            char* line_end = std::find_if(current_pos, end_pos, [](char c) {
-                return c == ',' || c == '\n';
-            });
+            char* line_end = std::find_if(current_pos, end_pos, [](char c) { return c == ',' || c == '\n'; });
             const auto& col = tab_.cols[i];
             int len = line_end - current_pos;
             switch (col.type) {
@@ -674,11 +671,11 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
             offset += col.len;
             current_pos = line_end + 1;
         }
-        
+
         // 插入记录
         Rid rid_ = {page_handle.page->get_page_id().page_no, count};
         count++;
-                
+
         // 插入索引
         RmRecord rec(record_size, record_data + start_offset);
         insert_index_without_lock(table_name, rec, rid_);
@@ -690,9 +687,8 @@ void SmManager::load_data(char *start_pos, char *end_pos, const std::string& tab
             buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
             page_handle = fh_->create_new_page_handle();  // 创建新页
         }
-        
     }
-    
+
     // 确保最后一页被写入
     batch_copy();
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
@@ -709,12 +705,12 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
     if (!file.is_open()) {
         throw RMDBError("Cannot open CSV file: " + file_path);
     }
-    
+
     // 获取文件大小
     file.seekg(0, std::ios::end);
     const size_t file_size = file.tellg();
     file.seekg(0, std::ios::beg);
-    
+
     // 预分配大缓冲区，一次性读取整个文件
     std::vector<char> file_buffer(file_size + 1);
     file.read(file_buffer.data(), file_size);
@@ -726,7 +722,6 @@ void SmManager::load_csv_data(const std::string& table_name, const std::string& 
 
 //! 使用内存映射文件的高性能版本（适用于大文件）
 void SmManager::load_csv_data_mmap(const std::string& table_name, const std::string& file_path, Transaction* txn) {
-
     // 打开文件获取文件描述符
     int fd = open(file_path.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -739,7 +734,7 @@ void SmManager::load_csv_data_mmap(const std::string& table_name, const std::str
         close(fd);
         throw RMDBError("Cannot get file size: " + file_path);
     }
-    
+
     const size_t file_size = file_stat.st_size;
     if (file_size == 0) {
         close(fd);
@@ -774,16 +769,16 @@ void SmManager::load_csv_data_auto(const std::string& table_name, const std::str
     if (stat(file_path.c_str(), &file_stat) == -1) {
         throw RMDBError("Cannot get file size: " + file_path);
     }
-    
+
     const size_t file_size = file_stat.st_size;
-    
+
     // 3. 根据文件大小选择最优策略
-    const size_t FILE_THRESHOLD = 100 * 1024 * 1024;   // 100MB
-    
+    const size_t FILE_THRESHOLD = 100 * 1024 * 1024;  // 100MB
+
     if (file_size < FILE_THRESHOLD) {
         // 小文件：使用优化的批量读取
         load_csv_data(table_name, file_path, txn);
-    } else  {
+    } else {
         // 大文件：使用内存映射
         load_csv_data_mmap(table_name, file_path, txn);
     }

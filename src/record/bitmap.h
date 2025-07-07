@@ -43,13 +43,13 @@ class Bitmap {
     static int next_bit(bool bit, const char *bm, int max_n, int curr) {
         int start_pos = curr + 1;
         if (start_pos >= max_n) return max_n;
-        
+
         int start_bucket = get_bucket(start_pos);
         int end_bucket = get_bucket(max_n - 1);
-        
+
         // 目标字节模式：查找0用0x00，查找1用0xFF
         const char target_byte = bit ? static_cast<char>(0xFF) : static_cast<char>(0x00);
-        
+
         // 处理起始字节的剩余位
         int start_offset = start_pos % BITMAP_WIDTH;
         if (start_offset != 0) {
@@ -63,7 +63,7 @@ class Bitmap {
             start_bucket++;
             start_pos = start_bucket * BITMAP_WIDTH;
         }
-        
+
         // 快速跳过整字节
         while (start_bucket <= end_bucket && start_pos < max_n) {
             if (start_bucket == end_bucket) {
@@ -93,7 +93,7 @@ class Bitmap {
                 start_pos += BITMAP_WIDTH;
             }
         }
-        
+
         return max_n;
     }
 
@@ -105,11 +105,11 @@ class Bitmap {
      */
     static void batch_reset(char *bm, int start_pos, int count) {
         if (count <= 0) return;
-        
+
         int end_pos = start_pos + count - 1;
         int start_bucket = get_bucket(start_pos);
         int end_bucket = get_bucket(end_pos);
-        
+
         if (start_bucket == end_bucket) {
             // 所有位都在同一个字节内
             for (int i = 0; i < count; i++) {
@@ -117,7 +117,7 @@ class Bitmap {
             }
         } else {
             // 跨多个字节
-            
+
             // 1. 处理起始字节的不对齐部分
             int start_offset = start_pos % BITMAP_WIDTH;
             if (start_offset != 0) {
@@ -127,12 +127,12 @@ class Bitmap {
                 }
                 start_bucket++;
             }
-            
+
             // 2. 批量处理完整字节（设置为0x00）
             for (int bucket = start_bucket; bucket < end_bucket; bucket++) {
                 bm[bucket] = 0x00;  // 所有8位都设置为0
             }
-            
+
             // 3. 处理结尾字节的不对齐部分
             int end_offset = end_pos % BITMAP_WIDTH;
             if (end_bucket < get_bucket(start_pos + count)) {
@@ -151,18 +151,18 @@ class Bitmap {
      */
     static void batch_set_fast(char *bm, int start_pos, int count) {
         if (count <= 0) return;
-        
+
         int end_pos = start_pos + count - 1;
         int start_bucket = get_bucket(start_pos);
         int end_bucket = get_bucket(end_pos);
-        
+
         if (start_bucket == end_bucket) {
             // 在同一字节内，使用位掩码
             char mask = create_mask(start_pos % BITMAP_WIDTH, count);
             bm[start_bucket] |= mask;
         } else {
             // 跨多个字节
-            
+
             // 1. 处理起始字节
             int start_offset = start_pos % BITMAP_WIDTH;
             if (start_offset != 0) {
@@ -171,10 +171,10 @@ class Bitmap {
                 bm[start_bucket] |= mask;
                 start_bucket++;
             }
-            
+
             // 2. 批量处理完整字节
             memset(bm + start_bucket, 0xFF, end_bucket - start_bucket);
-            
+
             // 3. 处理结尾字节
             int end_offset = end_pos % BITMAP_WIDTH;
             if (end_bucket > start_bucket - 1) {
@@ -192,18 +192,18 @@ class Bitmap {
      */
     static void batch_reset_fast(char *bm, int start_pos, int count) {
         if (count <= 0) return;
-        
+
         int end_pos = start_pos + count - 1;
         int start_bucket = get_bucket(start_pos);
         int end_bucket = get_bucket(end_pos);
-        
+
         if (start_bucket == end_bucket) {
             // 在同一字节内，使用位掩码
             char mask = create_mask(start_pos % BITMAP_WIDTH, count);
             bm[start_bucket] &= static_cast<char>(~mask);  // 使用反掩码清零
         } else {
             // 跨多个字节
-            
+
             // 1. 处理起始字节
             int start_offset = start_pos % BITMAP_WIDTH;
             if (start_offset != 0) {
@@ -212,10 +212,10 @@ class Bitmap {
                 bm[start_bucket] &= static_cast<char>(~mask);  // 使用反掩码清零
                 start_bucket++;
             }
-            
+
             // 2. 批量处理完整字节（设置为0x00）
             memset(bm + start_bucket, 0x00, end_bucket - start_bucket);
-            
+
             // 3. 处理结尾字节
             int end_offset = end_pos % BITMAP_WIDTH;
             if (end_bucket > start_bucket - 1) {

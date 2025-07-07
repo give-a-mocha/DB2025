@@ -56,12 +56,12 @@ class Page {
     friend class BufferPoolInstance;
 
    public:
-    Page() { 
+    Page() {
         data_ = new char[PAGE_SIZE];  // 分配PAGE_SIZE大小的内存
-        reset_memory();                // 初始化内存，将data_的PAGE_SIZE个字节填
+        reset_memory();               // 初始化内存，将data_的PAGE_SIZE个字节填
     }
 
-    ~Page() { delete [] data_; }
+    ~Page() { delete[] data_; }
 
     PageId get_page_id() const { return id_; }
 

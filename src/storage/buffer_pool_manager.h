@@ -130,11 +130,11 @@ class BufferPoolManager {
 
     size_t get_instance_no(const PageId& page_id) const { return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
 
-    auto new_page_guarded(PageId *page_id) -> BasicPageGuard;
+    auto new_page_guarded(PageId* page_id) -> BasicPageGuard;
 
     auto fetch_page_basic(PageId page_id) -> BasicPageGuard;
 
     auto fetch_page_read(PageId page_id) -> ReadPageGuard;
-    
+
     auto fetch_page_write(PageId page_id) -> WritePageGuard;
 };

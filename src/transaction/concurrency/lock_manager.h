@@ -51,10 +51,8 @@ class LockManager {
         txn_id_t exclusive_holder_ = -1;
         // 当前持有排他锁的迭代器，如果没有则为end()
         std::list<LockRequest>::iterator exclusive_holder_it_;
-        
-        LockRequestQueue() {
-            exclusive_holder_it_ = request_queue_.end();
-        }
+
+        LockRequestQueue() { exclusive_holder_it_ = request_queue_.end(); }
     };
 
     // GapLockRequest is now defined in "transaction/txn_defs.h"

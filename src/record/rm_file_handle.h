@@ -99,7 +99,7 @@ struct RmPageHandle {
 class RmFileHandle {
     friend class RmScan;     // 允许记录扫描器访问内部成员
     friend class RmManager;  // 允许记录管理器访问内部成员
-    friend class SmManager;   // 允许系统管理器访问内部成员
+    friend class SmManager;  // 允许系统管理器访问内部成员
 
    private:
     DiskManager *disk_manager_;               // 磁盘管理器，负责文件的创建、删除和读写

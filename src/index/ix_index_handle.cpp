@@ -879,7 +879,7 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
 bool IxIndexHandle::delete_entry_without_lock(const char *key) {
     TRACE_FUNCTION
     // 1. 获取目标key值所在的叶子结点 (不带锁)
-    Page *leaf_page = find_leaf_page_without_lock(key, Operation::DELETE); // 使用DELETE操作类型
+    Page *leaf_page = find_leaf_page_without_lock(key, Operation::DELETE);  // 使用DELETE操作类型
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
 
     // 2. 在叶子节点中查找目标key值的位置

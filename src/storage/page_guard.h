@@ -7,122 +7,120 @@ class ReadPageGuard;
 class WritePageGuard;
 
 class BasicPageGuard {
- public:
-  BasicPageGuard() = default;
+   public:
+    BasicPageGuard() = default;
 
-  BasicPageGuard(BufferPoolInstance *bpi, Page *page) : bpi_(bpi), page_(page) {}
+    BasicPageGuard(BufferPoolInstance *bpi, Page *page) : bpi_(bpi), page_(page) {}
 
-  BasicPageGuard(const BasicPageGuard &) = delete;
-  auto operator=(const BasicPageGuard &) -> BasicPageGuard & = delete;
+    BasicPageGuard(const BasicPageGuard &) = delete;
+    auto operator=(const BasicPageGuard &) -> BasicPageGuard & = delete;
 
-  BasicPageGuard(BasicPageGuard &&that) noexcept;
+    BasicPageGuard(BasicPageGuard &&that) noexcept;
 
-  void Drop();
+    void Drop();
 
-  auto operator=(BasicPageGuard &&that) noexcept -> BasicPageGuard &;
+    auto operator=(BasicPageGuard &&that) noexcept -> BasicPageGuard &;
 
-  ~BasicPageGuard();
+    ~BasicPageGuard();
 
-  auto PageId() -> PageId { return page_->get_page_id(); }
+    auto PageId() -> PageId { return page_->get_page_id(); }
 
-  auto GetData() -> const char * { return page_->get_data(); }
+    auto GetData() -> const char * { return page_->get_data(); }
 
-  template <class T>
-  auto As() -> const T * {
-    return reinterpret_cast<const T *>(GetData());
-  }
+    template <class T>
+    auto As() -> const T * {
+        return reinterpret_cast<const T *>(GetData());
+    }
 
-  auto GetDataMut() -> char * {
-    is_dirty_ = true;
-    return page_->get_data();
-  }
+    auto GetDataMut() -> char * {
+        is_dirty_ = true;
+        return page_->get_data();
+    }
 
-  template <class T>
-  auto AsMut() -> T * {
-    return reinterpret_cast<T *>(GetDataMut());
-  }
+    template <class T>
+    auto AsMut() -> T * {
+        return reinterpret_cast<T *>(GetDataMut());
+    }
 
- private:
-  friend class ReadPageGuard;
-  friend class WritePageGuard;
-  friend class BufferPoolInstance;
+   private:
+    friend class ReadPageGuard;
+    friend class WritePageGuard;
+    friend class BufferPoolInstance;
 
-  [[maybe_unused]] BufferPoolInstance *bpi_{nullptr};
-  Page *page_{nullptr};
-  bool is_dirty_{false};
+    [[maybe_unused]] BufferPoolInstance *bpi_{nullptr};
+    Page *page_{nullptr};
+    bool is_dirty_{false};
 };
 
 class ReadPageGuard {
- public:
-  ReadPageGuard() = default;
+   public:
+    ReadPageGuard() = default;
 
-  ReadPageGuard(BufferPoolInstance *bpi, Page *page) : guard_(bpi, page) {}
+    ReadPageGuard(BufferPoolInstance *bpi, Page *page) : guard_(bpi, page) {}
 
-  ReadPageGuard(const ReadPageGuard &) = delete;
+    ReadPageGuard(const ReadPageGuard &) = delete;
 
-  auto operator=(const ReadPageGuard &) -> ReadPageGuard & = delete;
+    auto operator=(const ReadPageGuard &) -> ReadPageGuard & = delete;
 
+    ReadPageGuard(ReadPageGuard &&that) noexcept;
 
-  ReadPageGuard(ReadPageGuard &&that) noexcept;
+    auto operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard &;
 
-  auto operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard &;
+    void Drop();
 
-  void Drop();
+    /** TODO(P1): Add implementation
+     *
+     * @brief Destructor for ReadPageGuard
+     *
+     * Just like with BasicPageGuard, this should behave
+     * as if you were dropping the guard.
+     */
+    ~ReadPageGuard();
 
-  /** TODO(P1): Add implementation
-   *
-   * @brief Destructor for ReadPageGuard
-   *
-   * Just like with BasicPageGuard, this should behave
-   * as if you were dropping the guard.
-   */
-  ~ReadPageGuard();
+    auto PageId() -> PageId { return guard_.PageId(); }
 
-  auto PageId() -> PageId { return guard_.PageId(); }
+    auto GetData() -> const char * { return guard_.GetData(); }
 
-  auto GetData() -> const char * { return guard_.GetData(); }
+    template <class T>
+    auto As() -> const T * {
+        return guard_.As<T>();
+    }
 
-  template <class T>
-  auto As() -> const T * {
-    return guard_.As<T>();
-  }
-
- private:
-  BasicPageGuard guard_;
+   private:
+    BasicPageGuard guard_;
 };
 
 class WritePageGuard {
- public:
-  WritePageGuard() = default;
-  WritePageGuard(BufferPoolInstance *bpi, Page *page) : guard_(bpi, page) {}
-  WritePageGuard(const WritePageGuard &) = delete;
-  auto operator=(const WritePageGuard &) -> WritePageGuard & = delete;
+   public:
+    WritePageGuard() = default;
+    WritePageGuard(BufferPoolInstance *bpi, Page *page) : guard_(bpi, page) {}
+    WritePageGuard(const WritePageGuard &) = delete;
+    auto operator=(const WritePageGuard &) -> WritePageGuard & = delete;
 
-  WritePageGuard(WritePageGuard &&that) noexcept;
+    WritePageGuard(WritePageGuard &&that) noexcept;
 
-  auto operator=(WritePageGuard &&that) noexcept -> WritePageGuard &;
+    auto operator=(WritePageGuard &&that) noexcept -> WritePageGuard &;
 
-  void Drop();
+    void Drop();
 
-  ~WritePageGuard();
+    ~WritePageGuard();
 
-  auto PageId() -> PageId { return guard_.PageId(); }
+    auto PageId() -> PageId { return guard_.PageId(); }
 
-  auto GetData() -> const char * { return guard_.GetData(); }
+    auto GetData() -> const char * { return guard_.GetData(); }
 
-  template <class T>
-  auto As() -> const T * {
-    return guard_.As<T>();
-  }
+    template <class T>
+    auto As() -> const T * {
+        return guard_.As<T>();
+    }
 
-  auto GetDataMut() -> char * { return guard_.GetDataMut(); }
+    auto GetDataMut() -> char * { return guard_.GetDataMut(); }
 
-  template <class T>
-  auto AsMut() -> T * {
-    return guard_.AsMut<T>();
-  }
+    template <class T>
+    auto AsMut() -> T * {
+        return guard_.AsMut<T>();
+    }
 
- private:
-  BasicPageGuard guard_;
+   private:
+    BasicPageGuard guard_;
 };
-
