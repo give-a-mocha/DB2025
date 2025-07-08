@@ -60,8 +60,14 @@ yacc.tab.hpp
 *.sql
 
 uv.lock
-main.py
+# main.py
 pyproject.toml
 .python-version
 src/test/performance_test/table_data/
 TPCC-Tester/
+
+
+FlameGraph
+
+performance_testing/run.sh
+performance_testing/*.svg
