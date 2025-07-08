@@ -170,7 +170,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             log_manager->add_insert_log(context->txn_->get_transaction_id(), rec, rid, table_name);
         }
         // 删除版本链记录
-        DeleteUpdateVersionLink(handle->GetFd(), rid, context->txn_);
+        DeleteUndoLink(handle->GetFd(), rid, context->txn_);
     }
     txn->get_write_set()->clear();  // 清空写集合
 
@@ -198,22 +198,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
  * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
  * 在更新之前，将调用 `check` 函数以确保有效性。
  */
-bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, std::optional<UndoLink> prev_link) {
-    std::optional<VersionUndoLink> prev_version = VersionUndoLink::FromOptionalUndoLink(prev_link);
-    return UpdateVersionLink(fd, rid, prev_version);
-}
-
-bool TransactionManager::update_undolink_without_lock(const int& fd, Rid rid, std::optional<UndoLink> prev_link) {
-    std::optional<VersionUndoLink> prev_version = VersionUndoLink::FromOptionalUndoLink(prev_link);
-    return update_versionlink_without_lock(fd, rid, prev_version);
-}
-
-/**
- * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
- * 在更新之前，将调用 `check` 函数以确保有效性。
- */
-bool TransactionManager::UpdateVersionLink(const int& fd, Rid rid, std::optional<VersionUndoLink> prev_version) {
-    // 获取对应的版本信息
+bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink prev_link) {
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
@@ -228,17 +213,11 @@ bool TransactionManager::UpdateVersionLink(const int& fd, Rid rid, std::optional
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
-    if (prev_version.has_value()) {
-        // 如果提供了版本链接，则更新或插入
-        prev_version_map[rid.slot_no] = *prev_version;
-    } else {
-        return false;
-    }
+    prev_version_map[rid.slot_no] = prev_link;
     return true;  // 更新成功，返回 true
 }
 
-bool TransactionManager::update_versionlink_without_lock(const int& fd, Rid rid,
-                                                         std::optional<VersionUndoLink> prev_version) {
+bool TransactionManager::update_undolink_without_lock(const int& fd, Rid rid, UndoLink prev_link) {
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
     if (it == version_info_.end()) {
@@ -251,16 +230,11 @@ bool TransactionManager::update_versionlink_without_lock(const int& fd, Rid rid,
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
-    if (prev_version.has_value()) {
-        // 如果提供了版本链接，则更新或插入
-        prev_version_map[rid.slot_no] = *prev_version;
-    } else {
-        return false;
-    }
+    prev_version_map[rid.slot_no] = prev_link;
     return true;  // 更新成功，返回 true
 }
 
-UndoLink TransactionManager::DeleteUpdateVersionLink(const int& fd, Rid rid, Transaction* txn) {
+UndoLink TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn) {
     // 获取对应的版本信息
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
@@ -274,49 +248,36 @@ UndoLink TransactionManager::DeleteUpdateVersionLink(const int& fd, Rid rid, Tra
     auto& prev_version_map = version_info->prev_version_;
     auto prev_version_it = prev_version_map.find(rid.slot_no);
     if (prev_version_it != prev_version_map.end()) {
-        VersionUndoLink version_link = prev_version_it->second;
-        UndoLink undo_link = version_link.prev_;
-        while (undo_link.prev_txn_ == txn->get_transaction_id()) {
-            undo_link = GetUndoLog(undo_link).prev_version_;
-            if (!undo_link.IsValid()) {
-                break;
-            }
+        UndoLink undolink = prev_version_it->second;
+        while (undolink.IsValid() && undolink.prev_txn_ == txn->get_transaction_id()) {
+            undolink = GetUndoLog(undolink).prev_version_;
         }
-        if (undo_link.IsValid()) {
+        if (undolink.IsValid()) {
             // 如果撤销链接有效，则更新版本链接
-            prev_version_it->second.prev_ = undo_link;
+            prev_version_it->second = undolink;
         } else {
             // 如果撤销链接无效，则删除该版本链接
             prev_version_map.erase(prev_version_it);
         }
-        return undo_link;
+        return undolink;
     }
     return UndoLink{};
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
-std::optional<UndoLink> TransactionManager::GetUndoLink(const int& fd, Rid rid) {
-    std::optional<VersionUndoLink> version_link = GetVersionLink(fd, rid);
-    if (!version_link.has_value()) {
-        return std::nullopt;  // 如果没有找到对应的版本链接，则返回 nullopt
-    }
-    return version_link->prev_;  // 返回前一个版本链接的撤销日志
-}
-
-/** @brief 获取表堆元组的第一个撤销日志。 */
-std::optional<VersionUndoLink> TransactionManager::GetVersionLink(const int& fd, Rid rid) {
+UndoLink TransactionManager::GetUndoLink(const int& fd, Rid rid) {
     std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
     if (it == version_info_.end()) {
-        return std::nullopt;  // 如果没有找到对应的版本信息，则返回 nullopt
+        return UndoLink{};  // 如果没有找到对应的版本信息，则返回空的 UndoLink
     }
     auto& version_info = it->second;
     lock.unlock();
     std::shared_lock<std::shared_mutex> version_lock(version_info->mutex_);
     auto prev_version_it = version_info->prev_version_.find(rid.slot_no);
     if (prev_version_it == version_info->prev_version_.end()) {
-        return std::nullopt;  // 如果没有找到对应的前一个版本链接，则返回 nullopt
+        return UndoLink{};  // 如果没有找到对应的版本信息，则返回空的 UndoLink
     }
     return prev_version_it->second;  // 返回前一个版本链接
 }
@@ -416,7 +377,7 @@ void TransactionManager::cleanup_expired_versions(timestamp_t watermark) {
 
         // 清理过期的版本链接
         for (auto version_it = version_info->prev_version_.begin(); version_it != version_info->prev_version_.end();) {
-            auto undo_log = GetUndoLog(version_it->second.prev_);
+            auto undo_log = GetUndoLog(version_it->second);
             if (undo_log.ts_ <= GetWatermark()) {
                 version_it = version_info->prev_version_.erase(version_it);
             } else {
@@ -528,8 +489,7 @@ void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Ri
     delete_log.is_deleted_ = true;
     delete_log.is_inserted_ = false;
     delete_log.ts_ = get_next_timestamp();
-    auto prev_version = GetVersionLink(fd, delete_rid);
-    delete_log.prev_version_ = prev_version.has_value() ? prev_version.value().prev_ : UndoLink{};
+    delete_log.prev_version_ = GetUndoLink(fd, delete_rid);
     auto delete_undo_link = txn->AppendUndoLog(delete_log);
     UndoLog insert_log;
     insert_log.is_deleted_ = false;
@@ -558,8 +518,7 @@ void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Ri
     // log.modified_fields_ = std::vector<bool>(values.size(), true);
     // log.tuple_ = std::move(values);
     log.ts_ = get_next_timestamp();
-    auto prev_version = GetVersionLink(fd, rid);
-    log.prev_version_ = prev_version.has_value() ? prev_version.value().prev_ : UndoLink{};
+    log.prev_version_ = GetUndoLink(fd, rid);
     auto undo_link = txn->AppendUndoLog(log);
     UpdateUndoLink(fd, rid, undo_link);
 }
@@ -567,8 +526,8 @@ void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Ri
 bool TransactionManager::is_delete_record(int fd, Rid rid) {
     auto pre_undo_link = GetUndoLink(fd, rid);
     bool is_deleted = false;
-    if (pre_undo_link.has_value()) {
-        auto undo_log = GetUndoLog(pre_undo_link.value());
+    if (pre_undo_link.IsValid()) {
+        auto undo_log = GetUndoLog(pre_undo_link);
         is_deleted = undo_log.is_deleted_;
     }
     return is_deleted;
@@ -581,15 +540,15 @@ std::pair<std::vector<UndoLog>, bool> TransactionManager::get_undologs_with_lock
 
     // 现在磁盘的是不是被标记删除
     bool is_deleted = false;
-    if (pre_undo_link.has_value()) {
-        auto undo_log = GetUndoLog(pre_undo_link.value());
+    if (pre_undo_link.IsValid()) {
+        auto undo_log = GetUndoLog(pre_undo_link);
         is_deleted = undo_log.is_deleted_;
     }
 
-    while (pre_undo_link.has_value()) {
-        auto undo_log = GetUndoLog(pre_undo_link.value());
+    while (pre_undo_link.IsValid()) {
+        auto undo_log = GetUndoLog(pre_undo_link);
         // 如果是自己修改的直接返回
-        if (pre_undo_link.value().prev_txn_ == txn->get_transaction_id()) {
+        if (pre_undo_link.prev_txn_ == txn->get_transaction_id()) {
             break;
         }
         // 如果是已提交事物
@@ -598,9 +557,6 @@ std::pair<std::vector<UndoLog>, bool> TransactionManager::get_undologs_with_lock
         }
         undo_logs.push_back(undo_log);
         pre_undo_link = undo_log.prev_version_;
-        if (!pre_undo_link->IsValid()) {
-            break;
-        }
     }
     return {undo_logs, is_deleted};
 }

@@ -100,16 +100,6 @@ class Planner {
     std::shared_ptr<Plan> physical_optimization(std::shared_ptr<Query> query, Context *context);
 
     /**
-     * @brief 为单表查询生成访问计划
-     * @param query 查询对象
-     * @return 生成的扫描计划
-     * @throw PlanError 当无法生成有效计划时
-     * @note 这是生成执行计划的基础步骤，
-     * 为后续的连接和其他操作提供输入
-     */
-    std::shared_ptr<Plan> make_one_rel(std::shared_ptr<Query> query);
-
-    /**
      * @brief 为ORDER BY生成排序计划
      * @param query 查询对象
      * @param plan 输入计划

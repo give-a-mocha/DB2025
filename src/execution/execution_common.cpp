@@ -49,15 +49,14 @@ bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, 
 }
 
 bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
-    auto pre_undo_link = txn_mgr->GetUndoLink(fh->GetFd(), rid);
-    if (pre_undo_link.has_value()) {
-        auto pre_txn = pre_undo_link.value().prev_txn_;
-        auto undo_log = txn_mgr->GetUndoLog(pre_undo_link.value());
+    auto undolink = txn_mgr->GetUndoLink(fh->GetFd(), rid);
+    if (undolink.IsValid()) {
+        auto pre_txn = undolink.prev_txn_;
+        auto undo_log = txn_mgr->GetUndoLog(undolink);
         // 检查是否有事务更新它且提交时间大于当前事务读时间
         if (pre_txn != txn->get_transaction_id() && undo_log.ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
-
         if (undo_log.is_deleted_) {
             return false;
         }
@@ -71,11 +70,11 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
     auto rec = fh_->get_record(rid, context_);
     bool is_deleted = false;
 
-    auto pre_undo_link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
-    while (pre_undo_link.has_value()) {
-        auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
+    auto undolink = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
+    while (undolink.IsValid()) {
+        auto undo_log = txn_mgr_->GetUndoLog(undolink);
         // 如果是自己修改的直接返回
-        if (pre_undo_link.value().prev_txn_ == context_->txn_->get_transaction_id()) {
+        if (undolink.prev_txn_ == context_->txn_->get_transaction_id()) {
             if (undo_log.is_deleted_) {
                 is_deleted = true;
             }
@@ -92,21 +91,18 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
             is_deleted = true;
         } else {
             is_deleted = false;
-            if (!undo_log.is_deleted_) {
-                for (size_t i = 0; i < cols_.size(); i++) {
-                    if (undo_log.modified_fields_[i]) {
-                        if (!undo_log.tuple_[i].raw) {
-                            undo_log.tuple_[i].init_raw(cols_[i].len);
-                        }
-                        memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
-                    }
-                }
-            }
+            // if (!undo_log.is_deleted_) {
+            //     for (size_t i = 0; i < cols_.size(); i++) {
+            //         if (undo_log.modified_fields_[i]) {
+            //             if (!undo_log.tuple_[i].raw) {
+            //                 undo_log.tuple_[i].init_raw(cols_[i].len);
+            //             }
+            //             memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
+            //         }
+            //     }
+            // }
         }
-        pre_undo_link = undo_log.prev_version_;
-        if (!pre_undo_link->IsValid()) {
-            break;
-        }
+        undolink = undo_log.prev_version_;
     }
     if (is_deleted) {
         return nullptr;
@@ -132,7 +128,7 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
         // 检查索引项是否已存在
         std::vector<Rid> result;
         bool is_exist = ih->get_value(key.get(), &result, context_->txn_);
-        page_id_t res = INVALID_PAGE_ID;
+        bool res = false;
         if (is_exist == false) {
             res = ih->insert_entry(key.get(), rid, context_->txn_);
         } else {
@@ -145,10 +141,11 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
                 }
             }
             if (ok) {
-                res = ih->insert_entry_force(key.get(), rid, context_->txn_);
+                res = true;
+                ih->insert_entry_force(key.get(), rid, context_->txn_);
             }
         }
-        if (res == INVALID_PAGE_ID) {
+        if (!res) {
             // 插入索引失败，可能是因为索引已存在
             for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
                 auto &rollback_index = tab_.indexes[rollback_i];

@@ -539,7 +539,7 @@ bool IxIndexHandle::insert_into_leaf(const char *key, const Rid &value, IxNodeHa
  * - 必须维护最右叶子节点信息
  * - 要及时释放节点的内存资源
  */
-page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction *transaction) {
+bool IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction *transaction) {
     TRACE_FUNCTION
     // Todo:
     // 1. 查找key值应该插入到哪个叶子节点
@@ -551,35 +551,33 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
     if (is_empty()) {
         create_new_root(key, value);
         root_latch_.unlock();
-        return file_hdr_->root_page_;
+        return true;
     } else {
         auto leaf_page = find_leaf_page(key, Operation::INSERT, transaction);
         auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
         bool ok = insert_into_leaf(key, value, leaf_node);
-        auto res = leaf_node->get_page_no();
         UnlockAncestors(transaction);
         leaf_page->WUnlatch();  // 插入完毕后释放叶子
         buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
         delete leaf_node;  // 释放叶子结点内存
         // 返回插入到的叶结点的page_no
-        return ok ? res : INVALID_PAGE_ID;
+        return ok;
     }
 }
 
-page_id_t IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &value) {
+bool IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &value) {
     TRACE_FUNCTION
     if (is_empty()) {
         create_new_root(key, value);
-        return file_hdr_->root_page_;
+        return true;
     } else {
         auto leaf_page = find_leaf_page_without_lock(key, Operation::INSERT);
         auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
         bool ok = insert_into_leaf(key, value, leaf_node);
-        auto res = leaf_node->get_page_no();
         buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
         delete leaf_node;  // 释放叶子结点内存
         // 返回插入到的叶结点的page_no
-        return ok ? res : INVALID_PAGE_ID;
+        return ok;
     }
 }
 
@@ -597,7 +595,7 @@ page_id_t IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &v
  * - 必须维护最右叶子节点信息
  * - 要及时释放节点的内存资源
  */
-page_id_t IxIndexHandle::insert_entry_force(const char *key, const Rid &value, Transaction *transaction) {
+void IxIndexHandle::insert_entry_force(const char *key, const Rid &value, Transaction *transaction) {
     TRACE_FUNCTION
     auto leaf_page = find_leaf_page(key, Operation::INSERT, transaction);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
@@ -618,7 +616,6 @@ page_id_t IxIndexHandle::insert_entry_force(const char *key, const Rid &value, T
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
     delete leaf_node;  // 释放叶子结点内存
     // 返回插入到的叶结点的page_no
-    return res;
 }
 
 /**

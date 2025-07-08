@@ -30,35 +30,6 @@ enum class ConcurrencyMode {
     MVCC                    // 多版本并发控制
 };
 
-/// 版本链中的第一个撤销链接，将表堆元组链接到撤销日志
-struct VersionUndoLink {
-    /** 版本链中的下一个版本。 */
-    UndoLink prev_;  // 指向记录前一个版本的撤销日志链接
-                     // 用于构建版本链，支持MVCC和事务回滚
-
-    bool in_progress_{false};  // 版本状态标记
-                               // true: 该版本正在被某个事务修改
-                               // false: 该版本是稳定的
-
-    friend auto operator==(const VersionUndoLink &a, const VersionUndoLink &b) {
-        return a.prev_ == b.prev_ && a.in_progress_ == b.in_progress_;
-    }
-
-    friend auto operator!=(const VersionUndoLink &a, const VersionUndoLink &b) { return !(a == b); }
-
-    /**
-     * @brief 从可选的 UndoLink 创建一个 VersionUndoLink。
-     * @param undo_link 可选的 UndoLink。
-     * @return 一个可选的 VersionUndoLink，如果 undo_link 为 nullopt，则为 std::nullopt。
-     */
-    inline static std::optional<VersionUndoLink> FromOptionalUndoLink(std::optional<UndoLink> undo_link) {
-        if (undo_link.has_value()) {
-            return VersionUndoLink{*undo_link};
-        }
-        return std::nullopt;
-    }
-};
-
 class TransactionManager {
    public:
     // 全局事务表，存放事务ID与事务对象的映射关系
@@ -76,7 +47,7 @@ class TransactionManager {
          * @brief 将槽偏移量映射到其对应的前一个版本链接。
          * @note 请使用 `find()` 而不是 `[]` 进行访问，以避免创建默认元素。
          */
-        std::unordered_map<slot_offset_t, VersionUndoLink> prev_version_;
+        std::unordered_map<slot_offset_t, UndoLink> prev_version_;
     };
 
     /** 保护版本信息 */
@@ -163,28 +134,19 @@ class TransactionManager {
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
-    bool UpdateUndoLink(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
+    bool UpdateUndoLink(const int &fd, Rid rid, UndoLink prev_link);
 
-    bool update_undolink_without_lock(const int &fd, Rid rid, std::optional<UndoLink> prev_link);
-
-    /**
-     * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
-     * 在更新之前，将调用 `check` 函数以确保有效性。
-     */
-    bool UpdateVersionLink(const int &fd, Rid rid, std::optional<VersionUndoLink> prev_version);
-
-    bool update_versionlink_without_lock(const int &fd, Rid rid, std::optional<VersionUndoLink> prev_version);
+    bool update_undolink_without_lock(const int &fd, Rid rid, UndoLink prev_link);
 
     /**
      * @brief 删除txn的撤销链接
      * @return 返回当前的最后一个撤销链接。
      */
-    UndoLink DeleteUpdateVersionLink(const int &fd, Rid rid, Transaction *txn);
+    UndoLink DeleteUndoLink(const int &fd, Rid rid, Transaction *txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
-    std::optional<UndoLink> GetUndoLink(const int &fd, Rid rid);
+    UndoLink GetUndoLink(const int &fd, Rid rid);
 
-    /** @brief 获取表堆元组的第一个撤销日志。*/
-    std::optional<VersionUndoLink> GetVersionLink(const int &fd, Rid rid);
+
 
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
      * 如果索引超出范围仍然会抛出异常。 */

@@ -533,8 +533,8 @@ bool SmManager::insert_index_without_lock(const std::string& tab_name, RmRecord&
         }
 
         // 插入索引项
-        auto res = ih->insert_entry_without_lock(key.get(), rid);
-        if (res == INVALID_PAGE_ID) {
+        bool res = ih->insert_entry_without_lock(key.get(), rid);
+        if (!res) {
             // 插入失败，回滚已插入的索引
             for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
                 auto& rollback_index = tab_.indexes[rollback_i];
@@ -561,10 +561,7 @@ bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, R
             offset += index.cols[j].len;
         }
         // 插入索引项
-        auto res = ih->insert_entry_force(key.get(), rid, txn);
-        if (res == INVALID_PAGE_ID) {
-            return false;
-        }
+        ih->insert_entry_force(key.get(), rid, txn);
     }
     return true;
 }
