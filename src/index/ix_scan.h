@@ -40,6 +40,11 @@ class IxScan : public RecScan {
     BufferPoolManager *bpm_;   // 缓冲池管理器
     Page *now;
 
+    // 溢出页优化相关成员
+    std::vector<Rid> current_rids_;  // 当前键值对应的所有RID缓存
+    size_t rid_index_;               // 当前RID在缓存中的索引
+    bool has_overflow_cache_;        // 是否有有效的RID缓存
+
    public:
     /**
      * @brief 构造索引扫描器
@@ -49,10 +54,12 @@ class IxScan : public RecScan {
      * @param bpm 缓冲池管理器
      */
     IxScan(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
-        : ih_(ih), iid_(lower), end_(upper), bpm_(bpm), now(nullptr) {
+        : ih_(ih), iid_(lower), end_(upper), bpm_(bpm), now(nullptr), rid_index_(0), has_overflow_cache_(false) {
         if (!is_end()) {
             now = bpm_->fetch_page({ih_->fd_, iid_.page_no});
             now->RLatch();  // 获取读锁，确保扫描期间页面不被修改
+            // 初始化RID缓存
+            load_current_rids();
         }
     }
 
@@ -96,5 +103,22 @@ class IxScan : public RecScan {
             bpm_->unpin_page(now->get_page_id(), false);  // 解除页面固定状态
             now = nullptr;                                // 清空当前页面指针
         }
+        // 重置状态，防止后续误用
+        has_overflow_cache_ = false;
+        current_rids_.clear();
+        rid_index_ = 0;
     }
+
+   private:
+    /**
+     * @brief 加载当前位置对应的所有RID（处理溢出页）
+     * @note 如果当前键值有溢出页，会一次性加载所有RID到缓存中
+     */
+    void load_current_rids();
+
+    /**
+     * @brief 移动到下一个键值位置（跳过当前键的所有RID）
+     * @note 内部使用，用于跳转到下一个不同的键值
+     */
+    void next_key_position();
 };

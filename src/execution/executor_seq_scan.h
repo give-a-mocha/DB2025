@@ -30,7 +30,6 @@ class SeqScanExecutor : public AbstractExecutor {
     Rid rid_;                           // 当前记录的RID
     std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
     SmManager *sm_manager_;             // 系统管理器指针
-    TransactionManager *txn_mgr_;  // 事务管理器指针
 
    public:
     /**
@@ -40,9 +39,8 @@ class SeqScanExecutor : public AbstractExecutor {
      * @param conds 过滤条件列表
      * @param context 执行上下文
      */
-    SeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context, TransactionManager *txn_mgr) {
+    SeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context) {
         sm_manager_ = sm_manager;
-        txn_mgr_ = txn_mgr;  // 初始化事务管理器指针
         tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
 

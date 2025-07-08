@@ -210,6 +210,25 @@ class IxPageHdr {
 };
 
 /**
+ * @brief 溢出页的页面头部结构
+ * @details 用于处理重复键值的存储，当同一键值有多个记录时使用
+ */
+class IxOverflowPageHdr {
+   public:
+    int num_rids;                  // 当前页面存储的RID数量
+    page_id_t next_overflow_page;  // 下一个溢出页的页号，如果没有则为IX_NO_PAGE
+    bool is_overflow_page;         // 标识这是一个溢出页，用于类型检查
+
+    IxOverflowPageHdr() : num_rids(0), next_overflow_page(IX_NO_PAGE), is_overflow_page(true) {}
+};
+
+/**
+ * @brief 计算溢出页能存储的最大RID数量
+ * @return 一个溢出页最多能存储的RID数量
+ */
+constexpr int IX_OVERFLOW_PAGE_MAX_RIDS() { return (PAGE_SIZE - sizeof(IxOverflowPageHdr)) / sizeof(Rid); }
+
+/**
  * @brief 索引项标识符，用于定位具体的键值对
  */
 class Iid {

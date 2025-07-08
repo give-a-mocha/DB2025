@@ -16,8 +16,6 @@ See the Mulan PSL v2 for more details. */
 #include <fcntl.h>     // for open flags
 #include <sys/stat.h>  // for stat
 #include <unistd.h>    // for lseek
-#include "common/TraceStack.hpp"  // for TRACE_FUNCTION
-#include "common/print.hpp"
 
 #include "defs.h"
 
@@ -41,7 +39,6 @@ DiskManager::DiskManager() {}
  * 3. 区分不同类型的IO错误
  */
 void DiskManager::write_page(int fd, page_id_t page_no, const char *offset, int num_bytes) {
-    TRACE_FUNCTION
     // Todo:
     // !1.lseek()定位到文件头，通过(fd,page_no)可以定位指定页面及其在磁盘文件中的偏移量
     // !2.调用write()函数
@@ -82,7 +79,6 @@ void DiskManager::write_page(int fd, page_id_t page_no, const char *offset, int 
  * 3. 保证数据完整性
  */
 void DiskManager::read_page(int fd, page_id_t page_no, char *offset, int num_bytes) {
-    TRACE_FUNCTION
     // Todo:
     // !1.lseek()定位到文件头，通过(fd,page_no)可以定位指定页面及其在磁盘文件中的偏移量
     // !2.调用read()函数

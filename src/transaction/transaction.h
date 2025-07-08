@@ -43,9 +43,12 @@ struct UndoLink {
 struct UndoLog {
     /* 此日志是否为删除标记 */
     bool is_deleted_;
+
     bool is_inserted_;
-    /* 此撤销日志修改的值 */
-    RmRecord values_{};
+    /* 此撤销日志修改的字段 */
+    std::vector<bool> modified_fields_;
+    /* 修改前的字段 */
+    std::vector<Value> tuple_;
     /* 此撤销日志的时间戳 */
     timestamp_t ts_{INVALID_TS};
     /* 撤销日志的前一个版本 */
@@ -66,6 +69,8 @@ class Transaction {
     lsn_t prev_lsn_;
     // 事务的ID，唯一标识符
     txn_id_t txn_id_;
+    // 事务的开始时间戳
+    timestamp_t start_ts_;
 
     // 事务包含的所有写操作
     std::shared_ptr<std::deque<std::unique_ptr<WriteRecord>>> write_set_;
@@ -119,6 +124,10 @@ class Transaction {
     inline void set_txn_mode(bool txn_mode) { txn_mode_ = txn_mode; }
 
     inline bool get_txn_mode() { return txn_mode_; }
+
+    inline void set_start_ts(timestamp_t start_ts) { start_ts_ = start_ts; }
+
+    inline timestamp_t get_start_ts() { return start_ts_; }
 
     inline IsolationLevel get_isolation_level() { return isolation_level_; }
 

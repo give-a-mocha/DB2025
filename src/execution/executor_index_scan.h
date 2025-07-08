@@ -64,8 +64,6 @@ class IndexScanExecutor : public AbstractExecutor {
      */
     SmManager *sm_manager_;  // 系统管理器
 
-    TransactionManager *txn_mgr_;  // 事务管理器
-
    public:
     /**
      * @brief 构造函数
@@ -79,9 +77,8 @@ class IndexScanExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
-                      std::vector<std::string> index_col_names, Context *context, TransactionManager *txn_mgr) {
+                      std::vector<std::string> index_col_names, Context *context) {
         sm_manager_ = sm_manager;
-        txn_mgr_ = txn_mgr;
         context_ = context;
         tab_name_ = std::move(tab_name);
         tab_ = sm_manager_->db_.get_table(tab_name_);
