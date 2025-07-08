@@ -29,13 +29,11 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_abstract.h"
 #include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
-#include "execution/executor_insert.h"
 #include "execution/executor_limit.h"
 #include "execution/executor_nestedloop_join.h"
 #include "execution/executor_nestedloop_semi_join.h"
 #include "execution/executor_projection.h"
 #include "execution/executor_seq_scan.h"
-#include "execution/executor_update.h"
 #include "optimizer/plan.h"
 #include "execution/executor_mvcc_update.h"
 #include "execution/executor_mvcc_delete.h"
@@ -95,13 +93,13 @@ class Portal {
             switch (x->tag) {
                 case PlanTag::T_select: {
                     std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
-                    std::unique_ptr<AbstractExecutor> root = convert_plan_executor(p, context, txn_mgr, false);
+                    std::unique_ptr<AbstractExecutor> root = convert_plan_executor(p, context, txn_mgr);
                     return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(p->sel_cols_), std::move(root),
                                                         plan);
                 }
 
                 case PlanTag::T_Update: {
-                    std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context, txn_mgr, true);
+                    std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context, txn_mgr);
                     std::vector<Rid> rids;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
@@ -113,7 +111,7 @@ class Portal {
                                                         std::move(root), plan);
                 }
                 case PlanTag::T_Delete: {
-                    std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context, txn_mgr, true);
+                    std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context, txn_mgr);
                     std::vector<Rid> rids;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
@@ -186,32 +184,24 @@ class Portal {
     void drop() {}
 
     std::unique_ptr<AbstractExecutor> convert_plan_executor(std::shared_ptr<Plan> plan, Context *context,
-                                                            TransactionManager *txn_mgr, bool is_current_read) {
+                                                            TransactionManager *txn_mgr) {
         TRACE_FUNCTION
         if (auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)) {
             return std::make_unique<ProjectionExecutor>(
-                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_);
+                convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_);
         } else if (auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if (x->tag == PlanTag::T_SeqScan) {
-                if (is_current_read)
-                    return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
-                else
-                    return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context,
+                return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context,
                                                                  txn_mgr);
             } else {
-                if (is_current_read) {
-                    return std::make_unique<IndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
-                                                               x->index_col_names_, context);
-                } else {
-                    return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
+                return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
                                                                    x->index_col_names_, context, txn_mgr);
-                }
             }
 
         } else if (auto x = std::dynamic_pointer_cast<JoinPlan>(plan)) {
-            std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr, is_current_read);
+            std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context, txn_mgr);
             std::unique_ptr<AbstractExecutor> right =
-                convert_plan_executor(x->right_, context, txn_mgr, is_current_read);
+                convert_plan_executor(x->right_, context, txn_mgr);
             if (x->type == JoinType::SEMI_JOIN) {
                 return std::make_unique<NestedLoopSemiJoinExecutor>(std::move(left), std::move(right),
                                                                     std::move(x->conds_));
@@ -220,18 +210,18 @@ class Portal {
                                                                 std::move(x->conds_));
             }
         } else if (auto x = std::dynamic_pointer_cast<SortPlan>(plan)) {
-            return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read),
+            return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context, txn_mgr),
                                                   x->sel_cols_, x->is_desc_);
         } else if (auto x = std::dynamic_pointer_cast<AggregatePlan>(plan)) {
             return std::make_unique<AggregateExecutor>(
-                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_, x->agg_types_);
+                convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_, x->agg_types_);
         } else if (auto x = std::dynamic_pointer_cast<GroupPlan>(plan)) {
             return std::make_unique<GroupExecutor>(
-                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->sel_cols_, x->group_cols_,
+                convert_plan_executor(x->subplan_, context, txn_mgr), x->sel_cols_, x->group_cols_,
                 x->having_conds_);
         } else if (auto x = std::dynamic_pointer_cast<LimitPlan>(plan)) {
             return std::make_unique<LimitExecutor>(
-                convert_plan_executor(x->subplan_, context, txn_mgr, is_current_read), x->offset_, x->count_);
+                convert_plan_executor(x->subplan_, context, txn_mgr), x->offset_, x->count_);
         }
         return nullptr;
     }

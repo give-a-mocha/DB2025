@@ -214,7 +214,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             // if(tab_.name == "warehouse") {
             //     INFO("IndexScanExecutor: rid_ = {},{}", rid_.page_no, rid_.slot_no);
             // }
-            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            auto pre_rec = fh_->get_record(rid_, context_);
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, std::move(pre_rec), txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
@@ -236,7 +237,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         // 移动到下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            auto pre_rec = fh_->get_record(rid_, context_);
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, std::move(pre_rec), txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
@@ -255,7 +257,10 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override { return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_); }
+    std::unique_ptr<RmRecord> Next() override { 
+        auto pre_rec = fh_->get_record(rid_, context_);
+        return mvcc_get_record(rid_, context_, fh_, std::move(pre_rec), txn_mgr_, cols_); 
+    }
 
     /**
      * @brief 获取记录的物理长度

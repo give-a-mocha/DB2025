@@ -63,6 +63,7 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
+        TRACE_FUNCTION
         // 创建记录缓冲区
         std::unique_ptr<RmRecord> rec = std::make_unique<RmRecord>(fh_->get_file_hdr().record_size);
 
@@ -92,15 +93,17 @@ class MvccInsertExecutor : public AbstractExecutor {
         if (!conds.empty() && eval_conds(tab_.cols, conds, rec)) {
             throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
-        rid_ = fh_->insert_record(rec->data, context_);
-        txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
-        // 添加日志要在插入索引之后，因为abort会回滚索引
-        if (!mvcc_insert_index(tab_, rec, rid_, context_, txn_mgr_, sm_manager_)) {
-            fh_->delete_record(rid_, context_);
-            txn_mgr_->abort(context_, context_->log_mgr_);
-            throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
+
+        if (sm_manager_->exist_in_index(tab_, *rec, rid_, context_->txn_)) {
+            get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid_);
+            fh_->insert_record_force(rid_, rec->data);
+        } else {
+            rid_ = fh_->insert_record(rec->data, context_);
+            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
+            sm_manager_->insert_index(tab_name_, *rec, rid_, context_->txn_);
         }
-        txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_);
+        RmRecord Value{};
+        txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, std::move(Value));
         context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, *rec));
         context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *rec, rid_, tab_.name);
         return nullptr;

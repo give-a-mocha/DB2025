@@ -49,10 +49,10 @@ bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, 
 }
 
 bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
-    auto pre_undo_link = txn_mgr->GetUndoLink(fh->GetFd(), rid);
-    if (pre_undo_link.has_value()) {
-        auto pre_txn = pre_undo_link.value().prev_txn_;
-        auto undo_log = txn_mgr->GetUndoLog(pre_undo_link.value());
+    auto undolink = txn_mgr->GetUndoLink(fh->GetFd(), rid);
+    if (undolink.IsValid()) {
+        auto pre_txn = undolink.prev_txn_;
+        auto undo_log = txn_mgr->GetUndoLog(undolink);
         // 检查是否有事务更新它且提交时间大于当前事务读时间
         if (pre_txn != txn->get_transaction_id() && undo_log.ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
@@ -65,103 +65,47 @@ bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle 
     return true;
 }
 
-std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_,
+std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_, std::unique_ptr<RmRecord> rec,
                                           TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_) {
     TRACE_FUNCTION
-    auto rec = fh_->get_record(rid, context_);
     bool is_deleted = false;
 
-    auto pre_undo_link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
-    while (pre_undo_link.has_value()) {
-        auto undo_log = txn_mgr_->GetUndoLog(pre_undo_link.value());
+    auto undolink = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
+    while (undolink.IsValid()) {
+        auto undo_log = txn_mgr_->GetUndoLogOptional(undolink);
+        if (!undo_log) {
+            // 如果没有找到对应的撤销日志，说明记录是有效的
+            break;
+        }
         // 如果是自己修改的直接返回
-        if (pre_undo_link.value().prev_txn_ == context_->txn_->get_transaction_id()) {
-            if (undo_log.is_deleted_) {
+        if (undolink.prev_txn_ == context_->txn_->get_transaction_id()) {
+            if ((*undo_log).is_deleted_) {
                 is_deleted = true;
             }
             break;
         }
         // 如果是已提交事物
-        if (undo_log.ts_ <= context_->txn_->get_read_ts()) {
-            if (undo_log.is_deleted_) {
+        if ((*undo_log).ts_ <= context_->txn_->get_read_ts()) {
+            if ((*undo_log).is_deleted_) {
                 is_deleted = true;
             }
             break;
         }
-        if (undo_log.is_inserted_) {
+        // 不是delete 就是 insert
+        if ((*undo_log).is_inserted_) {
             is_deleted = true;
+            if ((*undo_log).values_.is_allocated()) {
+                rec = std::make_unique<RmRecord>((*undo_log).values_);
+            }
         } else {
             is_deleted = false;
-            if (!undo_log.is_deleted_) {
-                for (size_t i = 0; i < cols_.size(); i++) {
-                    if (undo_log.modified_fields_[i]) {
-                        if (!undo_log.tuple_[i].raw) {
-                            undo_log.tuple_[i].init_raw(cols_[i].len);
-                        }
-                        memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
-                    }
-                }
-            }
         }
-        pre_undo_link = undo_log.prev_version_;
-        if (!pre_undo_link->IsValid()) {
-            break;
-        }
+        undolink = (*undo_log).prev_version_;
     }
     if (is_deleted) {
         return nullptr;
     }
     return rec;
-}
-
-bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
-                       TransactionManager *txn_mgr, SmManager *sm_manager) {
-    RmFileHandle *fh_ = sm_manager->fhs_.at(tab_.name).get();
-    std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
-    inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto &index = tab_.indexes[i];
-        auto ih = sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-        // 检查索引项是否已存在
-        std::vector<Rid> result;
-        bool is_exist = ih->get_value(key.get(), &result, context_->txn_);
-        page_id_t res = INVALID_PAGE_ID;
-        if (is_exist == false) {
-            res = ih->insert_entry(key.get(), rid, context_->txn_);
-        } else {
-            bool ok = true;
-            for (const auto &rid_ : result) {
-                bool is_not_deleted = check_conflict(context_->txn_, txn_mgr, fh_, rid_);
-                if (is_not_deleted == true) {
-                    ok = false;
-                    break;
-                }
-            }
-            if (ok) {
-                res = ih->insert_entry_force(key.get(), rid, context_->txn_);
-            }
-        }
-        if (res == INVALID_PAGE_ID) {
-            // 插入索引失败，可能是因为索引已存在
-            for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
-                auto &rollback_index = tab_.indexes[rollback_i];
-                auto rollback_ih =
-                    sm_manager->ihs_.at(sm_manager->get_ix_manager()->get_index_name(tab_.name, rollback_index.cols))
-                        .get();
-                rollback_ih->delete_entry_with_rid(inserted_keys[rollback_i].get(), rid, context_->txn_);
-            }
-            return false;
-        }
-        inserted_keys.emplace_back(std::move(key));  // 保存已插入的键值
-    }
-    return true;
 }
 
 /**

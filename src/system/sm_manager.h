@@ -211,13 +211,11 @@ class SmManager {
         flush_meta();
     }
 
-    bool insert_index_without_lock(const std::string& tab_name, RmRecord& rec, Rid rid);
+    bool exist_in_index(const TabMeta& tab, const RmRecord& rec, Rid &rid, Transaction* txn);
 
-    bool insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn);
+    bool insert_index(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn);
 
-    bool delete_index_without_lock(const std::string& tab_name, RmRecord& rec);
-
-    bool delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn);
+    bool delete_index(const std::string& tab_name, RmRecord& rec, Transaction* txn);
 
     void flush_to_disk() {
         for (const auto& [tab_name_, fh_] : fhs_) {

@@ -25,6 +25,7 @@ See the Mulan PSL v2 for more details. */
  * @throw RecordNotFoundError 如果记录不存在
  */
 std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* context) const {
+    TRACE_FUNCTION
     // Todo:
     // !1. 获取指定记录所在的page handle
     // !2. 初始化一个指向RmRecord的指针（赋值其内部的data和size）

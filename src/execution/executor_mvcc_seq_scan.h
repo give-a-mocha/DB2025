@@ -70,7 +70,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            auto pre_rec = fh_->get_record(rid_, context_);
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, std::move(pre_rec), txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
@@ -96,7 +97,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            auto pre_rec = fh_->get_record(rid_, context_);
+            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, std::move(pre_rec), txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
                 return;
             }
@@ -114,7 +116,10 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @brief 获取当前记录的数据
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
-    std::unique_ptr<RmRecord> Next() override { return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_); }
+    std::unique_ptr<RmRecord> Next() override { 
+        auto pre_rec = fh_->get_record(rid_, context_);
+        return mvcc_get_record(rid_, context_, fh_, std::move(pre_rec), txn_mgr_, cols_); 
+    }
 
     /**
      * @brief 获取记录的总长度

@@ -154,6 +154,48 @@ struct RmRecord {
     };
 
     /**
+     * @brief 移动构造函数
+     * @param other 要移动的源对象
+     * @note 移动后源对象将不再拥有数据
+     */
+    RmRecord(RmRecord&& other) noexcept {
+        size = other.size;
+        data = other.data;
+        allocated_ = other.allocated_;
+        
+        // 重置源对象
+        other.data = nullptr;
+        other.size = 0;
+        other.allocated_ = false;
+    }
+
+    /**
+     * @brief 移动赋值运算符
+     * @param other 要移动的源对象
+     * @return 当前对象的引用
+     * @note 移动后源对象将不再拥有数据
+     */
+    RmRecord& operator=(RmRecord&& other) noexcept {
+        if (this != &other) {
+            // 释放当前对象的资源
+            if (allocated_) {
+                delete[] data;
+            }
+            
+            // 移动源对象的资源
+            size = other.size;
+            data = other.data;
+            allocated_ = other.allocated_;
+            
+            // 重置源对象
+            other.data = nullptr;
+            other.size = 0;
+            other.allocated_ = false;
+        }
+        return *this;
+    }
+
+    /**
      * @brief 构造指定大小的记录
      * @param size_ 记录的大小(字节)
      * @throw InvalidRecordSizeError 如果size超出限制
@@ -208,4 +250,6 @@ struct RmRecord {
         allocated_ = false;
         data = nullptr;
     }
+
+    bool is_allocated() const { return allocated_; }
 };

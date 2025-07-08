@@ -20,15 +20,12 @@ See the Mulan PSL v2 for more details. */
 
 std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &record, const std::vector<ColMeta> &cols_);
 
-std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_,
+std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_, std::unique_ptr<RmRecord> rec,
                                           TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_);
 
 bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh_, const Rid &rid);
 
 bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid);
-
-bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
-                       TransactionManager *txn_mgr, SmManager *sm_manager);
 
 /**
  * @brief 递归地计算算术表达式的值
