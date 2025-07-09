@@ -71,3 +71,6 @@ FlameGraph
 
 performance_testing/run.sh
 performance_testing/*.svg
+performance_testing/*.perf
+performance_testing/*.data
+performance_testing/*.folded
