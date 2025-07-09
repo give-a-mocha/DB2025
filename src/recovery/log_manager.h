@@ -14,6 +14,9 @@ See the Mulan PSL v2 for more details. */
 #include <mutex>
 #include <vector>
 #include <memory>
+#include <atomic>
+#include <thread>
+#include <condition_variable>
 
 #include "common/config.h"
 #include "common/print.hpp"
@@ -43,8 +46,10 @@ class LogRecord {
     virtual ~LogRecord() = default;
 
     // 把日志记录序列化到dest中
+    // 虚函数：允许子类重写此方法来序列化特有数据
+    // 性能：通过虚函数表直接跳转，比switch+dynamic_cast快
     virtual void serialize(char* dest) const {
-        // 按照固定的偏移量依次写入各字段
+        // 基类只序列化头部信息，子类会调用此方法后再序列化自己的数据
         memcpy(dest + OFFSET_LOG_TYPE, &log_type_, sizeof(LogType));         // 写入日志类型
         memcpy(dest + OFFSET_LSN, &lsn_, sizeof(lsn_t));                     // 写入日志序列号
         memcpy(dest + OFFSET_LOG_TOT_LEN, &log_tot_len_, sizeof(uint32_t));  // 写入日志总长度
@@ -135,28 +140,24 @@ class AbortLogRecord : public LogRecord {
 
 class InsertLogRecord : public LogRecord {
    public:
-    RmRecord insert_value_;   // 插入的记录
+    std::unique_ptr<RmRecord> insert_value_;   // 插入的记录
     Rid rid_;                 // 记录插入的位置
-    char* table_name_;        // 插入记录的表名称
-    size_t table_name_size_;  // 表名称的大小
+    std::string table_name_;  // 插入记录的表名称（使用string提高性能）
+    
     InsertLogRecord() : LogRecord() {
         log_type_ = LogType::INSERT;
-        table_name_ = nullptr;
     }
-    InsertLogRecord(const txn_id_t txn_id, const RmRecord& insert_value, const Rid& rid, const std::string& table_name)
+    
+    InsertLogRecord(const txn_id_t txn_id, std::unique_ptr<RmRecord> insert_value, const Rid& rid, const std::string& table_name)
         : InsertLogRecord() {
         log_tid_ = txn_id;
-        insert_value_ = insert_value;
+        insert_value_ = std::move(insert_value);
         rid_ = rid;
-        // 记录的长度
-        log_tot_len_ += sizeof(int);
-        // 记录的大小
-        log_tot_len_ += insert_value_.size;
-        log_tot_len_ += sizeof(Rid);
-        table_name_size_ = table_name.length();
-        table_name_ = new char[table_name_size_];
-        memcpy(table_name_, table_name.c_str(), table_name_size_);
-        log_tot_len_ += sizeof(size_t) + table_name_size_;
+        table_name_ = table_name;  // 直接赋值，避免手动内存管理
+        
+        // 计算总长度
+        log_tot_len_ += sizeof(int) + insert_value_->size + sizeof(Rid) + 
+                       sizeof(size_t) + table_name_.size();
     }
 
     // 把insert日志记录序列化到dest中
@@ -166,28 +167,30 @@ class InsertLogRecord : public LogRecord {
         auto Serialize = [this, dest, &offset]<typename T>(const T* data, const int data_size = sizeof(T)) -> void {
             serialize_data(dest, offset, data, data_size);
         };
-        Serialize(&insert_value_.size);
-        Serialize(insert_value_.data, insert_value_.size);
+        Serialize(&insert_value_->size);
+        Serialize(insert_value_->data, insert_value_->size);
         Serialize(&rid_);
-        Serialize(&table_name_size_);
-        Serialize(table_name_, table_name_size_);
+        size_t table_name_size = table_name_.size();
+        Serialize(&table_name_size);
+        Serialize(table_name_.c_str(), table_name_size);
     }
     // 从src中反序列化出一条Insert日志记录
     void deserialize(const char* src) override {
         LogRecord::deserialize(src);
-        insert_value_.Deserialize(src + OFFSET_LOG_DATA);
-        int offset = OFFSET_LOG_DATA + insert_value_.size + sizeof(int);
+        insert_value_ = std::make_unique<RmRecord>();
+        insert_value_->Deserialize(src + OFFSET_LOG_DATA);
+        int offset = OFFSET_LOG_DATA + insert_value_->size + sizeof(int);
         rid_ = *reinterpret_cast<const Rid*>(src + offset);
         offset += sizeof(Rid);
-        table_name_size_ = *reinterpret_cast<const size_t*>(src + offset);
+        size_t table_name_size = *reinterpret_cast<const size_t*>(src + offset);
         offset += sizeof(size_t);
-        table_name_ = new char[table_name_size_];
-        memcpy(table_name_, src + offset, table_name_size_);
+        // 直接从源数据构造string
+        table_name_.assign(src + offset, table_name_size);
     }
     void format_print() const override {
         logINFO("insert record");
         LogRecord::format_print();
-        logINFO("insert_value: {}", insert_value_.data);
+        logINFO("insert_value: {}", insert_value_->data);
         logINFO("insert rid: {}, {}", rid_.page_no, rid_.slot_no);
         logINFO("table name: {}", table_name_);
     }
@@ -198,27 +201,24 @@ class InsertLogRecord : public LogRecord {
  */
 class DeleteLogRecord : public LogRecord {
    public:
-    RmRecord delete_value_;   // 删除的记录
+    std::unique_ptr<RmRecord> delete_value_;   // 删除的记录
     Rid rid_;                 // 记录删除的位置
-    char* table_name_;        // 删除记录的表名称
-    size_t table_name_size_;  // 表名称的大小
+    std::string table_name_;  // 删除记录的表名称
 
     DeleteLogRecord() : LogRecord() {
         log_type_ = LogType::DELETE;
-        table_name_ = nullptr;
     }
-    DeleteLogRecord(const txn_id_t txn_id, const RmRecord& delete_value, const Rid& rid, const std::string& table_name)
+    
+    DeleteLogRecord(const txn_id_t txn_id, std::unique_ptr<RmRecord> delete_value, const Rid& rid, const std::string& table_name)
         : DeleteLogRecord() {
         log_tid_ = txn_id;
-        delete_value_ = delete_value;
+        delete_value_ = std::move(delete_value);
         rid_ = rid;
-        log_tot_len_ += sizeof(int);
-        log_tot_len_ += delete_value_.size;
-        log_tot_len_ += sizeof(Rid);
-        table_name_size_ = table_name.length();
-        table_name_ = new char[table_name_size_];
-        memcpy(table_name_, table_name.c_str(), table_name_size_);
-        log_tot_len_ += sizeof(size_t) + table_name_size_;
+        table_name_ = table_name;
+        
+        // 计算总长度
+        log_tot_len_ += sizeof(int) + delete_value_->size + sizeof(Rid) + 
+                       sizeof(size_t) + table_name_.size();
     }
     // 把delete日志记录序列化到dest中
     void serialize(char* dest) const override {
@@ -227,28 +227,30 @@ class DeleteLogRecord : public LogRecord {
         auto Serialize = [this, dest, &offset]<typename T>(const T* data, const int data_size = sizeof(T)) -> void {
             serialize_data(dest, offset, data, data_size);
         };
-        Serialize(&delete_value_.size);
-        Serialize(delete_value_.data, delete_value_.size);
+        Serialize(&delete_value_->size);
+        Serialize(delete_value_->data, delete_value_->size);
         Serialize(&rid_);
-        Serialize(&table_name_size_);
-        Serialize(table_name_, table_name_size_);
+        size_t table_name_size = table_name_.size();
+        Serialize(&table_name_size);
+        Serialize(table_name_.c_str(), table_name_size);
     }
     // 从src中反序列化出一条Delete日志记录
     void deserialize(const char* src) override {
         LogRecord::deserialize(src);
-        delete_value_.Deserialize(src + OFFSET_LOG_DATA);
-        int offset = OFFSET_LOG_DATA + delete_value_.size + sizeof(int);
+        delete_value_ = std::make_unique<RmRecord>();
+        delete_value_->Deserialize(src + OFFSET_LOG_DATA);
+        int offset = OFFSET_LOG_DATA + delete_value_->size + sizeof(int);
         rid_ = *reinterpret_cast<const Rid*>(src + offset);
         offset += sizeof(Rid);
-        table_name_size_ = *reinterpret_cast<const size_t*>(src + offset);
+        size_t table_name_size = *reinterpret_cast<const size_t*>(src + offset);
         offset += sizeof(size_t);
-        table_name_ = new char[table_name_size_];
-        memcpy(table_name_, src + offset, table_name_size_);
+        // 直接从源数据构造string
+        table_name_.assign(src + offset, table_name_size);
     }
     void format_print() const override {
         logINFO("delete record");
         LogRecord::format_print();
-        logINFO("delete_value: {}", delete_value_.data);
+        logINFO("delete_value: {}", delete_value_->data);
         logINFO("delete rid: {}, {}", rid_.page_no, rid_.slot_no);
         logINFO("table name: {}", table_name_);
     }
@@ -259,31 +261,27 @@ class DeleteLogRecord : public LogRecord {
  */
 class UpdateLogRecord : public LogRecord {
    public:
-    RmRecord before_value_;   // 更新前的记录
-    RmRecord after_value_;    // 更新后的记录
+    std::unique_ptr<RmRecord> before_value_;   // 更新前的记录
+    std::unique_ptr<RmRecord> after_value_;    // 更新后的记录
     Rid rid_;                 // 记录插入的位置
-    char* table_name_;        // 插入记录的表名称
-    size_t table_name_size_;  // 表名称的大小
+    std::string table_name_;  // 插入记录的表名称
+    
     UpdateLogRecord() : LogRecord() {
         log_type_ = LogType::UPDATE;
-        table_name_ = nullptr;
     }
-    UpdateLogRecord(const txn_id_t txn_id, const RmRecord& before_value, const RmRecord& after_value, const Rid& rid,
+    
+    UpdateLogRecord(const txn_id_t txn_id, std::unique_ptr<RmRecord> before_value, std::unique_ptr<RmRecord> after_value, const Rid& rid,
                     const std::string& table_name)
         : UpdateLogRecord() {
         log_tid_ = txn_id;
-        before_value_ = before_value;
-        after_value_ = after_value;
+        before_value_ = std::move(before_value);
+        after_value_ = std::move(after_value);
         rid_ = rid;
-        log_tot_len_ += sizeof(int);
-        log_tot_len_ += before_value_.size;
-        log_tot_len_ += sizeof(int);
-        log_tot_len_ += after_value_.size;
-        log_tot_len_ += sizeof(Rid);
-        table_name_size_ = table_name.length();
-        table_name_ = new char[table_name_size_];
-        memcpy(table_name_, table_name.c_str(), table_name_size_);
-        log_tot_len_ += sizeof(size_t) + table_name_size_;
+        table_name_ = table_name;
+        
+        // 计算总长度
+        log_tot_len_ += sizeof(int) + before_value_->size + sizeof(int) + after_value_->size + 
+                       sizeof(Rid) + sizeof(size_t) + table_name_.size();
     }
     // 把update日志记录序列化到dest中
     void serialize(char* dest) const override {
@@ -292,33 +290,36 @@ class UpdateLogRecord : public LogRecord {
         auto Serialize = [this, dest, &offset]<typename T>(const T* data, const int data_size = sizeof(T)) -> void {
             serialize_data(dest, offset, data, data_size);
         };
-        Serialize(&before_value_.size);
-        Serialize(before_value_.data, before_value_.size);
-        Serialize(&after_value_.size);
-        Serialize(after_value_.data, after_value_.size);
+        Serialize(&before_value_->size);
+        Serialize(before_value_->data, before_value_->size);
+        Serialize(&after_value_->size);
+        Serialize(after_value_->data, after_value_->size);
         Serialize(&rid_);
-        Serialize(&table_name_size_);
-        Serialize(table_name_, table_name_size_);
+        size_t table_name_size = table_name_.size();
+        Serialize(&table_name_size);
+        Serialize(table_name_.c_str(), table_name_size);
     }
     // 从src中反序列化出一条Update日志记录
     void deserialize(const char* src) override {
         LogRecord::deserialize(src);
-        before_value_.Deserialize(src + OFFSET_LOG_DATA);
-        int offset = OFFSET_LOG_DATA + before_value_.size + sizeof(int);
-        after_value_.Deserialize(src + offset);
-        offset += after_value_.size + sizeof(int);
+        before_value_ = std::make_unique<RmRecord>();
+        after_value_ = std::make_unique<RmRecord>();
+        before_value_->Deserialize(src + OFFSET_LOG_DATA);
+        int offset = OFFSET_LOG_DATA + before_value_->size + sizeof(int);
+        after_value_->Deserialize(src + offset);
+        offset += after_value_->size + sizeof(int);
         rid_ = *reinterpret_cast<const Rid*>(src + offset);
         offset += sizeof(Rid);
-        table_name_size_ = *reinterpret_cast<const size_t*>(src + offset);
+        size_t table_name_size = *reinterpret_cast<const size_t*>(src + offset);
         offset += sizeof(size_t);
-        table_name_ = new char[table_name_size_];
-        memcpy(table_name_, src + offset, table_name_size_);
+        // 直接从源数据构造string
+        table_name_.assign(src + offset, table_name_size);
     }
     void format_print() const override {
         logINFO("update record");
         LogRecord::format_print();
-        logINFO("before_value: {}", before_value_.data);
-        logINFO("after_value: {}", after_value_.data);
+        logINFO("before_value: {}", before_value_->data);
+        logINFO("after_value: {}", after_value_->data);
         logINFO("update rid: {}, {}", rid_.page_no, rid_.slot_no);
         logINFO("table name: {}", table_name_);
     }
@@ -332,7 +333,13 @@ class LogBuffer {
         memset(buffer_, 0, sizeof(buffer_));
     }
 
-    bool is_full(int append_size) { return offset_ + append_size > LOG_BUFFER_SIZE; }
+    bool is_full(int append_size) const { return offset_ + append_size > LOG_BUFFER_SIZE; }
+    
+    inline int available_space() const { return LOG_BUFFER_SIZE - offset_; }
+    
+    inline void reset() {
+        offset_ = 0;
+    }
 
     char buffer_[LOG_BUFFER_SIZE + 1];
     int offset_;  // 写入log的offset
@@ -343,12 +350,12 @@ class LogManager {
     friend class RecoveryManager;
 
    private:
-    std::mutex latch_;      // 用于对log_buffer_的互斥访问
+    mutable std::mutex latch_;      // 用于对log_buffer_的互斥访问
     LogBuffer log_buffer_;  // 日志缓冲区
     DiskManager* disk_manager_;
-
+    
    public:
-    LogManager(DiskManager* disk_manager) { disk_manager_ = disk_manager; }
+    LogManager(DiskManager* disk_manager) : disk_manager_(disk_manager) {}
 
     void add_log_to_buffer(LogRecord* log_record);
 
@@ -360,11 +367,11 @@ class LogManager {
 
     LogBuffer* get_log_buffer() { return &log_buffer_; }
 
-    void add_insert_log(txn_id_t txn_id, const RmRecord& insert_value, const Rid& rid, const std::string& table_name);
+    void add_insert_log(txn_id_t txn_id, std::unique_ptr<RmRecord> insert_value, const Rid& rid, const std::string& table_name);
 
-    void add_delete_log(txn_id_t txn_id, const RmRecord& delete_value, const Rid& rid, const std::string& table_name);
+    void add_delete_log(txn_id_t txn_id, std::unique_ptr<RmRecord> delete_value, const Rid& rid, const std::string& table_name);
 
-    void add_update_log(txn_id_t txn_id, const RmRecord& new_rec, const RmRecord& old_rec, const Rid& rid,
+    void add_update_log(txn_id_t txn_id, std::unique_ptr<RmRecord> new_rec, std::unique_ptr<RmRecord> old_rec, const Rid& rid,
                         const std::string& table_name);
 
     void add_begin_log(txn_id_t txn_id);

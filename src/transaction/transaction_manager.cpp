@@ -42,11 +42,6 @@ TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_
     lock_manager_ = lock_manager;
     sm_manager_ = sm_manager;
     concurrency_mode_ = concurrency_mode;
-
-    // 初始化事务计数器和时间戳
-    next_txn_id_ = 0;
-    next_timestamp_ = 0;
-    last_commit_ts_ = 0;
 }
 
 /**
@@ -150,24 +145,22 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         const auto write_type = (*iter)->GetWriteType();
         const auto table_name = (*iter)->GetTableName();
         const auto rid = (*iter)->GetRid();
+        auto&& rec = (*iter)->GetRecord();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if (write_type == WType::INSERT_TUPLE) {
-            auto rec = (*iter)->GetRecord();
             handle->delete_record(rid, context);
             sm_manager_->delete_index_with_rid(table_name, rec, rid, context->txn_);
-            log_manager->add_delete_log(context->txn_->get_transaction_id(), (*iter)->GetRecord(), rid, table_name);
+            log_manager->add_delete_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
         } else if (write_type == WType::UPDATE_TUPLE) {
             //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
             auto new_rec = handle->get_record(rid, context);
-            auto old_rec = (*iter)->GetRecord();
-            handle->update_record(rid, old_rec.data, context);
-            sm_manager_->delete_index_with_rid(table_name, *new_rec, rid, context->txn_);
-            sm_manager_->insert_index_force(table_name, old_rec, rid, context->txn_);
-            log_manager->add_update_log(context->txn_->get_transaction_id(), *new_rec, old_rec, rid, table_name);
+            handle->update_record(rid, rec->data, context);
+            sm_manager_->delete_index_with_rid(table_name, new_rec, rid, context->txn_);
+            sm_manager_->insert_index_force(table_name, rec, rid, context->txn_);
+            log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid, table_name);
         } else if (write_type == WType::DELETE_TUPLE) {
-            auto rec = (*iter)->GetRecord();
-            handle->insert_record_force(rid, rec.data);
-            log_manager->add_insert_log(context->txn_->get_transaction_id(), rec, rid, table_name);
+            handle->insert_record_force(rid, rec->data);
+            log_manager->add_insert_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
         }
         // 删除版本链记录
         DeleteUndoLink(handle->GetFd(), rid, context->txn_);
@@ -297,7 +290,7 @@ std::optional<UndoLog> TransactionManager::GetUndoLogOptional(UndoLink link) {
     lock.unlock();
 
     // 检查撤销日志索引是否有效
-    if (link.prev_log_idx_ < 0 || link.prev_log_idx_ >= txn->GetUndoLogNum()) {
+    if (link.prev_log_idx_ < 0 || static_cast<size_t>(link.prev_log_idx_) >= txn->GetUndoLogNum()) {
         throw RangeError("Invalid undo log index: " + std::to_string(link.prev_log_idx_));
     }
 
@@ -323,7 +316,7 @@ UndoLog TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
     }
     auto txn = it->second;
     // 检查撤销日志索引是否有效
-    if (link.prev_log_idx_ < 0 || link.prev_log_idx_ >= txn->GetUndoLogNum()) {
+    if (link.prev_log_idx_ < 0 || static_cast<size_t>(link.prev_log_idx_) >= txn->GetUndoLogNum()) {
         throw RangeError("Invalid undo log index: " + std::to_string(link.prev_log_idx_));
     }
 

@@ -101,8 +101,8 @@ class MvccInsertExecutor : public AbstractExecutor {
             throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
         }
         txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_);
-        context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, *rec));
-        context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *rec, rid_, tab_.name);
+        context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, rec));
+        context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
         return nullptr;
     }
 

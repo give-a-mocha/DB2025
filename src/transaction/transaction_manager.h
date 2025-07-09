@@ -60,7 +60,7 @@ class TransactionManager {
     ConcurrencyMode concurrency_mode_;
 
     // 用于分发事务ID
-    std::atomic<txn_id_t> next_txn_id_{0};
+    std::atomic<txn_id_t> next_txn_id_{TXN_START_ID};
 
     // 用于分发事务时间戳
     std::atomic<timestamp_t> next_timestamp_{0};

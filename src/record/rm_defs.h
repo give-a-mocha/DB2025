@@ -138,20 +138,61 @@ struct RmRecord {
 
     RmRecord() = default;
 
+    // 禁用拷贝构造函数和拷贝赋值操作符
     RmRecord(const RmRecord& other) {
         size = other.size;
         data = new char[size];
         memcpy(data, other.data, size);
         allocated_ = true;
-    };
-
+    }
+    
     RmRecord& operator=(const RmRecord& other) {
-        size = other.size;
-        data = new char[size];
-        memcpy(data, other.data, size);
-        allocated_ = true;
+        if (this != &other) {
+            // 释放当前资源
+            if (allocated_) {
+                delete[] data;
+            }
+            // 分配新空间并复制数据
+            size = other.size;
+            data = new char[size];
+            memcpy(data, other.data, size);
+            allocated_ = true;
+        }
         return *this;
-    };
+    }
+
+    // 移动构造函数
+    RmRecord(RmRecord&& other) noexcept {
+        data = other.data;
+        size = other.size;
+        allocated_ = other.allocated_;
+        
+        // 清空源对象
+        other.data = nullptr;
+        other.size = 0;
+        other.allocated_ = false;
+    }
+
+    // 移动赋值操作符
+    RmRecord& operator=(RmRecord&& other) noexcept {
+        if (this != &other) {
+            // 释放当前资源
+            if (allocated_) {
+                delete[] data;
+            }
+            
+            // 移动资源
+            data = other.data;
+            size = other.size;
+            allocated_ = other.allocated_;
+            
+            // 清空源对象
+            other.data = nullptr;
+            other.size = 0;
+            other.allocated_ = false;
+        }
+        return *this;
+    }
 
     /**
      * @brief 构造指定大小的记录

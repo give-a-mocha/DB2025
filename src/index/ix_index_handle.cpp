@@ -610,7 +610,6 @@ void IxIndexHandle::insert_entry_force(const char *key, const Rid &value, Transa
         // 更新原RID为溢出页引用
         leaf_node->set_rid(pos, Rid{overflow_page_no, IX_NO_SLOT});
     }
-    auto res = leaf_node->get_page_no();
     UnlockAncestors(transaction);
     leaf_page->WUnlatch();  // 插入完毕后释放叶子
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
@@ -889,9 +888,6 @@ bool IxIndexHandle::delete_entry_without_lock(const char *key) {
         delete leaf_node;  // 释放叶子结点内存
         return false;
     }
-    // 键存在，获取对应的RID
-    auto rid_ = leaf_node->get_rid(pos);
-
     // 删除键
     leaf_node->erase_pair(pos);
     coalesce_or_redistribute(leaf_node);

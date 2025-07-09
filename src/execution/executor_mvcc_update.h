@@ -153,11 +153,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
 
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_rec));
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, insert_rid, *new_rec));
-            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, insert_rid, tab_.name);
+                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, insert_rid, new_rec));
+            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid, tab_.name);
         }
         return nullptr;
     }
