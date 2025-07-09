@@ -7,23 +7,24 @@ import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import psutil
 
 perf_process = None
+server_process = None
 
 def run_command_simple(command, timeout=1000, realtime=True):
     """简单的命令执行函数，支持实时输出"""
     print(f"正在运行命令: {command}")
 
-    
     if not realtime:
         # 原有的非实时模式
-        if command.strip().startswith('sudo') and sudo_password:
-            modified_command = command.replace('sudo ', 'sudo -S ', 1)
-            process = subprocess.Popen(modified_command, shell=True, 
-                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-                                     stdin=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate(input=f"{sudo_password}\n", timeout=timeout)
-            returncode = process.returncode
+        if command.strip().startswith('sudo'):
+            modified_command = f"echo '{sudo_password}' | sudo -S {command[5:]}"
+            result = subprocess.run(modified_command, shell=True, capture_output=True, 
+                                      text=True, timeout=timeout)
+            returncode = result.returncode
+            stdout = result.stdout
+            stderr = result.stderr
         else:
             try:
                 result = subprocess.run(command, shell=True, capture_output=True, 
@@ -41,24 +42,25 @@ def run_command_simple(command, timeout=1000, realtime=True):
                 }
     else:
         # 实时输出模式
-        global perf_process
-        if command.strip().startswith('sudo') and sudo_password:
-            modified_command = command.replace('sudo ', 'sudo -S ', 1)
+        global perf_process, server_process
+        if command.strip().startswith('sudo'):
+            modified_command = f"echo '{sudo_password}' | sudo -S {command[5:]}"
             process = subprocess.Popen(modified_command, shell=True,
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     stdin=subprocess.PIPE, text=True, bufsize=1)
+                                     text=True, bufsize=1)
             if "perf" in command:
                 perf_process = process
-
-            process.stdin.write(f"{sudo_password}\n")
-            process.stdin.flush()
-            process.stdin.close()
+            elif "rmdb" in command:
+                server_process = process
+            time.sleep(0.5)
         else:
             process = subprocess.Popen(command, shell=True,
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                      text=True, bufsize=1)
             if "perf" in command:
                 perf_process = process
+            elif "rmdb" in command:
+                server_process = process
         stdout_lines = []
         try:
             while True:
@@ -123,6 +125,7 @@ def get_flame_graph(timestamp):
     data_file = os.path.join(base_path, f"perf-{timestamp}.data")
     perf_file = os.path.join(base_path, f"perf-{timestamp}.perf")
     folded_file = os.path.join(base_path, f"perf-{timestamp}.folded")
+    diff_folded_file = os.path.join(base_path, f"diff-{timestamp}.folded")
     svg_file = os.path.join(base_path, f"flamegraph-{timestamp}.svg")
     
     # 修改 perf script 命令，禁用符号解析或使用不同选项
@@ -132,12 +135,17 @@ def get_flame_graph(timestamp):
     # run_command_simple(f"sudo perf script -i {data_file} --no-demangle > {perf_file}")
     
     run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && stackcollapse-perf.pl {perf_file} > {folded_file}")
-    run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && flamegraph.pl {folded_file} > {svg_file}")
+    if chaff_path is not None:
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && difffolded.pl {chaff_path} {folded_file} > {diff_folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && flamegraph.pl {diff_folded_file} > {svg_file}")
+    else:
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && flamegraph.pl {folded_file} > {svg_file}")
+
     
     # 清理中间文件，保留最终的SVG文件
     run_command_simple(f"rm -rf {data_file}")
     run_command_simple(f"rm -rf {perf_file}")
-    run_command_simple(f"rm -rf {folded_file}")
+    # run_command_simple(f"rm -rf {folded_file}")
     
     return svg_file
 
@@ -149,10 +157,12 @@ if __name__ == "__main__":
                        help='数据量大小（必需）')
     parser.add_argument('-p', '--password', type=str, required=True,
                        help='sudo 密码（必需）')
-    parser.add_argument('-t', '--tpcc-path', type=str, required=True,
+    parser.add_argument('-t', '--tpcc_path', type=str, required=True,
                        help='TPCC 路径（必需）')
-    parser.add_argument('-f', '--flamegraph-path', type=str, required=True,
+    parser.add_argument('-f', '--flamegraph_path', type=str, required=True,
                        help='FlameGraph 路径（必需）')
+
+    parser.add_argument('-c', '--ch', type=str, help='差分路径（必需）')
     
     args = parser.parse_args()
 
@@ -166,6 +176,8 @@ if __name__ == "__main__":
     sudo_password = args.password
     test_path = args.tpcc_path
     FlameGraph_path = args.flamegraph_path
+    chaff_path = args.ch
+
 
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -189,6 +201,7 @@ if __name__ == "__main__":
 
     run_command_simple(rm_data_command)
     run_command_simple(rm_db)
+    run_command_simple(compile_db)
     run_command_simple(gen_data_command)
     
     futures = []
@@ -198,13 +211,13 @@ if __name__ == "__main__":
         db_future = executor.submit(run_command_simple, start_db)
         
         # 等待数据库启动并获取PID
-        time.sleep(3)  # 给数据库更多启动时间
+        time.sleep(1)  # 给数据库更多启动时间
         pid = get_pid()
 
         # 使用时间戳命名性能数据文件
         perf_data_file = os.path.join(current_dir, f"perf-{timestamp}.data")
         print(f"性能数据文件: {perf_data_file}")
-        start_monitor = f"export PATH=$PATH:{FlameGraph_path} && sudo perf record -F 2000 -p {pid} -g -o {perf_data_file} --call-graph=dwarf"
+        start_monitor = f"sudo perf record -F 5000 -p {pid} -g -o {perf_data_file} --call-graph=dwarf && echo '性能测试成功开启'"
         start_test = f"cd {test_path} && cd .. && python TPCC-Tester/runner.py --prepare --thread 8 --rw 150 --ro 150 --analyze --w {data_size}"
         
         print("启动性能监控...")
@@ -212,7 +225,7 @@ if __name__ == "__main__":
         print(f"性能监控pid: {perf_process.pid}")
         
         # 给perf命令一点时间启动
-        time.sleep(2)
+        time.sleep(1)
         
         print("启动测试程序...")
         test_future = executor.submit(run_command_simple, start_test)
@@ -222,7 +235,14 @@ if __name__ == "__main__":
         test_future.result()
         print("测试完成!")
 
-        run_command_simple(f"sudo kill -9 {pid}")
+        # run_command_simple(f"sudo kill {pid}")
+        # psutil.Process(pid).kill()
+
+        subprocess.Popen(f"sudo kill {pid}", shell=True)
+
+        # server_process.send_signal(signal.SIGINT)
+        # server_process.wait(timeout=5)
+        # db_future.result()
 
 
         print("正在等待性能监控结束")
@@ -240,16 +260,21 @@ if __name__ == "__main__":
                 
         # 等待 monitor_feature 线程结束
         monitor_feature.result()
+        # subprocess.Popen(f"sudo kill {perf_process.pid}", shell=True)
         print("性能监控结束")
+
+        # executor.shutdown(wait=False)
 
         
 
     
-    # 生成火焰图
-    print("开始生成火焰图...")
-    flame_graph_file = get_flame_graph(timestamp)
-    print(f"测试完成！火焰图文件: {flame_graph_file}")
+        # 生成火焰图
+        print("开始生成火焰图...")
+        flame_graph_file = get_flame_graph(timestamp)
+        print(f"测试完成！火焰图文件: {flame_graph_file}")
 
 
-    run_command_simple(rm_data_command)
-    run_command_simple(rm_db)
+        run_command_simple(rm_data_command)
+        run_command_simple(rm_db)
+
+        os._exit(0)
