@@ -97,14 +97,6 @@ class TransactionManager {
 
     timestamp_t get_next_timestamp() { return next_timestamp_.fetch_add(1); }
 
-    TransactionState get_txn_state(txn_id_t txn_id) {
-        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
-        assert(txn_map.find(txn_id) != txn_map.end());
-        auto *txn = txn_map[txn_id];
-        assert(txn != nullptr);
-        return txn->get_state();
-    }
-
     /**
      * @description: 获取事务ID为txn_id的事务对象
      * @return {Transaction*} 事务对象的指针
@@ -146,17 +138,15 @@ class TransactionManager {
     /** @brief 获取表堆元组的第一个撤销日志。 */
     UndoLink GetUndoLink(const int &fd, Rid rid);
 
-
-
-    /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullopt。
+    /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullptr。
      * 如果索引超出范围仍然会抛出异常。 */
-    std::optional<UndoLog> GetUndoLogOptional(UndoLink link);
+    const UndoLog* GetUndoLogOptional(UndoLink link);
 
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
      * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
-    UndoLog GetUndoLog(UndoLink link);
+    const UndoLog& GetUndoLog(UndoLink link);
 
-    UndoLog GetUndoLogWithoutLock(UndoLink link);
+    const UndoLog& GetUndoLogWithoutLock(UndoLink link);
 
     /** @brief 获取系统中的最低读时间戳。 */
     timestamp_t GetWatermark();
@@ -167,15 +157,14 @@ class TransactionManager {
     /** @brief 检查是否需要执行垃圾回收 */
     bool should_perform_gc();
 
-    void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid);
+    void add_insert_undo_log(Transaction *txn, const int &fd, Rid &rid);
 
     void add_update_undo_log(Transaction *txn, const int &fd, Rid &delete_rid, Rid &insert_rid);
 
-    void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid);
+    void add_delete_undo_log(Transaction *txn, const int &fd, Rid &rid);
 
     void do_delete(Transaction *txn);
 
-    std::pair<std::vector<UndoLog>, bool> get_undologs_with_lock(int fd, Rid rid, Transaction *txn);
     bool is_delete_record(int fd, Rid rid);
 
    private:

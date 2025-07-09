@@ -43,16 +43,41 @@ struct UndoLink {
 struct UndoLog {
     /* 此日志是否为删除标记 */
     bool is_deleted_;
-
-    bool is_inserted_;
     /* 此撤销日志修改的字段 */
-    std::vector<bool> modified_fields_;
-    /* 修改前的字段 */
-    std::vector<Value> tuple_;
+    RmRecord record_;
     /* 此撤销日志的时间戳 */
     timestamp_t ts_{INVALID_TS};
     /* 撤销日志的前一个版本 */
     UndoLink prev_version_{};
+    
+    // 构造函数
+    UndoLog(bool is_deleted, const RmRecord& record, timestamp_t ts = INVALID_TS, UndoLink prev_version = {})
+        : is_deleted_(is_deleted), record_(record), ts_(ts), prev_version_(prev_version) {}
+    
+    // 默认构造函数
+    UndoLog() : is_deleted_(false) {}
+    
+    // 默认析构函数（编译器生成）
+    ~UndoLog() = default;
+    
+    // 禁用拷贝构造和拷贝赋值（避免意外拷贝大对象）
+    UndoLog(const UndoLog&) = delete;
+    UndoLog& operator=(const UndoLog&) = delete;
+    
+    // 启用移动构造和移动赋值
+    UndoLog(UndoLog&& other) noexcept 
+        : is_deleted_(other.is_deleted_), 
+          record_(std::move(other.record_)), ts_(other.ts_), prev_version_(other.prev_version_) {}
+    
+    UndoLog& operator=(UndoLog&& other) noexcept {
+        if (this != &other) {
+            is_deleted_ = other.is_deleted_;
+            record_ = std::move(other.record_);
+            ts_ = other.ts_;
+            prev_version_ = other.prev_version_;
+        }
+        return *this;
+    }
 };
 
 class Transaction {
@@ -90,8 +115,9 @@ class Transaction {
     /**
      * @brief 存储撤销日志。
      * 其他撤销日志/表堆将存储 (txn_id, index) 对，因此只能向此vector中追加内容或就地更新内容，而不能删除任何内容。
+     * 使用智能指针避免大对象的拷贝开销，提升性能。
      */
-    std::vector<UndoLog> undo_logs_;
+    std::vector<std::unique_ptr<UndoLog>> undo_logs_;
 
     /** 用于访问事务级撤销日志的锁。 */
     std::mutex latch_;
@@ -167,22 +193,22 @@ class Transaction {
 
     inline void set_commit_ts(timestamp_t commit_ts) { commit_ts_.store(commit_ts); }
     /** 修改现有的撤销日志 */
-    inline auto ModifyUndoLog(int log_idx, UndoLog new_log) {
+    inline auto ModifyUndoLog(int log_idx, std::unique_ptr<UndoLog> new_log) {
         std::scoped_lock<std::mutex> lck(latch_);
         undo_logs_[log_idx] = std::move(new_log);
     }
 
     /** @return 此事务中撤销日志的索引 */
-    inline auto AppendUndoLog(UndoLog log) -> UndoLink {
+    inline auto AppendUndoLog(std::unique_ptr<UndoLog> log) -> UndoLink {
         std::scoped_lock<std::mutex> lck(latch_);
         undo_logs_.emplace_back(std::move(log));
         return {txn_id_, static_cast<int>(undo_logs_.size() - 1)};
     }
 
-    inline auto GetUndoLog(size_t log_id) -> UndoLog {
+    inline auto GetUndoLog(size_t log_id) -> const UndoLog& {
         std::scoped_lock<std::mutex> lck(latch_);
         // 注意：如果 log_id 无效，这里可能抛出 std::out_of_range 异常
-        return undo_logs_[log_id];
+        return *undo_logs_[log_id];
     }
 
     inline auto ClearUndoLogs() -> void {
