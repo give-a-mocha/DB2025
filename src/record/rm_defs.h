@@ -101,7 +101,7 @@ struct RmFileHdr {
     int record_size;           // 每条记录的固定大小
     int num_pages;             // 已分配的页面总数
     int num_records_per_page;  // 每页的最大记录数
-    int first_free_page_no;    // 空闲页面链表的头部
+    std::atomic<int> first_free_page_no;    // 空闲页面链表的头部
     int bitmap_size;           // 每页位图的字节数
     int record_num;            // 表中的当前记录数
 };

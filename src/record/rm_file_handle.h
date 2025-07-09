@@ -66,9 +66,9 @@ struct RmPageHandle {
      */
     RmPageHandle(const RmFileHdr *fhdr_, Page *page_) : file_hdr(fhdr_), page(page_) {
         // 1. 初始化页面头指针（跳过页面预留的头部空间）
-        page_hdr = reinterpret_cast<RmPageHdr *>(page->get_data() + page->OFFSET_PAGE_HDR);
+        page_hdr = reinterpret_cast<RmPageHdr *>(page->get_data() + OFFSET_PAGE_HDR);
         // 2. 初始化位图指针（跳过页面头部结构）
-        bitmap = page->get_data() + sizeof(RmPageHdr) + page->OFFSET_PAGE_HDR;
+        bitmap = page->get_data() + sizeof(RmPageHdr) + OFFSET_PAGE_HDR;
         // 3. 初始化记录槽位指针（跳过位图区域）
         slots = bitmap + file_hdr->bitmap_size;
     }
@@ -111,6 +111,7 @@ class RmFileHandle {
                                               // - num_records_per_page: 每页记录数
                                               // - first_free_page_no: 第一个可用页面号
                                               // - bitmap_size: 每页位图大小
+    std::mutex latch_;  // 互斥锁，用于insert_record的并发访问
 
    public:
     /**
@@ -130,7 +131,7 @@ class RmFileHandle {
         disk_manager_->set_fd2pageno(fd, file_hdr_.num_pages);
     }
 
-    RmFileHdr get_file_hdr() { return file_hdr_; }
+    const RmFileHdr& get_file_hdr() const { return file_hdr_; }
     int GetFd() { return fd_; }
 
     /**

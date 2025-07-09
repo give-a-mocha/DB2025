@@ -70,10 +70,10 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     // if (context != nullptr) {
     //     context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
     // }
+    std::scoped_lock lock(latch_);  // 确保在插入记录时的线程安全
 
     // 获取空闲页面
     RmPageHandle page_handle = create_page_handle();
-    page_handle.page->WLatch();
 
     // 找到空闲slot
     int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
@@ -85,7 +85,6 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
     if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
-    page_handle.page->WUnlatch();
     // 复制数据到slot
     char* slot = page_handle.get_slot(slot_no);
     memcpy(slot, buf, file_hdr_.record_size);

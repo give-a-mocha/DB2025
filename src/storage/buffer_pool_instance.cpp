@@ -128,7 +128,8 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
     // 页面不在缓冲池中,寻找可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
-        return nullptr;  // 没有可用frame
+        throw InternalError("BufferPoolInstance::fetch_page: No available frame found.");
+        // return nullptr;  // 没有可用frame
     }
 
     // 获取victim frame对应的页面
@@ -257,7 +258,8 @@ Page* BufferPoolInstance::new_page(PageId* page_id) {
     // 找一个可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
-        return nullptr;
+        throw InternalError("BufferPoolInstance::new_page: No available frame found.");
+        // return nullptr;
     }
 
     // 获取frame对应的页面
@@ -392,7 +394,8 @@ auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     // 找一个可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
-        return {this, nullptr};  // 没有可用frame
+        throw InternalError("BufferPoolInstance::new_page_guarded: No available frame found.");
+        // return {this, nullptr};  // 没有可用frame
     }
 
     // 获取frame对应的页面
@@ -404,7 +407,7 @@ auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     return {this, page};
 }
 
-auto BufferPoolInstance::fetch_page_basic(PageId page_id) -> BasicPageGuard {
+auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
     TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
@@ -424,7 +427,8 @@ auto BufferPoolInstance::fetch_page_basic(PageId page_id) -> BasicPageGuard {
     // 页面不在缓冲池中,寻找可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
-        return {this, nullptr};  // 没有可用frame
+        throw InternalError("BufferPoolInstance::fetch_basic_page: No available frame found.");
+        // return {this, nullptr};  // 没有可用frame
     }
 
     // 获取victim frame对应的页面
@@ -437,22 +441,16 @@ auto BufferPoolInstance::fetch_page_basic(PageId page_id) -> BasicPageGuard {
     return {this, page};
 }
 
-auto BufferPoolInstance::fetch_page_read(PageId page_id) -> ReadPageGuard {
+auto BufferPoolInstance::fetch_read_page(PageId page_id) -> ReadPageGuard {
     TRACE_FUNCTION
-    auto basic_guard = fetch_page_basic(page_id);
-    if (basic_guard.page_ == nullptr) {
-        return {this, nullptr};  // 没有可用页面
-    }
+    auto basic_guard = fetch_basic_page(page_id);
     basic_guard.page_->RLatch();  // 获取读锁
     return {this, basic_guard.page_};
 }
 
-auto BufferPoolInstance::fetch_page_write(PageId page_id) -> WritePageGuard {
+auto BufferPoolInstance::fetch_write_page(PageId page_id) -> WritePageGuard {
     TRACE_FUNCTION
-    auto basic_guard = fetch_page_basic(page_id);
-    if (basic_guard.page_ == nullptr) {
-        return {this, nullptr};  // 没有可用页面
-    }
+    auto basic_guard = fetch_basic_page(page_id);
     basic_guard.page_->WLatch();  // 获取写锁
     return {this, basic_guard.page_};
 }

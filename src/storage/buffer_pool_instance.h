@@ -133,11 +133,11 @@ class BufferPoolInstance {
 
     auto new_page_guarded(PageId* page_id) -> BasicPageGuard;
 
-    auto fetch_page_basic(PageId page_id) -> BasicPageGuard;
+    auto fetch_basic_page(PageId page_id) -> BasicPageGuard;
 
-    auto fetch_page_read(PageId page_id) -> ReadPageGuard;
+    auto fetch_read_page(PageId page_id) -> ReadPageGuard;
 
-    auto fetch_page_write(PageId page_id) -> WritePageGuard;
+    auto fetch_write_page(PageId page_id) -> WritePageGuard;
 
    private:
     /**
