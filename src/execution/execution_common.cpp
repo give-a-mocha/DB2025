@@ -82,7 +82,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
 
     auto undolink = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
     while (undolink.IsValid()) {
-        const UndoLog* undo_log = txn_mgr_->GetUndoLog(undolink);
+        auto undo_log = txn_mgr_->GetUndoLog(undolink);
         // 如果是自己修改的直接返回
         if (undolink.prev_txn_ == context_->txn_->get_transaction_id()) {
             if (undo_log->is_deleted_) {
@@ -101,16 +101,6 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
             is_deleted = true;
         } else {
             is_deleted = false;
-            // if (!undo_log.is_deleted_) {
-            //     for (size_t i = 0; i < cols_.size(); i++) {
-            //         if (undo_log.modified_fields_[i]) {
-            //             if (!undo_log.tuple_[i].raw) {
-            //                 undo_log.tuple_[i].init_raw(cols_[i].len);
-            //             }
-            //             memcpy(rec->data + cols_[i].offset, undo_log.tuple_[i].raw->data, cols_[i].len);
-            //         }
-            //     }
-            // }
         }
         undolink = undo_log->prev_version_;
     }

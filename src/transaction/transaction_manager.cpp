@@ -210,23 +210,6 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink prev_li
     return true;  // 更新成功，返回 true
 }
 
-bool TransactionManager::update_undolink_without_lock(const int& fd, Rid rid, UndoLink prev_link) {
-    PageId page_id{fd, rid.page_no};
-    auto it = version_info_.find(page_id);
-    if (it == version_info_.end()) {
-        // 如果没有找到对应的版本信息，则创建一个新的
-        auto new_version_info = std::make_shared<PageVersionInfo>();
-        version_info_[page_id] = new_version_info;
-        it = version_info_.find(page_id);
-    }
-    auto& version_info = it->second;
-    std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
-    // 更新版本链接
-    auto& prev_version_map = version_info->prev_version_;
-    prev_version_map[rid.slot_no] = prev_link;
-    return true;  // 更新成功，返回 true
-}
-
 UndoLink TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn) {
     // 获取对应的版本信息
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
@@ -457,12 +440,10 @@ bool TransactionManager::should_perform_gc() {
  * @param rid 插入的记录的RID
  * @param values 插入的记录值
  */
-void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid &rid) {
+void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values) {
     auto log = std::make_unique<UndoLog>();
     log->is_deleted_ = false;
-    //! 插入操作删除后一定是空
-    // log->modified_fields_ = std::vector<bool>(values.size(), true);
-    // log->tuple_ = std::move(values);
+    log->record_ = RmRecord(*values);  // 复制记录值
     log->ts_ = get_next_timestamp();
     log->prev_version_ = UndoLink{};  // insert undo log 没有前一个版本
     auto undo_link = txn->AppendUndoLog(std::move(log));
@@ -476,23 +457,16 @@ void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Ri
  * @param values 修改前的记录值
  * @param modified_fields 修改的字段
  */
-void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid& delete_rid, Rid& insert_rid) {
-    auto delete_log = std::make_unique<UndoLog>();
-    delete_log->is_deleted_ = true;
-    delete_log->ts_ = get_next_timestamp();
-    delete_log->prev_version_ = GetUndoLink(fd, delete_rid);
-    auto delete_undo_link = txn->AppendUndoLog(std::move(delete_log));
-    
-    auto insert_log = std::make_unique<UndoLog>();
-    insert_log->is_deleted_ = false;
-    insert_log->ts_ = get_next_timestamp();
-    insert_log->prev_version_ = UndoLink{};  // insert undo log 没有前一个版本
-    auto insert_undo_link = txn->AppendUndoLog(std::move(insert_log));
-
-    // 确保是同时操作完成
-    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
-    update_undolink_without_lock(fd, delete_rid, delete_undo_link);
-    update_undolink_without_lock(fd, insert_rid, insert_undo_link);
+void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values) {
+    // UndoLog log;
+    // log.is_deleted_ = false;
+    // log.is_inserted_ = false;
+    // log.modified_fields_ = std::move(modified_fields);
+    // log.tuple_ = std::move(values);
+    // log.ts_ = get_next_timestamp();
+    // log.prev_version_ = DeleteUpdateVersionLink(fd, rid, txn);
+    // auto undo_link = txn->AppendUndoLog(log);
+    // UpdateUndoLink(fd, rid, undo_link);
 }
 
 /**
@@ -501,14 +475,11 @@ void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Ri
  * @param rid 要删除的记录的RID
  * @param values 删除前的记录值
  */
-void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid &rid) {
+void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid rid) {
     auto log = std::make_unique<UndoLog>();
     log->is_deleted_ = true;
-    // !删除是标记删除，拿到的值应该直接就是上一个版本
-    // log->modified_fields_ = std::vector<bool>(values.size(), true);
-    // log->tuple_ = std::move(values);
     log->ts_ = get_next_timestamp();
-    log->prev_version_ = GetUndoLink(fd, rid);
+    log->prev_version_ = DeleteUndoLink(fd, rid, txn);
     auto undo_link = txn->AppendUndoLog(std::move(log));
     UpdateUndoLink(fd, rid, undo_link);
 }

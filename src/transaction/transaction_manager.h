@@ -128,8 +128,6 @@ class TransactionManager {
      */
     bool UpdateUndoLink(const int &fd, Rid rid, UndoLink prev_link);
 
-    bool update_undolink_without_lock(const int &fd, Rid rid, UndoLink prev_link);
-
     /**
      * @brief 删除txn的撤销链接
      * @return 返回当前的最后一个撤销链接。
@@ -157,11 +155,11 @@ class TransactionManager {
     /** @brief 检查是否需要执行垃圾回收 */
     bool should_perform_gc();
 
-    void add_insert_undo_log(Transaction *txn, const int &fd, Rid &rid);
+    void add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values);
 
-    void add_update_undo_log(Transaction *txn, const int &fd, Rid &delete_rid, Rid &insert_rid);
+    void add_update_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values);
 
-    void add_delete_undo_log(Transaction *txn, const int &fd, Rid &rid);
+    void add_delete_undo_log(Transaction* txn, const int& fd, Rid rid);
 
     void do_delete(Transaction *txn);
 
