@@ -76,6 +76,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
             auto [base_meta, base_tuple] = fh_->get_record(rid_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
+            INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
                 return;
@@ -108,6 +109,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
             auto [base_meta, base_tuple] = fh_->get_record(rid_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
+            INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
                 return;

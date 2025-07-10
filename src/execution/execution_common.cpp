@@ -46,7 +46,7 @@ auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& bas
 auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool {
     if (undolink.IsValid()) return false;
     const UndoLog* undo_log = txn_mgr->GetUndoLog(undolink);
-    if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ < txn->get_read_ts()) {
+    if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ <= txn->get_read_ts()) {
         // 如果是当前事务的修改或者是已提交的事务
         return false;
     }

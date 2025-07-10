@@ -444,6 +444,8 @@ auto TransactionManager::GenerateNewUndoLog(int fd, Rid rid, const std::unique_p
         log->is_deleted_ = false;  // 如果是插入或更新操作
         log->record_ = RmRecord(*value);  
     }
+    INFO("Generate new undo log for rid: {}", rid);
+    INFO("Undo log ts: {}", txn->get_transaction_id());
     log->ts_ = txn->get_transaction_id();  // 设置时间戳为当前事务ID
     log->prev_version_ = GetUndoLink(fd, rid);  //
     auto link = txn->AppendUndoLog(std::move(log));
@@ -455,13 +457,18 @@ auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transactio
     if (!undo_link.IsValid()) {
         return {};
     }
+    INFO("Collecting undo log for rid: {}", rid);
+    INFO("Transaction ID: {}", txn->get_transaction_id());
+    INFO("Transaction Read TS: {}", txn->get_read_ts());
     std::vector<const UndoLog*> undo_logs;
     while (undo_link.IsValid()) {
         const UndoLog* undo_log = GetUndoLog(undo_link);
-        if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ < txn->get_read_ts()) {
+        INFO("Undo log ts: {}", undo_log->ts_);
+        if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ <= txn->get_read_ts()) {
             // 如果是当前事务的修改或者是已提交的事务
             break;
         }
+        WARN("APPEND Undo log ts: {}", undo_log->ts_);
         undo_logs.push_back(undo_log);
         undo_link = undo_log->prev_version_;
     }
