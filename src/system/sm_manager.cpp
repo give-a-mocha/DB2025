@@ -429,7 +429,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 6. 扫描表中所有记录，构建B+树索引
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
-        auto record = fh_->get_record(rmScan.rid(), context);
+        auto record = fh_->get_record(rmScan.rid()).second;
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -611,7 +611,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
 
     // 预分配记录缓冲区
     int max_record_num = fh_->file_hdr_.num_records_per_page;
-    int len = max_record_num * record_size;
+    int len = max_record_num * (record_size + TUPLE_META_SIZE);
     std::vector<char> record_buffer(len);
     char* record_data = record_buffer.data();
 
@@ -638,6 +638,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
 
     // 批量处理数据
     while (current_pos < end_pos) {
+        offset += TUPLE_META_SIZE;
         size_t start_offset = offset;
         for (size_t i = 0; i < tab_.cols.size(); ++i) {
             char* line_end = std::find_if(current_pos, end_pos, [](char c) { return c == ',' || c == '\n'; });

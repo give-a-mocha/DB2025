@@ -92,11 +92,11 @@ class MvccInsertExecutor : public AbstractExecutor {
         if (!conds.empty() && eval_conds(tab_.cols, conds, rec)) {
             throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
-        rid_ = fh_->insert_record(rec->data, context_);
+        rid_ = fh_->insert_record(rec->data);
         txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
         // 添加日志要在插入索引之后，因为abort会回滚索引
         if (!mvcc_insert_index(tab_, rec, rid_, context_, txn_mgr_, sm_manager_)) {
-            fh_->delete_record(rid_, context_);
+            fh_->delete_record(rid_);
             txn_mgr_->abort(context_, context_->log_mgr_);
             throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
         }

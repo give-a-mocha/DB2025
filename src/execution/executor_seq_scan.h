@@ -66,7 +66,7 @@ class SeqScanExecutor : public AbstractExecutor {
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto rec = fh_->get_record(rid_, context_);
+            auto [tuple_meta, rec] = fh_->get_record(rid_);
             if (eval_conds(cols_, fed_conds_, rec)) {
                 rec_ = std::move(rec);
                 return;
@@ -93,7 +93,7 @@ class SeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto rec = fh_->get_record(rid_, context_);
+            auto [tuple_meta, rec] = fh_->get_record(rid_);
             if (eval_conds(cols_, fed_conds_, rec)) {
                 rec_ = std::move(rec);
                 return;

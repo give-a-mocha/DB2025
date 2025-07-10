@@ -83,7 +83,7 @@ struct RmPageHandle {
      * 2. 偏移量为：槽位号 * 记录大小
      * @warning 调用前应确保槽位号有效，否则可能导致越界访问
      */
-    char *get_slot(int slot_no) const { return slots + slot_no * file_hdr->record_size; }
+    char *get_slot(int slot_no) const { return slots + slot_no * (TUPLE_META_SIZE + file_hdr->record_size); }
 };
 
 /**
@@ -154,7 +154,7 @@ class RmFileHandle {
      * @throw RecordNotFoundError 如果记录不存在
      * @note 返回的是记录的副本，对其修改不会影响原始数据
      */
-    std::unique_ptr<RmRecord> get_record(const Rid &rid, Context *context) const;
+    std::pair<TupleMeta, std::unique_ptr<RmRecord>> get_record(const Rid &rid) const;
 
     int get_record_size() const {
         return file_hdr_.record_size;  // 返回每条记录的大小
@@ -168,7 +168,7 @@ class RmFileHandle {
      * @throw OutOfSpaceError 如果没有足够的空间
      * @note 系统自动分配插入位置，返回的RID用于后续访问
      */
-    Rid insert_record(char *buf, Context *context);
+    Rid insert_record(char *buf);
 
     /**
      * @brief 在指定位置插入记录
@@ -184,15 +184,22 @@ class RmFileHandle {
      * @param rid 要删除的记录ID
      * @param context 事务上下文
      */
-    void delete_record(const Rid &rid, Context *context);
-
+    void delete_record(const Rid &rid);
     /**
      * @brief 更新记录
      * @param rid 要更新的记录ID
      * @param buf 新的记录数据
      * @param context 事务上下文
      */
-    void update_record(const Rid &rid, char *buf, Context *context);
+    void update_record(const Rid &rid, char *buf);
+
+    /**
+     * @brief 更新指定记录的 TupleMeta
+     * @param rid 要更新的记录ID
+     * @param new_meta 新的 TupleMeta 数据
+     * @throw RecordNotFoundError 如果记录不存在 (Optional, depending on desired behavior)
+     */
+    void update_tuple_meta(const Rid &rid, const TupleMeta &new_meta);
 
     /**
      * @brief 创建新的页面句柄

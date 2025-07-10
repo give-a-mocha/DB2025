@@ -77,8 +77,8 @@ bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle 
 std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_,
                                           TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_) {
     TRACE_FUNCTION
-    auto rec = fh_->get_record(rid, context_);
-    bool is_deleted = false;
+    auto [tuple_meta, rec] = fh_->get_record(rid);
+    bool is_deleted = tuple_meta.is_deleted_;
 
     auto undolink = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
     while (undolink.IsValid()) {
@@ -107,7 +107,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
     if (is_deleted) {
         return nullptr;
     }
-    return rec;
+    return std::move(rec);
 }
 
 bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,

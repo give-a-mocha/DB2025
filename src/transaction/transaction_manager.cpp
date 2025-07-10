@@ -148,13 +148,13 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         auto&& rec = (*iter)->GetRecord();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if (write_type == WType::INSERT_TUPLE) {
-            handle->delete_record(rid, context);
+            handle->delete_record(rid);
             sm_manager_->delete_index_with_rid(table_name, rec, rid, context->txn_);
             log_manager->add_delete_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
         } else if (write_type == WType::UPDATE_TUPLE) {
             //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
-            auto new_rec = handle->get_record(rid, context);
-            handle->update_record(rid, rec->data, context);
+            auto [tuple_meta, new_rec] = handle->get_record(rid);
+            handle->update_record(rid, rec->data);
             sm_manager_->delete_index_with_rid(table_name, new_rec, rid, context->txn_);
             sm_manager_->insert_index_force(table_name, rec, rid, context->txn_);
             log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid, table_name);
@@ -321,7 +321,7 @@ void TransactionManager::do_delete(Transaction* txn) {
         const auto rid = iter->GetRid();
         std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
         if (write_type == WType::DELETE_TUPLE) {
-            handle->delete_record(rid, nullptr);
+            handle->delete_record(rid);
 
             sm_manager_->delete_index_with_rid(table_name, iter->GetRecord(), rid, txn);
         }

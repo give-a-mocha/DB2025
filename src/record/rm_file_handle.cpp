@@ -24,22 +24,31 @@ See the Mulan PSL v2 for more details. */
  * @return {unique_ptr<RmRecord>} 记录对象的智能指针
  * @throw RecordNotFoundError 如果记录不存在
  */
-std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* context) const {
+std::pair<TupleMeta, std::unique_ptr<RmRecord>> RmFileHandle::get_record(const Rid& rid) const {
     // Todo:
     // !1. 获取指定记录所在的page handle
     // !2. 初始化一个指向RmRecord的指针（赋值其内部的data和size）
-    // if (context != nullptr) {
-    //     context->lock_mgr_->lock_shared_on_record(context->txn_, rid, fd_);
-    // }
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-    // 创建RmRecord并复制数据
-    char* slot = page_handle.get_slot(rid.slot_no);
-    auto record = std::make_unique<RmRecord>(file_hdr_.record_size, slot);
 
+    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
+        buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
+        throw RecordNotFoundError(rid.page_no, rid.slot_no);
+    }
+
+    // 定位 TupleMeta 和记录数据
+    char* slot_data = page_handle.get_slot(rid.slot_no);
+    TupleMeta tuple_meta = *reinterpret_cast<TupleMeta*>(slot_data);
+    char* record_data = slot_data + TUPLE_META_SIZE;
+
+    // 创建 RmRecord 并复制数据
+    auto record = std::make_unique<RmRecord>(file_hdr_.record_size, record_data);
+
+    // 释放页面
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
 
-    return record;
+    // 返回 TupleMeta 和 RmRecord
+    return {tuple_meta, std::move(record)};
 }
 
 /**
@@ -58,18 +67,7 @@ std::unique_ptr<RmRecord> RmFileHandle::get_record(const Rid& rid, Context* cont
  * @return {Rid} 新插入记录的标识符
  */
 // 修改后的 insert_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
-Rid RmFileHandle::insert_record(char* buf, Context* context) {
-    // 插入记录的步骤：
-    // 1. 获取或创建一个有空闲空间的页面句柄
-    // 2. 使用位图找到页面中第一个空闲槽位
-    // 3. 将记录数据复制到找到的槽位
-    // 4. 更新页面头部信息(记录数等)
-    // 5. 如果页面已满，更新文件头的空闲页面链表
-    // 6. 返回新记录的RID标识符
-
-    // if (context != nullptr) {
-    //     context->lock_mgr_->lock_exclusive_on_table(context->txn_, fd_);
-    // }
+Rid RmFileHandle::insert_record(char* buf) {
     std::scoped_lock lock(latch_);  // 确保在插入记录时的线程安全
 
     // 获取空闲页面
@@ -86,8 +84,13 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
     // 复制数据到slot
-    char* slot = page_handle.get_slot(slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
+    char* slot_data = page_handle.get_slot(slot_no);
+    // 初始化 TupleMeta (is_deleted_ = false)
+    memset(slot_data, 0, TUPLE_META_SIZE);
+
+    // 复制记录数据到 TupleMeta 之后
+    char* record_data = slot_data + TUPLE_META_SIZE;
+    memcpy(record_data, buf, file_hdr_.record_size);
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 
     return Rid{page_handle.page->get_page_id().page_no, slot_no};
@@ -115,8 +118,10 @@ void RmFileHandle::insert_record(const Rid& rid, char* buf) {
     }
 
     // 复制数据到指定slot
-    char* slot = page_handle.get_slot(rid.slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
+    char* slot_data = page_handle.get_slot(rid.slot_no);
+    memset(slot_data, 0, TUPLE_META_SIZE);
+    char* record_data = slot_data + TUPLE_META_SIZE;
+    memcpy(record_data, buf, file_hdr_.record_size);
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
 
@@ -133,8 +138,10 @@ void RmFileHandle::insert_record_force(const Rid& rid, char* buf) {
         file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
     }
     // 复制数据到指定slot
-    char* slot = page_handle.get_slot(rid.slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
+    char* slot_data = page_handle.get_slot(rid.slot_no);
+    memset(slot_data, 0, TUPLE_META_SIZE);
+    char* record_data = slot_data + TUPLE_META_SIZE;
+    memcpy(record_data, buf, file_hdr_.record_size);
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
@@ -154,7 +161,7 @@ void RmFileHandle::insert_record_force(const Rid& rid, char* buf) {
  * @throw RecordNotFoundError 如果记录不存在
  */
 // 修改后的 delete_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
-void RmFileHandle::delete_record(const Rid& rid, Context* context) {
+void RmFileHandle::delete_record(const Rid& rid) {
     // 删除记录的步骤：
     // 1. 获取记录所在页面的句柄
     // 2. 将对应槽位在位图中标记为空闲
@@ -201,7 +208,7 @@ void RmFileHandle::delete_record(const Rid& rid, Context* context) {
  * @throw RecordNotFoundError 如果记录不存在
  */
 // 修改后的 update_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
-void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
+void RmFileHandle::update_record(const Rid& rid, char* buf) {
     // 更新记录的步骤：
     // 1. 获取记录所在页面的句柄
     // 2. 验证记录是否存在
@@ -220,8 +227,10 @@ void RmFileHandle::update_record(const Rid& rid, char* buf, Context* context) {
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
     // 更新记录
-    char* slot = page_handle.get_slot(rid.slot_no);
-    memcpy(slot, buf, file_hdr_.record_size);
+    char* slot_data = page_handle.get_slot(rid.slot_no);
+    memset(slot_data, 0, TUPLE_META_SIZE);
+    char* record_data = slot_data + TUPLE_META_SIZE;
+    memcpy(record_data, buf, file_hdr_.record_size);
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
@@ -307,4 +316,19 @@ void RmFileHandle::release_page_handle(RmPageHandle& page_handle) {
     // 将当前页面加入空闲页面链表
     page_handle.page_hdr->next_free_page_no = file_hdr_.first_free_page_no;
     file_hdr_.first_free_page_no = page_handle.page->get_page_id().page_no;
+}
+
+/**
+ * @brief 更新指定记录的 TupleMeta
+ * @param rid 要更新的记录ID
+ * @param new_meta 新的 TupleMeta 数据
+ * @throw RecordNotFoundError 如果记录不存在 (Optional, depending on desired behavior)
+ */
+void RmFileHandle::update_tuple_meta(const Rid& rid, const TupleMeta& new_meta) {
+    // 获取页面句柄
+    RmPageHandle page_handle = fetch_page_handle(rid.page_no);
+    char* slot_data = page_handle.get_slot(rid.slot_no);
+    *reinterpret_cast<TupleMeta*>(slot_data) = new_meta;
+    // 标记页面为脏页并释放
+    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }

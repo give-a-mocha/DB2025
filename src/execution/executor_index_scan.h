@@ -153,7 +153,7 @@ class IndexScanExecutor : public AbstractExecutor {
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
-            auto rec = fh_->get_record(rid_, context_);
+            auto [tuple_meta, rec] = fh_->get_record(rid_);
             if (eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
                 return;
@@ -177,7 +177,7 @@ class IndexScanExecutor : public AbstractExecutor {
         // 移动到下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto rec = fh_->get_record(rid_, context_);
+            auto [tuple_meta, rec] = fh_->get_record(rid_);
             if (eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
                 return;

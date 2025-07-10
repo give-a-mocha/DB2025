@@ -136,7 +136,7 @@ void RecoveryManager::redo(LogRecord *log_record) {
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
-            sm_manager_->fhs_.at(table_name)->delete_record(delete_log_record_->rid_, nullptr);
+            sm_manager_->fhs_.at(table_name)->delete_record(delete_log_record_->rid_);
             break;
         }
         case LogType::UPDATE: {
@@ -147,7 +147,7 @@ void RecoveryManager::redo(LogRecord *log_record) {
             }
             // 在原本位置更新值
             sm_manager_->fhs_.at(table_name)
-                ->update_record(update_log_record_->rid_, update_log_record_->after_value_->data, nullptr);
+                ->update_record(update_log_record_->rid_, update_log_record_->after_value_->data);
             break;
         }
         default: {
@@ -168,7 +168,7 @@ void RecoveryManager::undo(LogRecord *log_record) {
                 return;
             }
             // 撤销插入：删除记录
-            sm_manager_->fhs_.at(table_name)->delete_record(insert_log_record_->rid_, nullptr);
+            sm_manager_->fhs_.at(table_name)->delete_record(insert_log_record_->rid_);
             break;
         }
         case LogType::DELETE: {
@@ -190,7 +190,7 @@ void RecoveryManager::undo(LogRecord *log_record) {
             }
             // 撤销更新：恢复到更新前的值
             sm_manager_->fhs_.at(table_name)
-                ->update_record(update_log_record_->rid_, update_log_record_->before_value_->data, nullptr);
+                ->update_record(update_log_record_->rid_, update_log_record_->before_value_->data);
             break;
         }
         default: {
