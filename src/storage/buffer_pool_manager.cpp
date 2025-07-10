@@ -11,6 +11,10 @@ See the Mulan PSL v2 for more details. */
 #include "buffer_pool_manager.h"
 #include "common/TraceStack.hpp"
 
+size_t BufferPoolManager::get_instance_no(const PageId& page_id) const {
+    return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE;
+}
+
 /**
  * @description: 获取指定的页面
  *

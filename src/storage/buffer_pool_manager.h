@@ -128,7 +128,7 @@ class BufferPoolManager {
      */
     void delete_all_pages(int fd);
 
-    size_t get_instance_no(const PageId& page_id) const { return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE; }
+    size_t get_instance_no(const PageId& page_id) const;
 
     auto new_page_guarded(PageId* page_id) -> BasicPageGuard;
 
