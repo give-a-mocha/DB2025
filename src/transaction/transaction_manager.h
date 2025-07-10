@@ -144,9 +144,9 @@ class TransactionManager {
 
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
      * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
-    const UndoLog& GetUndoLog(UndoLink link);
+    const UndoLog* GetUndoLog(UndoLink link);
 
-    const UndoLog& GetUndoLogWithoutLock(UndoLink link);
+    const UndoLog* GetUndoLogWithoutLock(UndoLink link);
 
     /** @brief 获取系统中的最低读时间戳。 */
     timestamp_t GetWatermark();

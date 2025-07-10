@@ -24,6 +24,8 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> tot_cols_;            // 左表列元数据
     std::vector<Condition> fed_conds_;         // 连接条件列表
     bool _is_end;                              // 扫描结束标志
+    std::unique_ptr<RmRecord> left_rec_;      // 左表当前记录
+    std::unique_ptr<RmRecord> right_rec_;     // 右表当前记录
 
    public:
     NestedLoopSemiJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
@@ -67,13 +69,11 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     bool is_end() const override { return _is_end; }
 
     std::unique_ptr<RmRecord> Next() override {
-        auto rec = left_->Next();
-        // 检查空指针，记录为空则返回空指针
-        if (!rec) {
+        if (!left_rec_) {
             ERROR("Error: One of the records is null at {}", getType());
             return nullptr;
         }
-        return rec;
+        return std::move(left_rec_);
     }
 
     size_t tupleLen() const override { return len_; }
@@ -105,6 +105,8 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
             memcpy(rec->data, left_rec->data, left_->tupleLen());
             memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
             if (eval_conds(tot_cols_, fed_conds_, rec)) {
+                left_rec_ = std::move(left_rec);
+                right_rec_ = std::move(right_rec);
                 return;
             }
             right_->nextTuple();

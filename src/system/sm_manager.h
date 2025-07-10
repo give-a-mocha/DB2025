@@ -235,4 +235,8 @@ class SmManager {
     void load_csv_data_auto(const std::string& table_name, const std::string& file_path, Transaction* txn);
 
     void draw_bplustree_graph();
+
+    std::string get_index_name(const std::string &filename, const std::vector<std::string> &index_cols) {
+        return ix_manager_->get_index_name(filename, index_cols);
+    }
 };

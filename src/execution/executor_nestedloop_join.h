@@ -26,6 +26,8 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> cols_;         // 结果集列元数据
     std::vector<Condition> fed_conds_;  // 连接条件列表
     bool _is_end;                       // 扫描结束标志
+    std::unique_ptr<RmRecord> left_rec_;  // 左表当前记录
+    std::unique_ptr<RmRecord> right_rec_; // 右表当前记录
 
    public:
     /**
@@ -115,17 +117,13 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         auto rec = std::make_unique<RmRecord>(len_);
-        auto left_rec = left_->Next();
-        auto right_rec = right_->Next();
-
-        // 检查空指针，如果任一记录为空则返回空指针
-        if (!left_rec || !right_rec) {
+        if (!left_rec_ || !right_rec_) {
             ERROR("Error: One of the records is null at {}", getType());
             return nullptr;
         }
 
-        memcpy(rec->data, left_rec->data, left_->tupleLen());
-        memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
+        memcpy(rec->data, left_rec_->data, left_->tupleLen());
+        memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
         return rec;
     }
 
@@ -173,6 +171,8 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             memcpy(rec->data, left_rec->data, left_->tupleLen());
             memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
             if (eval_conds(cols_, fed_conds_, rec)) {
+                left_rec_ = std::move(left_rec);
+                right_rec_ = std::move(right_rec);
                 return;
             }
             right_->nextTuple();

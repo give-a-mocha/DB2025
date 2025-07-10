@@ -25,27 +25,21 @@ class MvccDeleteExecutor : public AbstractExecutor {
     std::vector<Condition> conds_;  // 删除条件列表
     RmFileHandle *fh_;              // 表的数据文件句柄
     std::vector<Rid> rids_;         // 待删除记录的RID列表
+    std::vector<std::unique_ptr<RmRecord>> old_recs_;   // 旧记录列表
     std::string tab_name_;          // 表名
     SmManager *sm_manager_;         // 系统管理器指针
     TransactionManager *txn_mgr_;   // 事务管理器指针
 
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     * @param tab_name 目标表名
-     * @param conds 删除条件列表
-     * @param rids 要删除的记录RID列表
-     * @param context 执行上下文
-     */
     MvccDeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                       std::vector<Rid> rids, Context *context, TransactionManager *txn_mgr) {
+                       std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context, TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         tab_ = sm_manager_->db_.get_table(tab_name);
         fh_ = sm_manager_->fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         rids_ = std::move(rids);
+        old_recs_ = std::move(old_recs);
         context_ = context;
         txn_mgr_ = txn_mgr;
     }
@@ -57,16 +51,17 @@ class MvccDeleteExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> Next() override {
         // 添加间隙锁
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
+        int i = 0;
         for (auto &rid : rids_) {
             if (!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
                 continue;
             }
-            auto rec = fh_->get_record(rid, context_);
-            // fh_->delete_record(rid, context_);
+            // fh_->delete_record_tag(rid);
             txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, rec));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(rec), rid, tab_.name);
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_recs_[i]));
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_recs_[i]), rid, tab_.name);
+            i++;
         }
         return nullptr;
     }

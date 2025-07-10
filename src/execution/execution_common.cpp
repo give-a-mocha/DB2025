@@ -62,12 +62,12 @@ bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle 
     auto undolink = txn_mgr->GetUndoLink(fh->GetFd(), rid);
     if (undolink.IsValid()) {
         auto pre_txn = undolink.prev_txn_;
-        const UndoLog& undo_log = txn_mgr->GetUndoLog(undolink);
+        const UndoLog* undo_log = txn_mgr->GetUndoLog(undolink);
         // 检查是否有事务更新它且提交时间大于当前事务读时间
-        if (pre_txn != txn->get_transaction_id() && undo_log.ts_ > txn->get_read_ts()) {
+        if (pre_txn != txn->get_transaction_id() && undo_log->ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
-        if (undo_log.is_deleted_) {
+        if (undo_log->is_deleted_) {
             return false;
         }
     }
@@ -82,22 +82,22 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
 
     auto undolink = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
     while (undolink.IsValid()) {
-        const UndoLog& undo_log = txn_mgr_->GetUndoLog(undolink);
+        const UndoLog* undo_log = txn_mgr_->GetUndoLog(undolink);
         // 如果是自己修改的直接返回
         if (undolink.prev_txn_ == context_->txn_->get_transaction_id()) {
-            if (undo_log.is_deleted_) {
+            if (undo_log->is_deleted_) {
                 is_deleted = true;
             }
             break;
         }
         // 如果是已提交事物
-        if (undo_log.ts_ <= context_->txn_->get_read_ts()) {
-            if (undo_log.is_deleted_) {
+        if (undo_log->ts_ <= context_->txn_->get_read_ts()) {
+            if (undo_log->is_deleted_) {
                 is_deleted = true;
             }
             break;
         }
-        if (!undo_log.is_deleted_) {
+        if (!undo_log->is_deleted_) {
             is_deleted = true;
         } else {
             is_deleted = false;
@@ -112,7 +112,7 @@ std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmF
             //     }
             // }
         }
-        undolink = undo_log.prev_version_;
+        undolink = undo_log->prev_version_;
     }
     if (is_deleted) {
         return nullptr;

@@ -25,35 +25,28 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                         // 表的元数据
-    std::vector<Condition> conds_;        // 更新条件列表
-    RmFileHandle *fh_;                    // 表的数据文件句柄
-    std::vector<Rid> rids_;               // 待更新记录的RID列表
-    std::string tab_name_;                // 表名
-    std::vector<SetClause> set_clauses_;  // SET子句列表(新值)
-    SmManager *sm_manager_;               // 系统管理器指针
-    TransactionManager *txn_mgr_;         // 事务管理器指针
+    TabMeta& tab_;                                       // 表的元数据
+    std::vector<Condition> conds_;                      // 更新条件列表
+    RmFileHandle *fh_;                                  // 表的数据文件句柄
+    std::vector<Rid> rids_;                             // 待更新记录的RID列表
+    std::vector<std::unique_ptr<RmRecord>> old_recs_;   // 旧记录列表
+    std::string tab_name_;                              // 表名
+    std::vector<SetClause> set_clauses_;                // SET子句列表(新值)
+    SmManager *sm_manager_;                             // 系统管理器指针
+    TransactionManager *txn_mgr_;                       // 事务管理器指针
 
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     * @param tab_name 目标表名
-     * @param set_clauses SET子句列表
-     * @param conds 更新条件列表
-     * @param rids 待更新记录的RID列表
-     * @param context 执行上下文
-     */
     MvccUpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                       std::vector<Condition> conds, std::vector<Rid> rids, Context *context,
-                       TransactionManager *txn_mgr) {
+                       std::vector<Condition> conds, std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context,
+                       TransactionManager *txn_mgr)
+                       : tab_(sm_manager->db_.get_table(tab_name)){
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = std::move(set_clauses);
-        tab_ = sm_manager_->db_.get_table(tab_name);
         fh_ = sm_manager_->fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         rids_ = std::move(rids);
+        old_recs_ = std::move(old_recs);
         context_ = context;
         txn_mgr_ = txn_mgr;
     }
@@ -73,7 +66,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 continue;
             }
             // 获取旧记录并创建新记录
-            auto old_rec = fh_->get_record(rid, context_);
+            auto old_rec = std::move(old_recs_[i]);
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 

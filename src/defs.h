@@ -36,6 +36,11 @@ struct Rid {
     friend bool operator==(const Rid &x, const Rid &y) { return x.page_no == y.page_no && x.slot_no == y.slot_no; }
 
     friend bool operator!=(const Rid &x, const Rid &y) { return !(x == y); }
+
+    friend std::ostream &operator<<(std::ostream &os, const Rid &rid) {
+        os << "(page_no: " << rid.page_no << ", slot_no: " << rid.slot_no << ")";
+        return os;
+    }
 };
 
 class RecScan {

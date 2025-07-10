@@ -30,6 +30,7 @@ class SeqScanExecutor : public AbstractExecutor {
     Rid rid_;                           // 当前记录的RID
     std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
     SmManager *sm_manager_;             // 系统管理器指针
+    std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
 
    public:
     /**
@@ -67,6 +68,7 @@ class SeqScanExecutor : public AbstractExecutor {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
+                rec_ = std::move(rec);
                 return;
             }
             scan_->next();
@@ -93,6 +95,7 @@ class SeqScanExecutor : public AbstractExecutor {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
+                rec_ = std::move(rec);
                 return;
             }
             scan_->next();
@@ -110,10 +113,7 @@ class SeqScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
     std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
-            return nullptr;
-        }
-        return fh_->get_record(rid_, context_);
+        return std::move(rec_);  // 返回当前记录并清空智能指针
     }
 
     /**

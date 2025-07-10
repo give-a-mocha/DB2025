@@ -243,7 +243,7 @@ UndoLink TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction*
     if (prev_version_it != prev_version_map.end()) {
         UndoLink undolink = prev_version_it->second;
         while (undolink.IsValid() && undolink.prev_txn_ == txn->get_transaction_id()) {
-            undolink = GetUndoLog(undolink).prev_version_;
+            undolink = GetUndoLog(undolink)->prev_version_;
         }
         if (undolink.IsValid()) {
             // 如果撤销链接有效，则更新版本链接
@@ -295,12 +295,12 @@ const UndoLog* TransactionManager::GetUndoLogOptional(UndoLink link) {
     }
 
     // 返回对应的撤销日志指针
-    return &(txn->GetUndoLog(link.prev_log_idx_));
+    return txn->GetUndoLog(link.prev_log_idx_);
 }
 
 /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
  * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
-const UndoLog& TransactionManager::GetUndoLog(UndoLink link) {
+const UndoLog* TransactionManager::GetUndoLog(UndoLink link) {
     // 检查事务是否存在
     if (link.prev_txn_ == INVALID_TXN_ID) {
         throw RMDBError("Invalid transaction ID: " + std::to_string(link.prev_txn_));
@@ -309,7 +309,7 @@ const UndoLog& TransactionManager::GetUndoLog(UndoLink link) {
     return GetUndoLogWithoutLock(link);
 }
 
-const UndoLog& TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
+const UndoLog* TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
     auto it = TransactionManager::txn_map.find(link.prev_txn_);
     if (it == TransactionManager::txn_map.end()) {
         throw RMDBError("Transaction not found: " + std::to_string(link.prev_txn_));
@@ -370,8 +370,8 @@ void TransactionManager::cleanup_expired_versions(timestamp_t watermark) {
 
         // 清理过期的版本链接
         for (auto version_it = version_info->prev_version_.begin(); version_it != version_info->prev_version_.end();) {
-            const UndoLog& undo_log = GetUndoLog(version_it->second);
-            if (undo_log.ts_ <= GetWatermark()) {
+            const UndoLog* undo_log = GetUndoLog(version_it->second);
+            if (undo_log->ts_ <= GetWatermark()) {
                 version_it = version_info->prev_version_.erase(version_it);
             } else {
                 ++version_it;
@@ -517,8 +517,8 @@ bool TransactionManager::is_delete_record(int fd, Rid rid) {
     auto pre_undo_link = GetUndoLink(fd, rid);
     bool is_deleted = false;
     if (pre_undo_link.IsValid()) {
-        const UndoLog& undo_log = GetUndoLog(pre_undo_link);
-        is_deleted = undo_log.is_deleted_;
+        const UndoLog* undo_log = GetUndoLog(pre_undo_link);
+        is_deleted = undo_log->is_deleted_;
     }
     return is_deleted;
 }
