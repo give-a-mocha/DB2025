@@ -63,6 +63,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @brief 初始化扫描并定位第一条符合条件的记录
      */
     void beginTuple() override {
+        TRACE_FUNCTION
+        INFO("beginTuple record at table {}", tab_name_);
         // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
 
@@ -83,6 +85,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @throw InternalError 当扫描器未初始化时
      */
     void nextTuple() override {
+        TRACE_FUNCTION
+        INFO("Next record at table {}", tab_name_);
         // 检查扫描器状态
         if (scan_ == nullptr) {
             throw InternalError("Scan not initialized at " + getType());
@@ -116,9 +120,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
     std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
-            return nullptr;  // 如果扫描结束，返回空指针
-        }
+        TRACE_FUNCTION
         return std::move(rec_);
     }
 

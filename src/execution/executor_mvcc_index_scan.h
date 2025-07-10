@@ -203,9 +203,6 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @throw InternalError 当记录访问失败
      */
     std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
-            return nullptr;  // 如果扫描结束，返回空指针
-        }
         return std::move(rec_);
     }
 

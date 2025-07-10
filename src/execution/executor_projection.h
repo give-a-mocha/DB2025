@@ -108,8 +108,8 @@ class ProjectionExecutor : public AbstractExecutor {
         // 获取输入记录
         auto prev_rec = prev_->Next();
 
-        // 底层的scan 可能返回空，这是为了join的处理方便，不需要再判断
         if (!prev_rec) {
+            ERROR("ProjectionExecutor: No more records in previous executor");
             return nullptr;
         }
 

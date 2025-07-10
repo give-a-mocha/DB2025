@@ -52,6 +52,8 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
             _is_end = true;
             return;
         }
+        if (!left_->is_end()) left_rec_ = left_->Next();
+        if (!right_->is_end()) right_rec_ = right_->Next();
         find_record();
     }
 
@@ -63,15 +65,14 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
             _is_end = true;
             return;
         }
+        if (!left_->is_end()) left_rec_ = left_->Next();
+        if (!right_->is_end()) right_rec_ = right_->Next();
         find_record();
     }
 
     bool is_end() const override { return _is_end; }
 
     std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
-            return nullptr;  // 如果扫描结束，返回空指针
-        }
         return std::move(rec_);
     }
 
@@ -83,8 +84,6 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
 
    private:
     void find_record() {
-        left_rec_ = left_->Next();
-        right_rec_ = right_->Next();
         while (!is_end()) {
             if (right_->is_end()) {
                 left_->nextTuple();
@@ -92,9 +91,11 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
                     _is_end = true;
                     return;
                 }
+                if (!left_->is_end()) {
+                    left_rec_ = left_->Next();
+                }
                 right_->beginTuple();
-                left_rec_ = left_->Next();
-                right_rec_ = right_->Next();
+                if (!right_->is_end()) right_rec_ = right_->Next();
                 continue;
             }
             auto rec = std::make_unique<RmRecord>(left_->tupleLen() + right_->tupleLen());
@@ -105,7 +106,9 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
                 return;
             }
             right_->nextTuple();
-            right_rec_ = right_->Next();
+            if (!right_->is_end()) {
+                right_rec_ = right_->Next();
+            }
         }
         _is_end = true;
     }

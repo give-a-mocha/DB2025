@@ -69,12 +69,15 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * 3. 查找第一对满足连接条件的记录
      */
     void beginTuple() override {
+        TRACE_FUNCTION
         left_->beginTuple();
         right_->beginTuple();
         if (left_->is_end() || right_->is_end()) {
             _is_end = true;
             return;
         }
+        if (!left_->is_end()) left_rec_ = left_->Next();
+        if (!right_->is_end()) right_rec_ = right_->Next();
         find_record();
     }
 
@@ -87,15 +90,21 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * 3. 继续查找满足条件的记录对
      */
     void nextTuple() override {
+        TRACE_FUNCTION
         if (is_end()) return;
         right_->nextTuple();
+        if (!right_->is_end()) right_rec_ = right_->Next();
         if (right_->is_end()) {
             left_->nextTuple();
             if (left_->is_end()) {
                 _is_end = true;
                 return;
             }
+            if (!left_->is_end()) {
+                left_rec_ = left_->Next();
+            }
             right_->beginTuple();
+            if (!right_->is_end()) right_rec_ = right_->Next();
         }
         find_record();
     }
@@ -117,9 +126,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * @return 合并后的记录指针，如果任一表的记录为空则返回nullptr
      */
     std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
-            return nullptr;  // 如果扫描结束，返回空指针
-        }
+        TRACE_FUNCTION
         return std::move(rec_);
     }
 
@@ -146,9 +153,8 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * @brief 查找下一对满足连接条件的记录
      */
     void find_record() {
+        TRACE_FUNCTION
         // 先获取当前记录
-        left_rec_ = left_->Next();
-        right_rec_ = right_->Next();
         while (!is_end()) {
             if (right_->is_end()) {
                 left_->nextTuple();
@@ -156,9 +162,13 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                     _is_end = true;
                     return;
                 }
+                if (!left_->is_end()) {
+                    left_rec_ = left_->Next();
+                }
                 right_->beginTuple();
-                left_rec_ = left_->Next();
-                right_rec_ = right_->Next();
+                if (!right_->is_end()) {
+                    right_rec_ = right_->Next();
+                }
                 continue;
             }
 
@@ -170,7 +180,9 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                 return;
             }
             right_->nextTuple();
-            right_rec_ = right_->Next();
+            if (!right_->is_end()) {
+                right_rec_ = right_->Next();
+            }
         }
         _is_end = true;
     }
