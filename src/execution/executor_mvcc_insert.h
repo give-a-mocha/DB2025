@@ -63,6 +63,7 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
+        TRACE_FUNCTION
         // 创建记录缓冲区
         std::unique_ptr<RmRecord> rec = std::make_unique<RmRecord>(fh_->get_file_hdr().record_size);
 
@@ -100,7 +101,9 @@ class MvccInsertExecutor : public AbstractExecutor {
             txn_mgr_->abort(context_, context_->log_mgr_);
             throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
         }
-        txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, rec);
+        TupleMeta delete_meta;
+        delete_meta.is_deleted_ = true;  // 插入的记录不标记为
+        txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid_, nullptr, delete_meta, context_->txn_);
         context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, rec));
         context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
         return nullptr;

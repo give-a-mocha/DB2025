@@ -30,84 +30,27 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
     return values;
 }
 
-auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const std::vector<UndoLog> &undo_logs) -> std::optional<std::unique_ptr<RmRecord>> {
-    // if (undo_logs.empty()) {
-    //     return std::move(base_tuple);  // 如果没有撤销日志，直接返回原始记录
-    // }
-    // bool is_deleted = false;
-    // for (const auto &undo_log : undo_logs) {
-        
-    // }
+auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& base_meta, const std::vector<const UndoLog*> &undo_logs) -> std::unique_ptr<RmRecord> {
+    if (undo_logs.empty()) {
+        if (base_meta.is_deleted_) {
+            return nullptr;  // 如果基础元组已被删除，返回空指针
+        }
+        return std::move(base_tuple);  // 如果没有撤销日志，直接返回基础元组
+    }
+    if (undo_logs.back()->is_deleted_) {
+        return nullptr;  // 如果最后一个撤销日志标记为删除，返回空指针
+    }
+    return std::make_unique<RmRecord>(undo_logs.back()->record_);  // 返回基础元组的副本
 }
 
-/**
- * @brief 检查事务是否与记录发生冲突, 获取锁
- */
-bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
-    // 检查是否有未提交事务修改
-    bool ok = txn_mgr->get_lock_manager()->lock_exclusive_on_record(txn, rid, fh->GetFd());
-    if (ok == false) {
-        throw TransactionAbortException(txn->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
-    }
-    bool is_not_deleted = check_conflict(txn, txn_mgr, fh, rid);
-    if (is_not_deleted == false) {
-        LockDataId lock_data_id(fh->GetFd(), rid);
-        txn_mgr->get_lock_manager()->unlock(txn, lock_data_id);
+auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool {
+    if (undolink.IsValid()) return false;
+    const UndoLog* undo_log = txn_mgr->GetUndoLog(undolink);
+    if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ < txn->get_read_ts()) {
+        // 如果是当前事务的修改或者是已提交的事务
         return false;
     }
-    return true;
-}
-
-bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid) {
-    auto undolink = txn_mgr->GetUndoLink(fh->GetFd(), rid);
-    if (undolink.IsValid()) {
-        auto pre_txn = undolink.prev_txn_;
-        const UndoLog* undo_log = txn_mgr->GetUndoLog(undolink);
-        // 检查是否有事务更新它且提交时间大于当前事务读时间
-        if (pre_txn != txn->get_transaction_id() && undo_log->ts_ > txn->get_read_ts()) {
-            throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-        }
-        if (undo_log->is_deleted_) {
-            return false;
-        }
-    }
-    return true;
-}
-
-std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_,
-                                          TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_) {
-    TRACE_FUNCTION
-    auto [tuple_meta, rec] = fh_->get_record(rid);
-    bool is_deleted = tuple_meta.is_deleted_;
-
-    auto undolink = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
-    while (undolink.IsValid()) {
-        auto undo_log = txn_mgr_->GetUndoLog(undolink);
-        // 如果是自己修改的直接返回
-        if (undolink.prev_txn_ == context_->txn_->get_transaction_id()) {
-            if (undo_log->is_deleted_) {
-                is_deleted = true;
-            }
-            break;
-        }
-        // 如果是已提交事物
-        if (undo_log->ts_ <= context_->txn_->get_read_ts()) {
-            if (undo_log->is_deleted_) {
-                is_deleted = true;
-            }
-            break;
-        }
-        if (!undo_log->is_deleted_) {
-            is_deleted = true;
-        } else {
-            is_deleted = false;
-        }
-        undolink = undo_log->prev_version_;
-    }
-    if (is_deleted) {
-        return nullptr;
-    }
-    return std::move(rec);
+    return true;  // 存在写写冲突
 }
 
 bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
@@ -134,7 +77,8 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
         } else {
             bool ok = true;
             for (const auto &rid_ : result) {
-                bool is_not_deleted = check_conflict(context_->txn_, txn_mgr, fh_, rid_);
+                auto link = txn_mgr->GetUndoLink(fh_->GetFd(), rid_);
+                bool is_not_deleted = IsWriteWriteConflict(context_->txn_, txn_mgr, link);
                 if (is_not_deleted == true) {
                     ok = false;
                     break;

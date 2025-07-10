@@ -20,14 +20,9 @@ See the Mulan PSL v2 for more details. */
 
 std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &record, const std::vector<ColMeta> &cols_);
 
-std::unique_ptr<RmRecord> mvcc_get_record(const Rid &rid, Context *context_, RmFileHandle *fh_,
-                                          TransactionManager *txn_mgr_, const std::vector<ColMeta> &cols_);
+auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& base_meta, const std::vector<const UndoLog*> &undo_logs) -> std::unique_ptr<RmRecord>;
 
-bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh_, const Rid &rid);
-
-bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid);
-
-auto ReconstructTuple(const std::unique_ptr<RmRecord> base_tuple, const std::vector<UndoLog> &undo_logs) -> std::optional<std::unique_ptr<RmRecord>>;
+auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool;
 
 bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
                        TransactionManager *txn_mgr, SmManager *sm_manager);

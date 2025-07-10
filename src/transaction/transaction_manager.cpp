@@ -91,7 +91,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-    // MVCC: 分配提交时间戳
+    std::unique_lock<std::mutex> commit_lock(commit_mutex_);  // 确保提交操作的互斥性
     txn->set_state(TransactionState::COMMITTED);
     timestamp_t commit_ts = INVALID_TS;
     if (concurrency_mode_ == ConcurrencyMode::MVCC) {
@@ -99,6 +99,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         txn->set_commit_ts(commit_ts);  // 设置提交时间戳
         last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
     }
+
+    txn->CommitUndoLogs();  // 提交事务的撤销日志
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
@@ -181,7 +183,6 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
 
     txn->clear_lock_set();
     txn->set_state(TransactionState::ABORTED);
-    txn->ClearUndoLogs();
     log_manager->add_abort_log(txn->get_transaction_id());
 
     running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
@@ -191,7 +192,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
  * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
  * 在更新之前，将调用 `check` 函数以确保有效性。
  */
-bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink prev_link) {
+bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
@@ -206,7 +207,7 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink prev_li
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
-    prev_version_map[rid.slot_no] = prev_link;
+    prev_version_map[rid.slot_no] = link;
     return true;  // 更新成功，返回 true
 }
 
@@ -434,62 +435,35 @@ bool TransactionManager::should_perform_gc() {
     return terminated_count > txn_map.size() * 0.3;
 }
 
-/**
- * @brief 添加插入操作的撤销日志
- * @param txn 事务指针
- * @param rid 插入的记录的RID
- * @param values 插入的记录值
- */
-void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values) {
+auto TransactionManager::GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta, Transaction *txn) -> bool {
+    TRACE_FUNCTION
     auto log = std::make_unique<UndoLog>();
-    log->is_deleted_ = false;
-    log->record_ = RmRecord(*values);  // 复制记录值
-    log->ts_ = get_next_timestamp();
-    log->prev_version_ = UndoLink{};  // insert undo log 没有前一个版本
-    auto undo_link = txn->AppendUndoLog(std::move(log));
-    UpdateUndoLink(fd, rid, undo_link);
-}
-
-/**
- * @brief 添加修改操作的撤销日志
- * @param txn 事务指针
- * @param rid 要删除的记录的RID
- * @param values 修改前的记录值
- * @param modified_fields 修改的字段
- */
-void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values) {
-    // UndoLog log;
-    // log.is_deleted_ = false;
-    // log.is_inserted_ = false;
-    // log.modified_fields_ = std::move(modified_fields);
-    // log.tuple_ = std::move(values);
-    // log.ts_ = get_next_timestamp();
-    // log.prev_version_ = DeleteUpdateVersionLink(fd, rid, txn);
-    // auto undo_link = txn->AppendUndoLog(log);
-    // UpdateUndoLink(fd, rid, undo_link);
-}
-
-/**
- * @brief 添加删除操作的撤销日志
- * @param txn 事务指针
- * @param rid 要删除的记录的RID
- * @param values 删除前的记录值
- */
-void TransactionManager::add_delete_undo_log(Transaction* txn, const int& fd, Rid rid) {
-    auto log = std::make_unique<UndoLog>();
-    log->is_deleted_ = true;
-    log->ts_ = get_next_timestamp();
-    log->prev_version_ = DeleteUndoLink(fd, rid, txn);
-    auto undo_link = txn->AppendUndoLog(std::move(log));
-    UpdateUndoLink(fd, rid, undo_link);
-}
-
-bool TransactionManager::is_delete_record(int fd, Rid rid) {
-    auto pre_undo_link = GetUndoLink(fd, rid);
-    bool is_deleted = false;
-    if (pre_undo_link.IsValid()) {
-        const UndoLog* undo_log = GetUndoLog(pre_undo_link);
-        is_deleted = undo_log->is_deleted_;
+    if (base_meta.is_deleted_) {
+        log->is_deleted_ = true;  // 如果是删除操作
+    } else {
+        log->is_deleted_ = false;  // 如果是插入或更新操作
+        log->record_ = RmRecord(*value);  
     }
-    return is_deleted;
+    log->ts_ = txn->get_transaction_id();  // 设置时间戳为当前事务ID
+    log->prev_version_ = GetUndoLink(fd, rid);  //
+    auto link = txn->AppendUndoLog(std::move(log));
+    UpdateUndoLink(fd, rid, link);  // 更新版本链接
+    return true;
+}
+
+auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog*> {
+    if (!undo_link.IsValid()) {
+        return {};
+    }
+    std::vector<const UndoLog*> undo_logs;
+    while (undo_link.IsValid()) {
+        const UndoLog* undo_log = GetUndoLog(undo_link);
+        if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ < txn->get_read_ts()) {
+            // 如果是当前事务的修改或者是已提交的事务
+            break;
+        }
+        undo_logs.push_back(undo_log);
+        undo_link = undo_log->prev_version_;
+    }
+    return undo_logs;
 }

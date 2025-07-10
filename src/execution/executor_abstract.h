@@ -33,6 +33,8 @@ class AbstractExecutor {
      */
     Rid _abstract_rid;
 
+    TupleMeta _abstract_tuple_meta;
+
     /**
      * @brief 执行上下文
      */
@@ -86,6 +88,10 @@ class AbstractExecutor {
 
      */
     virtual Rid &rid() = 0;
+
+    virtual TupleMeta &tuple_meta() {
+        return _abstract_tuple_meta;
+    }
 
     /**
      * @brief 获取下一个元组

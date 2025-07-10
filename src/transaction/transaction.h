@@ -211,6 +211,14 @@ class Transaction {
         return undo_logs_[log_id].get();
     }
 
+    inline auto CommitUndoLogs() -> void {
+        std::scoped_lock<std::mutex> lck(latch_);
+        // 提交事务的撤销日志
+        for (auto &log : undo_logs_) {
+            log->ts_ = commit_ts_.load();  // 设置撤销日志的时间戳为提交时间戳
+        }
+    }
+
     inline auto ClearUndoLogs() -> void {
         std::scoped_lock<std::mutex> lck(latch_);
         undo_logs_.clear();  // 清空事务的撤销日志

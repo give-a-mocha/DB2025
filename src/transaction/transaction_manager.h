@@ -37,6 +37,8 @@ class TransactionManager {
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
+    std::mutex commit_mutex_; // 用于保护提交操作的互斥锁
+
     /**
      * @brief 为 MVCC 存储单个页面内所有槽的版本信息。
      */
@@ -126,7 +128,7 @@ class TransactionManager {
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
-    bool UpdateUndoLink(const int &fd, Rid rid, UndoLink prev_link);
+    bool UpdateUndoLink(const int &fd, Rid rid, UndoLink link);
 
     /**
      * @brief 删除txn的撤销链接
@@ -155,15 +157,11 @@ class TransactionManager {
     /** @brief 检查是否需要执行垃圾回收 */
     bool should_perform_gc();
 
-    void add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values);
-
-    void add_update_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values);
-
-    void add_delete_undo_log(Transaction* txn, const int& fd, Rid rid);
+    auto GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta, Transaction *txn) -> bool;
 
     void do_delete(Transaction *txn);
 
-    bool is_delete_record(int fd, Rid rid);
+    auto CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog*>;
 
    private:
     /** @brief 检查事务是否可以被垃圾回收 */

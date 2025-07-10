@@ -30,6 +30,7 @@ class IndexScanExecutor : public AbstractExecutor {
     Rid rid_;                                   // 当前记录ID
     std::unique_ptr<IxScan> scan_;              // 扫描迭代器
     SmManager *sm_manager_;                     // 系统管理器
+    TupleMeta tuple_meta_;                      // 当前记录的元数据
     std::unique_ptr<RmRecord> rec_;             // 当前记录
     Iid lower_iid;                              // 索引下界
     Iid upper_iid;                              // 索引上界
@@ -228,6 +229,11 @@ class IndexScanExecutor : public AbstractExecutor {
      * @return 当前记录的RID引用
      */
     Rid &rid() override { return rid_; }
+
+    TupleMeta &tuple_meta() override {
+        // 返回当前记录的元数据
+        return tuple_meta_;
+    }
 
     /**
      * @brief 获取执行器类型名称

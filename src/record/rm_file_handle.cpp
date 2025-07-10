@@ -68,6 +68,7 @@ std::pair<TupleMeta, std::unique_ptr<RmRecord>> RmFileHandle::get_record(const R
  */
 // 修改后的 insert_record 函数，支持 MVCC (基于 Context 和 UndoLog 将被更新的假设)
 Rid RmFileHandle::insert_record(char* buf) {
+    TRACE_FUNCTION
     std::scoped_lock lock(latch_);  // 确保在插入记录时的线程安全
 
     // 获取空闲页面
@@ -264,6 +265,7 @@ RmPageHandle RmFileHandle::fetch_page_handle(int page_no) const {
  * @throw PageNotExistError 如果无法创建新页面
  */
 RmPageHandle RmFileHandle::create_new_page_handle() {
+    TRACE_FUNCTION
     // 使用缓冲池创建新页面
     PageId new_page_id = {fd_, INVALID_PAGE_ID};
     Page* page = buffer_pool_manager_->new_page(&new_page_id);
@@ -292,6 +294,7 @@ RmPageHandle RmFileHandle::create_new_page_handle() {
  * @note pin the page, remember to unpin it outside!
  */
 RmPageHandle RmFileHandle::create_page_handle() {
+    TRACE_FUNCTION
     if (file_hdr_.first_free_page_no == RM_NO_PAGE) {
         // 没有空闲页面,创建新页面
         RmPageHandle page_handle = create_new_page_handle();
