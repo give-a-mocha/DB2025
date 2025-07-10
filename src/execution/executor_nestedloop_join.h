@@ -26,6 +26,9 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> cols_;         // 结果集列元数据
     std::vector<Condition> fed_conds_;  // 连接条件列表
     bool _is_end;                       // 扫描结束标志
+    std::unique_ptr<RmRecord> left_rec_; // 左表当前记录
+    std::unique_ptr<RmRecord> right_rec_;// 右表当前记录
+    std::unique_ptr<RmRecord> rec_;     // 结果当前记录
 
    public:
     /**
@@ -114,19 +117,10 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * @return 合并后的记录指针，如果任一表的记录为空则返回nullptr
      */
     std::unique_ptr<RmRecord> Next() override {
-        auto rec = std::make_unique<RmRecord>(len_);
-        auto left_rec = left_->Next();
-        auto right_rec = right_->Next();
-
-        // 检查空指针，如果任一记录为空则返回空指针
-        if (!left_rec || !right_rec) {
-            ERROR("Error: One of the records is null at {}", getType());
-            return nullptr;
+        if (is_end()) {
+            return nullptr;  // 如果扫描结束，返回空指针
         }
-
-        memcpy(rec->data, left_rec->data, left_->tupleLen());
-        memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
-        return rec;
+        return std::move(rec_);
     }
 
     /**
@@ -152,6 +146,9 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * @brief 查找下一对满足连接条件的记录
      */
     void find_record() {
+        // 先获取当前记录
+        left_rec_ = left_->Next();
+        right_rec_ = right_->Next();
         while (!is_end()) {
             if (right_->is_end()) {
                 left_->nextTuple();
@@ -160,22 +157,20 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                     return;
                 }
                 right_->beginTuple();
+                left_rec_ = left_->Next();
+                right_rec_ = right_->Next();
                 continue;
-            }
-            auto left_rec = left_->Next();
-            auto right_rec = right_->Next();
-            if (!left_rec || !right_rec) {
-                _is_end = true;
-                return;
             }
 
             auto rec = std::make_unique<RmRecord>(len_);
-            memcpy(rec->data, left_rec->data, left_->tupleLen());
-            memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
+            memcpy(rec->data, left_rec_->data, left_->tupleLen());
+            memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
             if (eval_conds(cols_, fed_conds_, rec)) {
+                rec_ = std::move(rec);
                 return;
             }
             right_->nextTuple();
+            right_rec_ = right_->Next();
         }
         _is_end = true;
     }

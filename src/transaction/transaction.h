@@ -205,10 +205,10 @@ class Transaction {
         return {txn_id_, static_cast<int>(undo_logs_.size() - 1)};
     }
 
-    inline auto GetUndoLog(size_t log_id) -> const UndoLog& {
+    inline auto GetUndoLog(size_t log_id) -> const UndoLog* {
         std::scoped_lock<std::mutex> lck(latch_);
         // 注意：如果 log_id 无效，这里可能抛出 std::out_of_range 异常
-        return *undo_logs_[log_id];
+        return undo_logs_[log_id].get();
     }
 
     inline auto ClearUndoLogs() -> void {
