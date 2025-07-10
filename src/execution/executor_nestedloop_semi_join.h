@@ -24,8 +24,9 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> tot_cols_;            // 左表列元数据
     std::vector<Condition> fed_conds_;         // 连接条件列表
     bool _is_end;                              // 扫描结束标志
-    std::unique_ptr<RmRecord> left_rec_;      // 左表当前记录
-    std::unique_ptr<RmRecord> right_rec_;     // 右表当前记录
+    std::unique_ptr<RmRecord> left_rec_;       // 左表当前记录
+    std::unique_ptr<RmRecord> right_rec_;      // 右表当前记录
+    std::unique_ptr<RmRecord> rec_;            // 结果记录
 
    public:
     NestedLoopSemiJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
@@ -47,7 +48,6 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     void beginTuple() override {
         left_->beginTuple();
         right_->beginTuple();
-        // 左表是空或者右表是空直接设置结束标记
         if (left_->is_end() || right_->is_end()) {
             _is_end = true;
             return;
@@ -69,11 +69,10 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     bool is_end() const override { return _is_end; }
 
     std::unique_ptr<RmRecord> Next() override {
-        if (!left_rec_) {
-            ERROR("Error: One of the records is null at {}", getType());
-            return nullptr;
+        if (is_end()) {
+            return nullptr;  // 如果扫描结束，返回空指针
         }
-        return std::move(left_rec_);
+        return std::move(rec_);
     }
 
     size_t tupleLen() const override { return len_; }
@@ -84,6 +83,8 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
 
    private:
     void find_record() {
+        left_rec_ = left_->Next();
+        right_rec_ = right_->Next();
         while (!is_end()) {
             if (right_->is_end()) {
                 left_->nextTuple();
@@ -92,24 +93,19 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
                     return;
                 }
                 right_->beginTuple();
+                left_rec_ = left_->Next();
+                right_rec_ = right_->Next();
+                continue;
             }
-
-            auto left_rec = left_->Next();
-            auto right_rec = right_->Next();
-            if (!left_rec || !right_rec) {
-                _is_end = true;
-                return;
-            }
-
             auto rec = std::make_unique<RmRecord>(left_->tupleLen() + right_->tupleLen());
-            memcpy(rec->data, left_rec->data, left_->tupleLen());
-            memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
+            memcpy(rec->data, left_rec_->data, left_->tupleLen());
+            memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
             if (eval_conds(tot_cols_, fed_conds_, rec)) {
-                left_rec_ = std::move(left_rec);
-                right_rec_ = std::move(right_rec);
+                rec_ = std::make_unique<RmRecord>(*left_rec_);
                 return;
             }
             right_->nextTuple();
+            right_rec_ = right_->Next();
         }
         _is_end = true;
     }

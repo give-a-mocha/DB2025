@@ -24,13 +24,15 @@ class IndexScanExecutor : public AbstractExecutor {
     TabMeta& tab_;                               // 表元数据
     std::vector<Condition> conds_;              // 原始条件
     RmFileHandle *fh_;                          // 表文件句柄
+    IxIndexHandle *ih_;                          // 索引句柄
     size_t len_;                                // 记录长度
     IndexMeta& index_meta_;                       // 索引元数据
-    std::string index_name_;                    // 索引标识
     Rid rid_;                                   // 当前记录ID
     std::unique_ptr<IxScan> scan_;              // 扫描迭代器
     SmManager *sm_manager_;                     // 系统管理器
     std::unique_ptr<RmRecord> rec_;             // 当前记录
+    Iid lower_iid;                              // 索引下界
+    Iid upper_iid;                              // 索引上界
 
    public:
     IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
@@ -38,9 +40,9 @@ class IndexScanExecutor : public AbstractExecutor {
         : tab_(sm_manager->db_.get_table(tab_name)),
           conds_(std::move(conds)),
           fh_(sm_manager->fhs_.at(tab_name).get()),
+          ih_(sm_manager->ihs_.at(sm_manager->get_index_name(tab_name, index_col_names)).get()),
           len_(tab_.cols.back().offset + tab_.cols.back().len),
           index_meta_(*tab_.get_index_meta(index_col_names)),
-          index_name_(sm_manager->get_index_name(tab_name, index_col_names)),
           rid_(),
           scan_(nullptr),
           sm_manager_(sm_manager),
@@ -55,17 +57,11 @@ class IndexScanExecutor : public AbstractExecutor {
                 cond.op = swap_op(cond.op);
             }
         }
+        getBound();  // 获取索引的边界
     }
 
-    /**
-     * @brief 初始化索引扫描并定位第一条记录
-     * @throw InternalError 当索引访问失败时
-
-     */
-    void beginTuple() override {
-        TRACE_FUNCTION
+    void getBound() {
         // 构建索引查询范围
-        auto ih = sm_manager_->ihs_.at(index_name_).get();
         // 从条件中提取索引键的范围
         RmRecord lower_record(index_meta_.col_tot_len), upper_record(index_meta_.col_tot_len);
         off_t offset = 0;
@@ -142,9 +138,18 @@ class IndexScanExecutor : public AbstractExecutor {
             offset += col.len;
         }
 
-        auto lower_iid = ih->lower_bound(lower_record.data);
-        auto upper_iid = ih->upper_bound(upper_record.data);
-        scan_ = std::make_unique<IxScan>(ih, lower_iid, upper_iid, sm_manager_->get_bpm());
+        lower_iid = ih_->lower_bound(lower_record.data);
+        upper_iid = ih_->upper_bound(upper_record.data);
+    }
+
+    /**
+     * @brief 初始化索引扫描并定位第一条记录
+     * @throw InternalError 当索引访问失败时
+
+     */
+    void beginTuple() override {
+        TRACE_FUNCTION
+        scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
@@ -195,7 +200,12 @@ class IndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
+    std::unique_ptr<RmRecord> Next() override { 
+        if (is_end()) {
+            return nullptr;  // 如果扫描结束，返回空指针
+        }
+        return std::move(rec_); 
+    }
 
     /**
      * @brief 获取记录的物理长度

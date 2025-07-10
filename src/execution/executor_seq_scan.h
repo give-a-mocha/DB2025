@@ -113,6 +113,9 @@ class SeqScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
     std::unique_ptr<RmRecord> Next() override {
+        if (is_end()) {
+            return nullptr;  // 如果扫描结束，返回空指针
+        }
         return std::move(rec_);  // 返回当前记录并清空智能指针
     }
 
