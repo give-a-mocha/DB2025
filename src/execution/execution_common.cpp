@@ -79,8 +79,12 @@ bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid 
             bool ok = true;
             for (const auto &rid_ : result) {
                 auto link = txn_mgr->GetUndoLink(fh_->GetFd(), rid_);
-                bool is_not_deleted = IsWriteWriteConflict(context_->txn_, txn_mgr, link);
-                if (is_not_deleted == true) {
+                if (IsWriteWriteConflict(context_->txn_, txn_mgr, link)) {
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                    AbortReason::UPGRADE_CONFLICT);
+                }
+                auto [base_meta, temp] = fh_->get_record(rid_);
+                if (!base_meta.is_deleted_) {
                     ok = false;
                     break;
                 }

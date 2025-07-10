@@ -157,6 +157,7 @@ class IndexScanExecutor : public AbstractExecutor {
             auto [tuple_meta, rec] = fh_->get_record(rid_);
             if (eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = tuple_meta;  // 设置当前记录的元数据
                 return;
             }
             scan_->next();
@@ -181,6 +182,7 @@ class IndexScanExecutor : public AbstractExecutor {
             auto [tuple_meta, rec] = fh_->get_record(rid_);
             if (eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = tuple_meta;  // 设置当前记录的元数据
                 return;
             }
             scan_->next();

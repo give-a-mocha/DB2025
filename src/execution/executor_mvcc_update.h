@@ -65,6 +65,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
             // 先获取写锁
             INFO("Update record at rid: {}", rid);
+            WARN("Rid TupleMeta: {}", base_meta.is_deleted_);
             bool ok = txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
             if (!ok) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);

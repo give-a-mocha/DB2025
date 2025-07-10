@@ -331,7 +331,7 @@ void RmFileHandle::update_tuple_meta(const Rid& rid, const TupleMeta& new_meta) 
     // 获取页面句柄
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
     char* slot_data = page_handle.get_slot(rid.slot_no);
-    *reinterpret_cast<TupleMeta*>(slot_data) = new_meta;
+    memcpy(slot_data, &new_meta, sizeof(TupleMeta));
     // 标记页面为脏页并释放
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }
