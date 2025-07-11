@@ -100,7 +100,13 @@ class MvccInsertExecutor : public AbstractExecutor {
             if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
+            // 主键冲突
+            if (tuple_meta.is_deleted_ == false) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                    AbortReason::UPGRADE_CONFLICT);
+            }
             txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
+            fh_->insert_record_force(rid_, rec->data);
             if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {
                 txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid_, old_rec, tuple_meta, context_->txn_);
                 context_->txn_->append_write_record(
