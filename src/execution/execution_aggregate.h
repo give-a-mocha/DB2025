@@ -17,6 +17,7 @@ class AggregateExecutor : public AbstractExecutor {
     std::vector<AggregateType> agg_types_;                             // 聚合类型列表
     std::vector<std::unique_ptr<RmRecord>> aggregated_records_;        // 聚合后的记录
     std::vector<std::unique_ptr<RmRecord>>::iterator current_record_;  // 当前记录迭代器
+    BatchRecord batch_record;
 
    public:
     /**
@@ -100,7 +101,9 @@ class AggregateExecutor : public AbstractExecutor {
             // 没有分组，对所有记录执行聚合操作
             std::vector<std::unique_ptr<RmRecord>> records;
             while (!prev_->is_end()) {
-                records.push_back(prev_->Next());
+                // records.push_back(prev_->Next());
+                BatchRecord prev_records = prev_->Next();
+                records.insert(records.end(), prev_records.begin(), prev_records.end());
                 prev_->nextTuple();
             }
             auto record = aggregateGroup(records);
@@ -110,13 +113,19 @@ class AggregateExecutor : public AbstractExecutor {
         }
         // 初始化当前记录迭代器
         current_record_ = aggregated_records_.begin();
+        while(current_record_ != aggregated_records_.end() && !batch_record.full()) {
+            batch_record.push_back(std::make_unique<RmRecord>(**current_record_));
+            ++current_record_;
+        }
     }
 
     /**
      * @brief 移动到下一个元组
      */
     void nextTuple() override {
-        if (current_record_ != aggregated_records_.end()) {
+        batch_record.clear();
+        while(current_record_ != aggregated_records_.end() && !batch_record.full()) {
+            batch_record.push_back(std::make_unique<RmRecord>(**current_record_));
             ++current_record_;
         }
     }
@@ -125,7 +134,7 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 获取当前记录
      * @return 当前记录的副本
      */
-    std::unique_ptr<RmRecord> Next() override { return std::make_unique<RmRecord>(**current_record_); }
+    BatchRecord Next() override { return std::move(batch_record); }
 
     /**
      * @brief 检查是否已到达结尾

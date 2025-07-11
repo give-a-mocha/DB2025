@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief 顺序扫描执行器，负责实现表的全表顺序扫描功能
@@ -31,6 +32,7 @@ class SeqScanExecutor : public AbstractExecutor {
     std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
     SmManager *sm_manager_;             // 系统管理器指针
     std::unique_ptr<RmRecord> rec_;     // 当前记录的智能指针
+    BatchArray<std::unique_ptr<RmRecord>, BATCHSIZE> batch_rec_;
 
    public:
     /**
@@ -68,8 +70,9 @@ class SeqScanExecutor : public AbstractExecutor {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                // rec_ = std::move(rec);
+                batch_rec_.push_back(std::move(rec));
+                if (batch_rec_.full()) return ;
             }
             scan_->next();
         }
@@ -95,8 +98,8 @@ class SeqScanExecutor : public AbstractExecutor {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_.push_back(std::move(rec));
+                if (batch_rec_.full()) return ;
             }
             scan_->next();
         }
@@ -112,8 +115,8 @@ class SeqScanExecutor : public AbstractExecutor {
      * @brief 获取当前记录的数据
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
-    std::unique_ptr<RmRecord> Next() override {
-        return std::move(rec_);  // 返回当前记录并清空智能指针
+    BatchRecord Next() override {
+        return std::move(batch_rec_);  // 返回当前记录并清空智能指针
     }
 
     /**

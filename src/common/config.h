@@ -61,3 +61,6 @@ static const std::string DB_META_NAME = "db.meta";
 static constexpr size_t OFFSET_PAGE_START = 0;
 static constexpr size_t OFFSET_PAGE_LSN = 0;
 static constexpr size_t OFFSET_PAGE_HDR = 4;
+
+
+static constexpr size_t BATCHSIZE = 64;
