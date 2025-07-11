@@ -37,7 +37,7 @@ class IndexScanExecutor : public AbstractExecutor {
 
    public:
     IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
-                          std::vector<std::string> index_col_names, Context *context)
+                      std::vector<std::string> index_col_names, Context *context)
         : tab_(sm_manager->db_.get_table(tab_name)),
           conds_(std::move(conds)),
           fh_(sm_manager->fhs_.at(tab_name).get()),
@@ -47,11 +47,10 @@ class IndexScanExecutor : public AbstractExecutor {
           rid_(),
           scan_(nullptr),
           sm_manager_(sm_manager),
-          rec_(nullptr)
-    {
+          rec_(nullptr) {
         TRACE_FUNCTION
-        context_ = context; // Initialize context_ in the constructor body
-        //!先留着按道理应该在plan部分被调整顺序
+        context_ = context;  // Initialize context_ in the constructor body
+        //! 先留着按道理应该在plan部分被调整顺序
         for (auto &cond : conds_) {
             if (cond.lhs_col.tab_name != tab_.name) {
                 std::swap(cond.lhs_col, cond.rhs_col);
@@ -200,9 +199,7 @@ class IndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override { 
-        return std::move(rec_); 
-    }
+    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
 
     /**
      * @brief 获取记录的物理长度

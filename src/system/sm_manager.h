@@ -211,13 +211,15 @@ class SmManager {
         flush_meta();
     }
 
-    bool insert_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid);
+    bool insert_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid);
 
-    bool insert_index_force(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn);
+    bool insert_index_force(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
+                            Transaction* txn);
 
-    bool delete_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec);
+    bool delete_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec);
 
-    bool delete_index_with_rid(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn);
+    bool delete_index_with_rid(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
+                               Transaction* txn);
 
     void flush_to_disk() {
         for (const auto& [tab_name_, fh_] : fhs_) {
@@ -236,7 +238,7 @@ class SmManager {
 
     void draw_bplustree_graph();
 
-    std::string get_index_name(const std::string &filename, const std::vector<std::string> &index_cols) {
+    std::string get_index_name(const std::string& filename, const std::vector<std::string>& index_cols) {
         return ix_manager_->get_index_name(filename, index_cols);
     }
 };

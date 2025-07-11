@@ -122,7 +122,7 @@ class Portal {
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
-                
+
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root =
                         std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);

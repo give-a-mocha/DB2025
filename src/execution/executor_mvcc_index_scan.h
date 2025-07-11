@@ -21,19 +21,19 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccIndexScanExecutor : public AbstractExecutor {
    private:
-    TabMeta& tab_;                               // 表元数据
-    std::vector<Condition> conds_;              // 原始条件
-    RmFileHandle *fh_;                          // 表文件句柄
-    IxIndexHandle* ih_;                          // 索引句柄
-    size_t len_;                                // 记录长度
-    IndexMeta& index_meta_;                       // 索引元数据
-    Rid rid_;                                   // 当前记录ID
-    std::unique_ptr<IxScan> scan_;              // 扫描迭代器
-    SmManager *sm_manager_;                     // 系统管理器
+    TabMeta &tab_;                  // 表元数据
+    std::vector<Condition> conds_;  // 原始条件
+    RmFileHandle *fh_;              // 表文件句柄
+    IxIndexHandle *ih_;             // 索引句柄
+    size_t len_;                    // 记录长度
+    IndexMeta &index_meta_;         // 索引元数据
+    Rid rid_;                       // 当前记录ID
+    std::unique_ptr<IxScan> scan_;  // 扫描迭代器
+    SmManager *sm_manager_;         // 系统管理器
     TransactionManager *txn_mgr_;
-    std::unique_ptr<RmRecord> rec_;             // 当前记录
-    Iid lower_iid;                              // 索引下界
-    Iid upper_iid;                              // 索引上界
+    std::unique_ptr<RmRecord> rec_;  // 当前记录
+    Iid lower_iid;                   // 索引下界
+    Iid upper_iid;                   // 索引上界
 
    public:
     MvccIndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
@@ -48,11 +48,10 @@ class MvccIndexScanExecutor : public AbstractExecutor {
           scan_(nullptr),
           sm_manager_(sm_manager),
           txn_mgr_(txn_mgr),
-          rec_(nullptr)
-    {
+          rec_(nullptr) {
         TRACE_FUNCTION
-        context_ = context; // Initialize context_ in the constructor body
-        //!先留着按道理应该在plan部分被调整顺序
+        context_ = context;  // Initialize context_ in the constructor body
+        //! 先留着按道理应该在plan部分被调整顺序
         for (auto &cond : conds_) {
             if (cond.lhs_col.tab_name != tab_.name) {
                 std::swap(cond.lhs_col, cond.rhs_col);
@@ -208,9 +207,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override {
-        return std::move(rec_);
-    }
+    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
 
     /**
      * @brief 获取记录的物理长度

@@ -49,27 +49,29 @@ struct UndoLog {
     timestamp_t ts_{INVALID_TS};
     /* 撤销日志的前一个版本 */
     UndoLink prev_version_{};
-    
+
     // 构造函数
-    UndoLog(bool is_deleted, const RmRecord& record, timestamp_t ts = INVALID_TS, UndoLink prev_version = {})
+    UndoLog(bool is_deleted, const RmRecord &record, timestamp_t ts = INVALID_TS, UndoLink prev_version = {})
         : is_deleted_(is_deleted), record_(record), ts_(ts), prev_version_(prev_version) {}
-    
+
     // 默认构造函数
     UndoLog() : is_deleted_(false) {}
-    
+
     // 默认析构函数（编译器生成）
     ~UndoLog() = default;
-    
+
     // 禁用拷贝构造和拷贝赋值（避免意外拷贝大对象）
-    UndoLog(const UndoLog&) = delete;
-    UndoLog& operator=(const UndoLog&) = delete;
-    
+    UndoLog(const UndoLog &) = delete;
+    UndoLog &operator=(const UndoLog &) = delete;
+
     // 启用移动构造和移动赋值
-    UndoLog(UndoLog&& other) noexcept 
-        : is_deleted_(other.is_deleted_), 
-          record_(std::move(other.record_)), ts_(other.ts_), prev_version_(other.prev_version_) {}
-    
-    UndoLog& operator=(UndoLog&& other) noexcept {
+    UndoLog(UndoLog &&other) noexcept
+        : is_deleted_(other.is_deleted_),
+          record_(std::move(other.record_)),
+          ts_(other.ts_),
+          prev_version_(other.prev_version_) {}
+
+    UndoLog &operator=(UndoLog &&other) noexcept {
         if (this != &other) {
             is_deleted_ = other.is_deleted_;
             record_ = std::move(other.record_);
@@ -205,7 +207,7 @@ class Transaction {
         return {txn_id_, static_cast<int>(undo_logs_.size() - 1)};
     }
 
-    inline auto GetUndoLog(size_t log_id) -> const UndoLog* {
+    inline auto GetUndoLog(size_t log_id) -> const UndoLog * {
         std::scoped_lock<std::mutex> lck(latch_);
         // 注意：如果 log_id 无效，这里可能抛出 std::out_of_range 异常
         return undo_logs_[log_id].get();

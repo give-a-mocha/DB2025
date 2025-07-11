@@ -72,9 +72,7 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
 
     bool is_end() const override { return _is_end; }
 
-    std::unique_ptr<RmRecord> Next() override {
-        return std::move(rec_);
-    }
+    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
 
     size_t tupleLen() const override { return len_; }
 

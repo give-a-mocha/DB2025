@@ -159,7 +159,8 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             handle->update_record(rid, rec->data);
             sm_manager_->delete_index_with_rid(table_name, new_rec, rid, context->txn_);
             sm_manager_->insert_index_force(table_name, rec, rid, context->txn_);
-            log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid, table_name);
+            log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid,
+                                        table_name);
         } else if (write_type == WType::DELETE_TUPLE) {
             handle->insert_record_force(rid, rec->data);
             log_manager->add_insert_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
