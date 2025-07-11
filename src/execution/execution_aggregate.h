@@ -113,7 +113,7 @@ class AggregateExecutor : public AbstractExecutor {
         }
         // 初始化当前记录迭代器
         current_record_ = aggregated_records_.begin();
-        while(current_record_ != aggregated_records_.end() && !batch_record.full()) {
+        while (current_record_ != aggregated_records_.end() && !batch_record.full()) {
             batch_record.push_back(std::make_unique<RmRecord>(**current_record_));
             ++current_record_;
         }
@@ -124,7 +124,7 @@ class AggregateExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         batch_record.clear();
-        while(current_record_ != aggregated_records_.end() && !batch_record.full()) {
+        while (current_record_ != aggregated_records_.end() && !batch_record.full()) {
             batch_record.push_back(std::make_unique<RmRecord>(**current_record_));
             ++current_record_;
         }

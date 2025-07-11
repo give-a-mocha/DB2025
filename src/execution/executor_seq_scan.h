@@ -72,7 +72,7 @@ class SeqScanExecutor : public AbstractExecutor {
             if (eval_conds(cols_, fed_conds_, rec)) {
                 // rec_ = std::move(rec);
                 batch_rec_.push_back(std::move(rec));
-                if (batch_rec_.full()) return ;
+                if (batch_rec_.full()) return;
             }
             scan_->next();
         }
@@ -99,7 +99,7 @@ class SeqScanExecutor : public AbstractExecutor {
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
                 batch_rec_.push_back(std::move(rec));
-                if (batch_rec_.full()) return ;
+                if (batch_rec_.full()) return;
             }
             scan_->next();
         }
