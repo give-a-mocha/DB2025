@@ -116,7 +116,7 @@ class MvccInsertExecutor : public AbstractExecutor {
             //!插入到索引 在并发时可能有事务也插入
             sm_manager_->insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);
         }
-        context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
+        // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
         return nullptr;
     }
 

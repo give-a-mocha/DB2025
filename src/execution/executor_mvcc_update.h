@@ -159,7 +159,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 context_->txn_->append_write_record(
                     std::make_unique<WriteRecord>(tab_name_, rid));
             }
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
+            // context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
 
             // 插入新记录
             Rid insert_rid;
@@ -187,7 +187,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 //插入到索引
                 sm_manager_->insert_index_with_tab_meta(tab_, new_rec, insert_rid, context_->txn_);
             }
-            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid, tab_.name);
+            // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid, tab_.name);
         }
         return nullptr;
     }

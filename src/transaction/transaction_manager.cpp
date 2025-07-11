@@ -71,7 +71,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     txn->set_read_ts(last_commit_ts_);  // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
-    log_manager->add_begin_log(txn->get_transaction_id());
+    // log_manager->add_begin_log(txn->get_transaction_id());
 
     running_txns_.AddTxn(start_ts);  // 添加事务到水位线
     return txn;
@@ -118,8 +118,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 清空事务相关的集合
     txn->clear_lock_set();
 
-    log_manager->add_commit_log(txn->get_transaction_id());
-    log_manager->flush_log_to_disk();
+    // log_manager->add_commit_log(txn->get_transaction_id());
+    // log_manager->flush_log_to_disk();
 
     running_txns_.UpdateCommitTs(commit_ts);      // 更新水位线的提交时间戳
     running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
@@ -153,8 +153,10 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             TupleMeta delete_meta;
             delete_meta.is_deleted_ = true;  // 插入的记录不标记为
             fh_->update_tuple_meta(rid, delete_meta);
+            // log_manager->add_delete_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid, table_name);
         } else {
             fh_->insert_record_force(rid, undolog->record_.data);
+            // log_manager->add_insert_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid, table_name);
         }
     }
     txn->get_write_set()->clear();  // 清空写集合
@@ -173,7 +175,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
 
     txn->clear_lock_set();
     txn->set_state(TransactionState::ABORTED);
-    log_manager->add_abort_log(txn->get_transaction_id());
+    // log_manager->add_abort_log(txn->get_transaction_id());
 
     running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
 }

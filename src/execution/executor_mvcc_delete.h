@@ -74,7 +74,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
                 context_->txn_->append_write_record(
                     std::make_unique<WriteRecord>(tab_name_, rid));
             }
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
+            // context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
         }
         return nullptr;
     }

@@ -156,7 +156,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
                 break;
             }
             case PlanTag::T_Create_StaticCheckPoint: {
-                recovery_manager_->create_static_check_point();
+                // recovery_manager_->create_static_check_point();
                 break;
             }
             default:
