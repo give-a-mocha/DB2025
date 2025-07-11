@@ -54,10 +54,10 @@ class WriteRecord {
     // constructor for delete & update operation
     WriteRecord(WType wtype, const std::string &tab_name, const Rid &rid, const std::unique_ptr<RmRecord> &record)
         : wtype_(wtype), tab_name_(tab_name), rid_(rid) {
-            if (record) {
-                record_ = std::make_unique<RmRecord>(*record);
-            }
+        if (record) {
+            record_ = std::make_unique<RmRecord>(*record);
         }
+    }
 
     ~WriteRecord() = default;
 

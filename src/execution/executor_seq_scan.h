@@ -30,7 +30,7 @@ class SeqScanExecutor : public AbstractExecutor {
     Rid rid_;                           // 当前记录的RID
     std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
     SmManager *sm_manager_;             // 系统管理器指针
-    std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
+    std::unique_ptr<RmRecord> rec_;     // 当前记录的智能指针
 
    public:
     /**

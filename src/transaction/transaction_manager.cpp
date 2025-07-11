@@ -157,7 +157,8 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             handle->update_record(rid, rec->data, context);
             sm_manager_->delete_index_with_rid(table_name, new_rec, rid, context->txn_);
             sm_manager_->insert_index_force(table_name, rec, rid, context->txn_);
-            log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid, table_name);
+            log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid,
+                                        table_name);
         } else if (write_type == WType::DELETE_TUPLE) {
             handle->insert_record_force(rid, rec->data);
             log_manager->add_insert_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
@@ -440,7 +441,8 @@ bool TransactionManager::should_perform_gc() {
  * @param rid 插入的记录的RID
  * @param values 插入的记录值
  */
-void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values) {
+void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Rid rid,
+                                             const std::unique_ptr<RmRecord>& values) {
     auto log = std::make_unique<UndoLog>();
     log->is_deleted_ = false;
     log->record_ = RmRecord(*values);  // 复制记录值
@@ -457,7 +459,8 @@ void TransactionManager::add_insert_undo_log(Transaction* txn, const int& fd, Ri
  * @param values 修改前的记录值
  * @param modified_fields 修改的字段
  */
-void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid rid, const std::unique_ptr<RmRecord>& values) {
+void TransactionManager::add_update_undo_log(Transaction* txn, const int& fd, Rid rid,
+                                             const std::unique_ptr<RmRecord>& values) {
     // UndoLog log;
     // log.is_deleted_ = false;
     // log.is_inserted_ = false;

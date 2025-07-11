@@ -22,15 +22,15 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccSeqScanExecutor : public AbstractExecutor {
    private:
-    std::string tab_name_;              // 扫描的表名
-    std::vector<Condition> conds_;      // 过滤条件列表
-    RmFileHandle *fh_;                  // 表文件句柄
-    std::vector<ColMeta> cols_;         // 输出列的元数据
-    size_t len_;                        // 记录总长度(字节)
-    Rid rid_;                           // 当前记录的RID
-    std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
-    SmManager *sm_manager_;             // 系统管理器指针
-    TransactionManager *txn_mgr_;       // 事务管理器指针
+    std::string tab_name_;           // 扫描的表名
+    std::vector<Condition> conds_;   // 过滤条件列表
+    RmFileHandle *fh_;               // 表文件句柄
+    std::vector<ColMeta> cols_;      // 输出列的元数据
+    size_t len_;                     // 记录总长度(字节)
+    Rid rid_;                        // 当前记录的RID
+    std::unique_ptr<RecScan> scan_;  // 表扫描迭代器
+    SmManager *sm_manager_;          // 系统管理器指针
+    TransactionManager *txn_mgr_;    // 事务管理器指针
     std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
 
    public:

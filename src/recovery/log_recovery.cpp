@@ -19,7 +19,7 @@ void RecoveryManager::recovery() {
 
     // 辅助lambda函数：处理表操作日志记录（INSERT、DELETE、UPDATE）
     auto process_table_operation = [&](const auto *log_record_) {
-        const std::string& table_name = log_record_->table_name_;  // 修复：直接使用std::string
+        const std::string &table_name = log_record_->table_name_;  // 修复：直接使用std::string
         if (sm_manager_->fhs_.find(table_name) != sm_manager_->fhs_.end()) {
             tab_page_num[table_name] = std::max(tab_page_num[table_name], log_record_->rid_.page_no);
         }
@@ -121,7 +121,7 @@ void RecoveryManager::redo(LogRecord *log_record) {
     switch (log_record->log_type_) {
         case LogType::INSERT: {
             auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
-            const std::string& table_name = insert_log_record_->table_name_;  // 修复：直接使用std::string
+            const std::string &table_name = insert_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
@@ -132,7 +132,7 @@ void RecoveryManager::redo(LogRecord *log_record) {
         }
         case LogType::DELETE: {
             auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
-            const std::string& table_name = delete_log_record_->table_name_;  // 修复：直接使用std::string
+            const std::string &table_name = delete_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
@@ -141,7 +141,7 @@ void RecoveryManager::redo(LogRecord *log_record) {
         }
         case LogType::UPDATE: {
             auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
-            const std::string& table_name = update_log_record_->table_name_;  // 修复：直接使用std::string
+            const std::string &table_name = update_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
@@ -163,7 +163,7 @@ void RecoveryManager::undo(LogRecord *log_record) {
     switch (log_record->log_type_) {
         case LogType::INSERT: {
             auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
-            const std::string& table_name = insert_log_record_->table_name_;  // 修复：直接使用std::string
+            const std::string &table_name = insert_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
@@ -173,7 +173,7 @@ void RecoveryManager::undo(LogRecord *log_record) {
         }
         case LogType::DELETE: {
             auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
-            const std::string& table_name = delete_log_record_->table_name_;  // 修复：直接使用std::string
+            const std::string &table_name = delete_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
@@ -184,7 +184,7 @@ void RecoveryManager::undo(LogRecord *log_record) {
         }
         case LogType::UPDATE: {
             auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
-            const std::string& table_name = update_log_record_->table_name_;  // 修复：直接使用std::string
+            const std::string &table_name = update_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }

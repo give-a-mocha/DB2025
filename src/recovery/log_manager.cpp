@@ -32,12 +32,12 @@ void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
     if (log_buffer_.is_full(log_record->log_tot_len_)) {
         flush_log_to_disk_without_lock();
     }
-    
+
     // 使用虚函数多态机制，这比dynamic_cast更高效
     // 每个子类都正确重写了serialize方法，会自动调用正确的版本
     log_record->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
     log_buffer_.offset_ += log_record->log_tot_len_;
-    
+
     // 超过一半写入磁盘
     if (log_buffer_.offset_ > (LOG_BUFFER_SIZE >> 1)) {
         flush_log_to_disk_without_lock();
@@ -58,7 +58,7 @@ void LogManager::flush_log_to_disk() {
 
 void LogManager::flush_log_to_disk_without_lock() {
     if (log_buffer_.offset_ == 0) return;  // 优化：避免不必要的磁盘写入
-    
+
     // 将缓冲区内容写入磁盘
     disk_manager_->write_log(log_buffer_.buffer_, static_cast<int>(log_buffer_.offset_));
     log_buffer_.reset();
@@ -76,8 +76,8 @@ void LogManager::add_delete_log(txn_id_t txn_id, std::unique_ptr<RmRecord> delet
     add_log_to_buffer(&delete_log);
 }
 
-void LogManager::add_update_log(txn_id_t txn_id, std::unique_ptr<RmRecord> new_rec, std::unique_ptr<RmRecord> old_rec, const Rid &rid,
-                                const std::string &table_name) {
+void LogManager::add_update_log(txn_id_t txn_id, std::unique_ptr<RmRecord> new_rec, std::unique_ptr<RmRecord> old_rec,
+                                const Rid &rid, const std::string &table_name) {
     UpdateLogRecord update_log(txn_id, std::move(old_rec), std::move(new_rec), rid, table_name);
     add_log_to_buffer(&update_log);
 }
@@ -101,18 +101,18 @@ std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t o
     std::vector<std::unique_ptr<LogRecord>> log_records_;
     const auto file_size_ = static_cast<size_t>(disk_manager_->get_file_size(LOG_FILE_NAME));
     if (file_size_ <= offset) return log_records_;  // 优化：早期返回
-    
+
     // 优化：预估容器大小，减少重新分配
     log_records_.reserve((file_size_ - offset) / LOG_HEADER_SIZE);
-    
+
     auto buffer = std::make_unique<char[]>(file_size_);
     disk_manager_->read_log(buffer.get(), file_size_, static_cast<int>(offset));
 
     auto start_offset = offset;
     while (offset < file_size_) {
         // 优化：直接读取日志类型，避免创建临时对象
-        LogType log_type = *reinterpret_cast<const LogType*>(buffer.get() + offset - start_offset);
-        
+        LogType log_type = *reinterpret_cast<const LogType *>(buffer.get() + offset - start_offset);
+
         std::unique_ptr<LogRecord> log_record_;
         switch (log_type) {
             case LogType::BEGIN: {
@@ -143,7 +143,7 @@ std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t o
                 throw RMDBError("not supported log type");
             }
         }
-        
+
         // 统一反序列化和处理
         log_record_->deserialize(buffer.get() + offset - start_offset);
         offset += log_record_->log_tot_len_;

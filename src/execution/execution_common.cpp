@@ -30,13 +30,14 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
     return values;
 }
 
-auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const std::vector<UndoLog> &undo_logs) -> std::optional<std::unique_ptr<RmRecord>> {
+auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple,
+                      const std::vector<UndoLog> &undo_logs) -> std::optional<std::unique_ptr<RmRecord>> {
     // if (undo_logs.empty()) {
     //     return std::move(base_tuple);  // 如果没有撤销日志，直接返回原始记录
     // }
     // bool is_deleted = false;
     // for (const auto &undo_log : undo_logs) {
-        
+
     // }
 }
 
@@ -62,7 +63,7 @@ bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle 
     auto undolink = txn_mgr->GetUndoLink(fh->GetFd(), rid);
     if (undolink.IsValid()) {
         auto pre_txn = undolink.prev_txn_;
-        const UndoLog* undo_log = txn_mgr->GetUndoLog(undolink);
+        const UndoLog *undo_log = txn_mgr->GetUndoLog(undolink);
         // 检查是否有事务更新它且提交时间大于当前事务读时间
         if (pre_txn != txn->get_transaction_id() && undo_log->ts_ > txn->get_read_ts()) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);

@@ -105,8 +105,9 @@ class Portal {
                         rids.push_back(scan->rid());
                         old_recs.push_back(scan->Next());
                     }
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
-                        sm_manager_, x->tab_name_, x->set_clauses_, x->conds_, rids, std::move(old_recs), context, txn_mgr);
+                    std::unique_ptr<AbstractExecutor> root =
+                        std::make_unique<MvccUpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_, x->conds_,
+                                                             rids, std::move(old_recs), context, txn_mgr);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -126,7 +127,7 @@ class Portal {
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
-                
+
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root =
                         std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);

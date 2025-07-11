@@ -98,12 +98,12 @@ struct TupleMeta {
  * @note 文件头信息在表创建时初始化，并随表的修改而更新
  */
 struct RmFileHdr {
-    int record_size;           // 每条记录的固定大小
-    int num_pages;             // 已分配的页面总数
-    int num_records_per_page;  // 每页的最大记录数
-    std::atomic<int> first_free_page_no;    // 空闲页面链表的头部
-    int bitmap_size;           // 每页位图的字节数
-    int record_num;            // 表中的当前记录数
+    int record_size;                      // 每条记录的固定大小
+    int num_pages;                        // 已分配的页面总数
+    int num_records_per_page;             // 每页的最大记录数
+    std::atomic<int> first_free_page_no;  // 空闲页面链表的头部
+    int bitmap_size;                      // 每页位图的字节数
+    int record_num;                       // 表中的当前记录数
 };
 
 /**
@@ -145,7 +145,7 @@ struct RmRecord {
         memcpy(data, other.data, size);
         allocated_ = true;
     }
-    
+
     RmRecord& operator=(const RmRecord& other) {
         if (this != &other) {
             // 释放当前资源
@@ -166,7 +166,7 @@ struct RmRecord {
         data = other.data;
         size = other.size;
         allocated_ = other.allocated_;
-        
+
         // 清空源对象
         other.data = nullptr;
         other.size = 0;
@@ -180,12 +180,12 @@ struct RmRecord {
             if (allocated_) {
                 delete[] data;
             }
-            
+
             // 移动资源
             data = other.data;
             size = other.size;
             allocated_ = other.allocated_;
-            
+
             // 清空源对象
             other.data = nullptr;
             other.size = 0;

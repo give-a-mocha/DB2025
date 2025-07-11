@@ -21,18 +21,19 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccDeleteExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                   // 表的元数据
-    std::vector<Condition> conds_;  // 删除条件列表
-    RmFileHandle *fh_;              // 表的数据文件句柄
-    std::vector<Rid> rids_;         // 待删除记录的RID列表
-    std::vector<std::unique_ptr<RmRecord>> old_recs_;   // 旧记录列表
-    std::string tab_name_;          // 表名
-    SmManager *sm_manager_;         // 系统管理器指针
-    TransactionManager *txn_mgr_;   // 事务管理器指针
+    TabMeta tab_;                                      // 表的元数据
+    std::vector<Condition> conds_;                     // 删除条件列表
+    RmFileHandle *fh_;                                 // 表的数据文件句柄
+    std::vector<Rid> rids_;                            // 待删除记录的RID列表
+    std::vector<std::unique_ptr<RmRecord>> old_recs_;  // 旧记录列表
+    std::string tab_name_;                             // 表名
+    SmManager *sm_manager_;                            // 系统管理器指针
+    TransactionManager *txn_mgr_;                      // 事务管理器指针
 
    public:
     MvccDeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                       std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context, TransactionManager *txn_mgr) {
+                       std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context,
+                       TransactionManager *txn_mgr) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         tab_ = sm_manager_->db_.get_table(tab_name);
@@ -60,7 +61,8 @@ class MvccDeleteExecutor : public AbstractExecutor {
             txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_recs_[i]));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_recs_[i]), rid, tab_.name);
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_recs_[i]), rid,
+                                               tab_.name);
             i++;
         }
         return nullptr;

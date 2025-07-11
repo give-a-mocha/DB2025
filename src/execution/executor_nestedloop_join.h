@@ -22,13 +22,13 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;
     std::unique_ptr<AbstractExecutor> right_;
-    size_t len_;                        // 连接结果记录长度
-    std::vector<ColMeta> cols_;         // 结果集列元数据
-    std::vector<Condition> fed_conds_;  // 连接条件列表
-    bool _is_end;                       // 扫描结束标志
-    std::unique_ptr<RmRecord> left_rec_; // 左表当前记录
-    std::unique_ptr<RmRecord> right_rec_;// 右表当前记录
-    std::unique_ptr<RmRecord> rec_;     // 结果当前记录
+    size_t len_;                           // 连接结果记录长度
+    std::vector<ColMeta> cols_;            // 结果集列元数据
+    std::vector<Condition> fed_conds_;     // 连接条件列表
+    bool _is_end;                          // 扫描结束标志
+    std::unique_ptr<RmRecord> left_rec_;   // 左表当前记录
+    std::unique_ptr<RmRecord> right_rec_;  // 右表当前记录
+    std::unique_ptr<RmRecord> rec_;        // 结果当前记录
 
    public:
     /**

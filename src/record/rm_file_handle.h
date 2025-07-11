@@ -111,7 +111,7 @@ class RmFileHandle {
                                               // - num_records_per_page: 每页记录数
                                               // - first_free_page_no: 第一个可用页面号
                                               // - bitmap_size: 每页位图大小
-    std::mutex latch_;  // 互斥锁，用于insert_record的并发访问
+    std::mutex latch_;                        // 互斥锁，用于insert_record的并发访问
 
    public:
     /**
@@ -131,7 +131,7 @@ class RmFileHandle {
         disk_manager_->set_fd2pageno(fd, file_hdr_.num_pages);
     }
 
-    const RmFileHdr& get_file_hdr() const { return file_hdr_; }
+    const RmFileHdr &get_file_hdr() const { return file_hdr_; }
     int GetFd() { return fd_; }
 
     /**

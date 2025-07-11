@@ -25,21 +25,21 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
-    TabMeta& tab_;                                       // 表的元数据
-    std::vector<Condition> conds_;                      // 更新条件列表
-    RmFileHandle *fh_;                                  // 表的数据文件句柄
-    std::vector<Rid> rids_;                             // 待更新记录的RID列表
-    std::vector<std::unique_ptr<RmRecord>> old_recs_;   // 旧记录列表
-    std::string tab_name_;                              // 表名
-    std::vector<SetClause> set_clauses_;                // SET子句列表(新值)
-    SmManager *sm_manager_;                             // 系统管理器指针
-    TransactionManager *txn_mgr_;                       // 事务管理器指针
+    TabMeta &tab_;                                     // 表的元数据
+    std::vector<Condition> conds_;                     // 更新条件列表
+    RmFileHandle *fh_;                                 // 表的数据文件句柄
+    std::vector<Rid> rids_;                            // 待更新记录的RID列表
+    std::vector<std::unique_ptr<RmRecord>> old_recs_;  // 旧记录列表
+    std::string tab_name_;                             // 表名
+    std::vector<SetClause> set_clauses_;               // SET子句列表(新值)
+    SmManager *sm_manager_;                            // 系统管理器指针
+    TransactionManager *txn_mgr_;                      // 事务管理器指针
 
    public:
     MvccUpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                       std::vector<Condition> conds, std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context,
-                       TransactionManager *txn_mgr)
-                       : tab_(sm_manager->db_.get_table(tab_name)){
+                       std::vector<Condition> conds, std::vector<Rid> rids,
+                       std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context, TransactionManager *txn_mgr)
+        : tab_(sm_manager->db_.get_table(tab_name)) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = std::move(set_clauses);
@@ -125,7 +125,6 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            
             std::vector<Value> values(tab_.cols.size());
             for (int i = 0; i < (int)tab_.cols.size(); ++i) {
                 if (is_modify[i]) {
@@ -146,7 +145,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
             txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_rec));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid,
+                                               tab_.name);
 
             auto rid_ = fh_->insert_record(new_rec->data, context_);
             txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
@@ -159,7 +159,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
             txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, new_rec);
             context_->txn_->append_write_record(
                 std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, new_rec));
-            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), rid_, tab_.name);
+            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), rid_,
+                                               tab_.name);
         }
         return nullptr;
     }
