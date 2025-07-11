@@ -211,15 +211,17 @@ class SmManager {
         flush_meta();
     }
 
-    bool insert_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid);
+    std::unique_ptr<char[]> make_index_key(const IndexMeta& index,const std::unique_ptr<IxIndexHandle>& ih, const std::unique_ptr<RmRecord>& rec);
 
-    bool insert_index_force(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
-                            Transaction* txn);
+    bool exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Rid &rid, Transaction* txn);
 
-    bool delete_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec);
+    bool insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn);
 
-    bool delete_index_with_rid(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
-                               Transaction* txn);
+    bool insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn);
+
+    bool delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Transaction* txn);
+
+    bool delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Transaction* txn);
 
     void flush_to_disk() {
         for (const auto& [tab_name_, fh_] : fhs_) {

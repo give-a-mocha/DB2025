@@ -21,7 +21,7 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccDeleteExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                   // 表的元数据
+    TabMeta& tab_;                   // 表的元数据
     std::vector<Condition> conds_;  // 删除条件列表
     RmFileHandle *fh_;              // 表的数据文件句柄
     std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;   // 旧记录列表
@@ -31,10 +31,10 @@ class MvccDeleteExecutor : public AbstractExecutor {
 
    public:
     MvccDeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                      std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context, TransactionManager *txn_mgr) {
+                      std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context, TransactionManager *txn_mgr)
+                      :tab_(sm_manager->db_.get_table(tab_name)) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
-        tab_ = sm_manager_->db_.get_table(tab_name);
         fh_ = sm_manager_->fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         old_recs_ = std::move(old_recs);
@@ -55,12 +55,12 @@ class MvccDeleteExecutor : public AbstractExecutor {
             auto &rid = std::get<2>(rec_tuple);
             auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
             // 先获取写锁
+            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
             bool ok = txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
             if (!ok) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
-            }
-            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
-                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             if (base_meta.is_deleted_) {
                 // 如果元组已经被删除，跳过
@@ -71,9 +71,9 @@ class MvccDeleteExecutor : public AbstractExecutor {
             fh_->update_tuple_meta(rid, delete_meta);
             if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {
                 txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid, old_rec, base_meta, context_->txn_);
+                context_->txn_->append_write_record(
+                    std::make_unique<WriteRecord>(tab_name_, rid));
             }
-            context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_rec));
             context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
         }
         return nullptr;

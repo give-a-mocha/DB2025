@@ -24,9 +24,6 @@ auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& bas
 
 auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool;
 
-bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
-                       TransactionManager *txn_mgr, SmManager *sm_manager);
-
 /**
  * @brief 递归地计算算术表达式的值
  * @param term 当前要求值的表达式项

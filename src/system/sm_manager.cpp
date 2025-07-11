@@ -441,7 +441,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
         // 将键值对插入B+树
         // 键：索引列值的组合
         // 值：记录的RID
-        auto&& res = ih_->insert_entry_without_lock(key, rmScan.rid());
+        auto res = ih_->insert_entry_without_lock(key, rmScan.rid());
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (!res) {
             drop_index(tab_name, col_names, context);
@@ -513,95 +513,76 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-bool SmManager::insert_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid) {
-    TabMeta& tab_ = db_.get_table(tab_name);
-    std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
-    inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
-
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        // 获取索引句柄
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-
-        // 构造索引键值
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-
-        // 插入索引项
-        bool res = ih->insert_entry_without_lock(key.get(), rid);
-        if (!res) {
-            // 插入失败，回滚已插入的索引
-            for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
-                auto& rollback_index = tab_.indexes[rollback_i];
-                auto rollback_ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
-                rollback_ih->delete_entry_without_lock(inserted_keys[rollback_i].get());
-            }
-            return false;
-        }
-        inserted_keys.emplace_back(std::move(key));
+std::unique_ptr<char[]> SmManager::make_index_key(const IndexMeta& index,const std::unique_ptr<IxIndexHandle>& ih, const std::unique_ptr<RmRecord>& rec) {
+    auto key = std::make_unique<char[]>(index.col_tot_len);
+    int offset = 0;
+    for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+        memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
+        offset += index.cols[j].len;
     }
-    return true;
+    return key;
 }
 
-bool SmManager::insert_index_force(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
-                                   Transaction* txn) {
+bool SmManager::insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid, Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-        // 插入索引项
-        ih->insert_entry_force(key.get(), rid, txn);
-    }
-    return true;
+    return insert_index_with_tab_meta(tab_, rec, rid, txn);
 }
 
-bool SmManager::delete_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec) {
-    TabMeta& tab_ = db_.get_table(tab_name);
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-        // 删除索引项
-        ih->delete_entry_without_lock(key.get());
+bool SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn = nullptr) {
+    if (tab_.indexes.empty()) {
+        return true;  // 没有索引，直接返回true
     }
-    return true;
+    if (tab_.indexes.size() > 1) {
+        throw InternalError("Multiple indexes not supported in insert_index_with_tab_meta");
+    }
+    auto& index = tab_.indexes[0];
+    auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+    // 构造索引键值
+    auto key = make_index_key(index, ih, rec);
+    // 插入索引项
+    if (txn == nullptr) {
+        return ih->insert_entry_without_lock(key.get(), rid);
+    } else {
+        return ih->insert_entry(key.get(), rid, txn);
+    }
 }
 
-bool SmManager::delete_index_with_rid(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
-                                      Transaction* txn) {
+bool SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-        // 删除索引项
-        ih->delete_entry_with_rid(key.get(), rid, txn);
+    return delete_index_with_tab_meta(tab_, rec, txn);
+}
+
+bool SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Transaction* txn = nullptr) {
+    if (tab_.indexes.empty()) {
+        return true;  // 没有索引，直接返回true
     }
-    return true;
+    if (tab_.indexes.size() > 1) {
+        throw InternalError("Multiple indexes not supported in delete_index_with_tab_meta");
+    }
+    auto& index = tab_.indexes[0];
+    //TODO :可以考虑优化
+    auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+    // 构造索引键值
+    auto key = make_index_key(index, ih, rec);
+    if (txn == nullptr) {
+        return ih->delete_entry_without_lock(key.get());
+    } else {
+        return ih->delete_entry(key.get(), txn);
+    }
+}
+
+//!唯一索引
+bool SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Rid &rid, Transaction* txn) {
+    if (tab_.indexes.empty()) {
+        return false;  // 没有索引，直接返回false
+    }
+    if (tab_.indexes.size() > 1) {
+        throw InternalError("Multiple indexes not supported in exist_in_index");
+    }
+    auto& index = tab_.indexes[0];
+    auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+    auto key = make_index_key(index, ih, rec);
+    return ih->get_value(key.get(), rid, txn);
 }
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
@@ -678,7 +659,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
 
         // 插入索引
         auto rec = std::make_unique<RmRecord>(record_size, record_data + start_offset);
-        insert_index_without_lock(table_name, rec, rid_);
+        insert_index_with_tab_meta(tab_, rec, rid_);
 
         // 检查是否需要创建新页
         if (count == max_record_num) {

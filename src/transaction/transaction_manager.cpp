@@ -142,31 +142,20 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     Transaction* txn = context->txn_;
 
     auto write_set = txn->get_write_set();
+    for (size_t i = 0; i < write_set->size(); ++i) {
+        const auto table_name = (*write_set)[i]->GetTableName();
+        const auto rid = (*write_set)[i]->GetRid();
+        const UndoLog* undolog = txn->GetUndoLog(i);
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
 
-    for (auto iter = write_set->rbegin(); iter != write_set->rend(); iter++) {
-        const auto write_type = (*iter)->GetWriteType();
-        const auto table_name = (*iter)->GetTableName();
-        const auto rid = (*iter)->GetRid();
-        auto&& rec = (*iter)->GetRecord();
-        std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
-        if (write_type == WType::INSERT_TUPLE) {
-            handle->delete_record(rid);
-            sm_manager_->delete_index_with_rid(table_name, rec, rid, context->txn_);
-            log_manager->add_delete_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
-        } else if (write_type == WType::UPDATE_TUPLE) {
-            //! 按道理来说不应该出现这种情况，因为更新操作是insert + delete
-            auto [tuple_meta, new_rec] = handle->get_record(rid);
-            handle->update_record(rid, rec->data);
-            sm_manager_->delete_index_with_rid(table_name, new_rec, rid, context->txn_);
-            sm_manager_->insert_index_force(table_name, rec, rid, context->txn_);
-            log_manager->add_update_log(context->txn_->get_transaction_id(), std::move(new_rec), std::move(rec), rid,
-                                        table_name);
-        } else if (write_type == WType::DELETE_TUPLE) {
-            handle->insert_record_force(rid, rec->data);
-            log_manager->add_insert_log(context->txn_->get_transaction_id(), std::move(rec), rid, table_name);
+        DeleteUndoLink(fh_->GetFd(), rid, context->txn_);
+        if (undolog->is_deleted_) {
+            TupleMeta delete_meta;
+            delete_meta.is_deleted_ = true;  // 插入的记录不标记为
+            fh_->update_tuple_meta(rid, delete_meta);
+        } else {
+            fh_->insert_record_force(rid, undolog->record_.data);
         }
-        // 删除版本链记录
-        DeleteUndoLink(handle->GetFd(), rid, context->txn_);
     }
     txn->get_write_set()->clear();  // 清空写集合
 
@@ -212,13 +201,13 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
     return true;  // 更新成功，返回 true
 }
 
-UndoLink TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn) {
+void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn) {
     // 获取对应的版本信息
     std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
     auto it = version_info_.find(page_id);
     if (it == version_info_.end()) {
-        return UndoLink{};
+        return ;
     }
     auto& version_info = it->second;
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
@@ -227,9 +216,7 @@ UndoLink TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction*
     auto prev_version_it = prev_version_map.find(rid.slot_no);
     if (prev_version_it != prev_version_map.end()) {
         UndoLink undolink = prev_version_it->second;
-        while (undolink.IsValid() && undolink.prev_txn_ == txn->get_transaction_id()) {
-            undolink = GetUndoLog(undolink)->prev_version_;
-        }
+        undolink = GetUndoLog(undolink)->prev_version_;
         if (undolink.IsValid()) {
             // 如果撤销链接有效，则更新版本链接
             prev_version_it->second = undolink;
@@ -237,9 +224,9 @@ UndoLink TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction*
             // 如果撤销链接无效，则删除该版本链接
             prev_version_map.erase(prev_version_it);
         }
-        return undolink;
+        return ;
     }
-    return UndoLink{};
+    return ;
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
@@ -313,24 +300,7 @@ const UndoLog* TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
 timestamp_t TransactionManager::GetWatermark() { return running_txns_.GetWatermark(); }
 
 void TransactionManager::do_delete(Transaction* txn) {
-    if (txn == nullptr || txn->get_write_set() == nullptr) {
-        return;
-    }
-
-    for (const auto& iter : *txn->get_write_set()) {
-        const auto write_type = iter->GetWriteType();
-        const auto table_name = iter->GetTableName();
-        const auto rid = iter->GetRid();
-        std::unique_ptr<RmFileHandle>& handle = sm_manager_->fhs_.at(table_name);
-        if (write_type == WType::DELETE_TUPLE) {
-            handle->delete_record(rid);
-
-            sm_manager_->delete_index_with_rid(table_name, iter->GetRecord(), rid, txn);
-        }
-    }
-
-    txn->get_write_set()->clear();  // 清空写集合
-    txn->ClearUndoLogs();           // 清空撤销日志
+    
 }
 
 bool TransactionManager::is_transaction_expired(Transaction* txn, timestamp_t watermark) const {

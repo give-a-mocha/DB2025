@@ -132,9 +132,8 @@ class TransactionManager {
 
     /**
      * @brief 删除txn的撤销链接
-     * @return 返回当前的最后一个撤销链接。
      */
-    UndoLink DeleteUndoLink(const int &fd, Rid rid, Transaction *txn);
+    void DeleteUndoLink(const int &fd, Rid rid, Transaction *txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
     UndoLink GetUndoLink(const int &fd, Rid rid);
 
@@ -158,6 +157,11 @@ class TransactionManager {
     bool should_perform_gc();
 
     auto GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta, Transaction *txn) -> bool;
+
+    //先占位
+    auto UpdateTupleAndUndoLink() -> void;
+    //先占位
+    auto GetTupleAndUndoLink() -> void;
 
     void do_delete(Transaction *txn);
 

@@ -100,7 +100,7 @@ class Transaction {
     timestamp_t start_ts_;
 
     // 事务包含的所有写操作
-    std::shared_ptr<std::deque<std::unique_ptr<WriteRecord>>> write_set_;
+    std::shared_ptr<std::vector<std::unique_ptr<WriteRecord>>> write_set_;
     // 事务申请的所有锁
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set_;
 
@@ -128,7 +128,7 @@ class Transaction {
     explicit Transaction(txn_id_t txn_id, IsolationLevel isolation_level = IsolationLevel::SERIALIZABLE)
         : state_(TransactionState::DEFAULT), isolation_level_(isolation_level), txn_id_(txn_id) {
         /* 初始化事务的写集合（记录所有写操作），使用智能指针 */
-        write_set_ = std::make_shared<std::deque<std::unique_ptr<WriteRecord>>>();
+        write_set_ = std::make_shared<std::vector<std::unique_ptr<WriteRecord>>>();
         /* 初始化事务持有的锁集合 */
         lock_set_ = std::make_shared<std::unordered_set<LockDataId>>();
 
@@ -168,7 +168,7 @@ class Transaction {
     inline void set_prev_lsn(lsn_t prev_lsn) { prev_lsn_ = prev_lsn; }
 
     // 返回写集合的共享指针
-    inline std::shared_ptr<std::deque<std::unique_ptr<WriteRecord>>> get_write_set() { return write_set_; }
+    inline std::shared_ptr<std::vector<std::unique_ptr<WriteRecord>>> get_write_set() { return write_set_; }
 
     // 向写集合添加一个写记录 (接收 unique_ptr)
     inline void append_write_record(std::unique_ptr<WriteRecord> write_record) {
