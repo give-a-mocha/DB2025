@@ -69,13 +69,9 @@ class Page {
 
     bool is_dirty() const { return is_dirty_; }
 
-    static constexpr size_t OFFSET_PAGE_START = 0;
-    static constexpr size_t OFFSET_LSN = 0;
-    static constexpr size_t OFFSET_PAGE_HDR = 4;
+    inline lsn_t get_page_lsn() { return *reinterpret_cast<lsn_t *>(get_data() + OFFSET_PAGE_LSN); }
 
-    inline lsn_t get_page_lsn() { return *reinterpret_cast<lsn_t *>(get_data() + OFFSET_LSN); }
-
-    inline void set_page_lsn(lsn_t page_lsn) { memcpy(get_data() + OFFSET_LSN, &page_lsn, sizeof(lsn_t)); }
+    inline void set_page_lsn(lsn_t page_lsn) { memcpy(get_data() + OFFSET_PAGE_LSN, &page_lsn, sizeof(lsn_t)); }
 
     /** Acquire the page write latch. */
     inline void WLatch() { rwlatch_.WLock(); }

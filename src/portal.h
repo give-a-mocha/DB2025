@@ -27,15 +27,12 @@ See the Mulan PSL v2 for more details. */
 #include "execution/execution_group.h"
 #include "execution/execution_sort.h"
 #include "execution/executor_abstract.h"
-#include "execution/executor_delete.h"
 #include "execution/executor_index_scan.h"
-#include "execution/executor_insert.h"
 #include "execution/executor_limit.h"
 #include "execution/executor_nestedloop_join.h"
 #include "execution/executor_nestedloop_semi_join.h"
 #include "execution/executor_projection.h"
 #include "execution/executor_seq_scan.h"
-#include "execution/executor_update.h"
 #include "optimizer/plan.h"
 #include "execution/executor_mvcc_update.h"
 #include "execution/executor_mvcc_delete.h"
@@ -103,11 +100,13 @@ class Portal {
                 case PlanTag::T_Update: {
                     std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context, txn_mgr, true);
                     std::vector<Rid> rids;
+                    std::vector<std::unique_ptr<RmRecord>> old_recs;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
+                        old_recs.push_back(scan->Next());
                     }
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
-                        sm_manager_, x->tab_name_, x->set_clauses_, x->conds_, rids, context, txn_mgr);
+                        sm_manager_, x->tab_name_, x->set_clauses_, x->conds_, rids, std::move(old_recs), context, txn_mgr);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -115,17 +114,19 @@ class Portal {
                 case PlanTag::T_Delete: {
                     std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context, txn_mgr, true);
                     std::vector<Rid> rids;
+                    std::vector<std::unique_ptr<RmRecord>> old_recs;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
+                        old_recs.push_back(scan->Next());
                     }
 
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(
-                        sm_manager_, x->tab_name_, x->conds_, rids, context, txn_mgr);
+                        sm_manager_, x->tab_name_, x->conds_, rids, std::move(old_recs), context, txn_mgr);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
                 }
-
+                
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root =
                         std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);

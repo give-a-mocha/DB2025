@@ -56,3 +56,8 @@ static const std::string LOG_FILE_NAME = "db.log";
 static const std::string REPLACER_TYPE = "LRU";
 
 static const std::string DB_META_NAME = "db.meta";
+
+// rmPage
+static constexpr size_t OFFSET_PAGE_START = 0;
+static constexpr size_t OFFSET_PAGE_LSN = 0;
+static constexpr size_t OFFSET_PAGE_HDR = 4;

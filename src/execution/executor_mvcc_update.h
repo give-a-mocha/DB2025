@@ -25,35 +25,28 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                         // 表的元数据
-    std::vector<Condition> conds_;        // 更新条件列表
-    RmFileHandle *fh_;                    // 表的数据文件句柄
-    std::vector<Rid> rids_;               // 待更新记录的RID列表
-    std::string tab_name_;                // 表名
-    std::vector<SetClause> set_clauses_;  // SET子句列表(新值)
-    SmManager *sm_manager_;               // 系统管理器指针
-    TransactionManager *txn_mgr_;         // 事务管理器指针
+    TabMeta& tab_;                                       // 表的元数据
+    std::vector<Condition> conds_;                      // 更新条件列表
+    RmFileHandle *fh_;                                  // 表的数据文件句柄
+    std::vector<Rid> rids_;                             // 待更新记录的RID列表
+    std::vector<std::unique_ptr<RmRecord>> old_recs_;   // 旧记录列表
+    std::string tab_name_;                              // 表名
+    std::vector<SetClause> set_clauses_;                // SET子句列表(新值)
+    SmManager *sm_manager_;                             // 系统管理器指针
+    TransactionManager *txn_mgr_;                       // 事务管理器指针
 
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     * @param tab_name 目标表名
-     * @param set_clauses SET子句列表
-     * @param conds 更新条件列表
-     * @param rids 待更新记录的RID列表
-     * @param context 执行上下文
-     */
     MvccUpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                       std::vector<Condition> conds, std::vector<Rid> rids, Context *context,
-                       TransactionManager *txn_mgr) {
+                       std::vector<Condition> conds, std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context,
+                       TransactionManager *txn_mgr)
+                       : tab_(sm_manager->db_.get_table(tab_name)){
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = std::move(set_clauses);
-        tab_ = sm_manager_->db_.get_table(tab_name);
         fh_ = sm_manager_->fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         rids_ = std::move(rids);
+        old_recs_ = std::move(old_recs);
         context_ = context;
         txn_mgr_ = txn_mgr;
     }
@@ -73,7 +66,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 continue;
             }
             // 获取旧记录并创建新记录
-            auto old_rec = fh_->get_record(rid, context_);
+            auto old_rec = std::move(old_recs_[i]);
             auto new_rec = std::make_unique<RmRecord>(old_rec->size, old_rec->data);
             std::vector<bool> is_modify(tab_.cols.size(), false);
 
@@ -132,6 +125,14 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
+            
+            std::vector<Value> values(tab_.cols.size());
+            for (int i = 0; i < (int)tab_.cols.size(); ++i) {
+                if (is_modify[i]) {
+                    values[i].set_col_data(tab_.cols[i].type, old_rec->data + tab_.cols[i].offset, tab_.cols[i].len);
+                    values[i].init_raw(tab_.cols[i].len);
+                }
+            }
             // 获取全局条件
             std::vector<Condition> conds =
                 txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
@@ -141,23 +142,24 @@ class MvccUpdateExecutor : public AbstractExecutor {
 
             // update = delete + insert
 
-            auto insert_rid = fh_->insert_record(new_rec->data, context_);
-            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd());
-            txn_mgr_->add_update_undo_log(context_->txn_, fh_->GetFd(), rid, insert_rid);
+            // fh_->delete_record(rid, context_);
+            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
+            context_->txn_->append_write_record(
+                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_rec));
+            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
 
+            auto rid_ = fh_->insert_record(new_rec->data, context_);
+            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
             // 添加日志要在插入索引之后，因为abort会回滚索引
-            if (!mvcc_insert_index(tab_, new_rec, insert_rid, context_, txn_mgr_, sm_manager_)) {
-                fh_->delete_record(insert_rid, context_);
+            if (!mvcc_insert_index(tab_, new_rec, rid_, context_, txn_mgr_, sm_manager_)) {
+                fh_->delete_record(rid_, context_);
                 txn_mgr_->abort(context_, context_->log_mgr_);
                 throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
             }
-
+            txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, new_rec);
             context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, *old_rec));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), *old_rec, rid, tab_.name);
-            context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, insert_rid, *new_rec));
-            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), *new_rec, insert_rid, tab_.name);
+                std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, new_rec));
+            context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), rid_, tab_.name);
         }
         return nullptr;
     }

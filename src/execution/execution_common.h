@@ -27,6 +27,8 @@ bool get_lock_and_check_conflict(Transaction *txn, TransactionManager *txn_mgr, 
 
 bool check_conflict(Transaction *txn, TransactionManager *txn_mgr, RmFileHandle *fh, const Rid &rid);
 
+auto ReconstructTuple(const std::unique_ptr<RmRecord> base_tuple, const std::vector<UndoLog> &undo_logs) -> std::optional<std::unique_ptr<RmRecord>>;
+
 bool mvcc_insert_index(const TabMeta &tab_, std::unique_ptr<RmRecord> &rec, Rid rid, Context *context_,
                        TransactionManager *txn_mgr, SmManager *sm_manager);
 

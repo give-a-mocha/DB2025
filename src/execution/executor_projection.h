@@ -107,8 +107,9 @@ class ProjectionExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> Next() override {
         // 获取输入记录
         auto prev_rec = prev_->Next();
+
         if (!prev_rec) {
-            ERROR("Error: Previous record is null at {}", getType());
+            ERROR("ProjectionExecutor: No more records in previous executor");
             return nullptr;
         }
 

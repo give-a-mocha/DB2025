@@ -68,13 +68,6 @@ class ReadPageGuard {
 
     void Drop();
 
-    /** TODO(P1): Add implementation
-     *
-     * @brief Destructor for ReadPageGuard
-     *
-     * Just like with BasicPageGuard, this should behave
-     * as if you were dropping the guard.
-     */
     ~ReadPageGuard();
 
     auto PageId() -> PageId { return guard_.PageId(); }

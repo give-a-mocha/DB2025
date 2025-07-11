@@ -42,22 +42,26 @@ class WriteRecord {
     WType wtype_;
     std::string tab_name_;
     Rid rid_;
-    RmRecord record_;
+    std::unique_ptr<RmRecord> record_;  // 使用智能指针管理内存
 
    public:
     WriteRecord() = default;
 
     // constructor for insert operation
     WriteRecord(WType wtype, const std::string &tab_name, const Rid &rid)
-        : wtype_(wtype), tab_name_(tab_name), rid_(rid) {}
+        : wtype_(wtype), tab_name_(tab_name), rid_(rid), record_(nullptr) {}
 
     // constructor for delete & update operation
-    WriteRecord(WType wtype, const std::string &tab_name, const Rid &rid, const RmRecord &record)
-        : wtype_(wtype), tab_name_(tab_name), rid_(rid), record_(record) {}
+    WriteRecord(WType wtype, const std::string &tab_name, const Rid &rid, const std::unique_ptr<RmRecord> &record)
+        : wtype_(wtype), tab_name_(tab_name), rid_(rid) {
+            if (record) {
+                record_ = std::make_unique<RmRecord>(*record);
+            }
+        }
 
     ~WriteRecord() = default;
 
-    inline RmRecord &GetRecord() { return record_; }
+    inline std::unique_ptr<RmRecord> &GetRecord() { return record_; }
 
     inline Rid &GetRid() { return rid_; }
 
@@ -65,8 +69,12 @@ class WriteRecord {
 
     inline std::string &GetTableName() { return tab_name_; }
 
-    inline std::tuple<WType, const std::string &, const Rid &, const RmRecord &> GetAll() {
-        return std::make_tuple(wtype_, tab_name_, rid_, record_);
+    inline std::tuple<WType, std::string, Rid, std::unique_ptr<RmRecord>> GetAll() {
+        if (record_) {
+            return std::make_tuple(wtype_, tab_name_, rid_, std::make_unique<RmRecord>(*record_));
+        } else {
+            return std::make_tuple(wtype_, tab_name_, rid_, std::unique_ptr<RmRecord>(nullptr));
+        }
     }
 };
 

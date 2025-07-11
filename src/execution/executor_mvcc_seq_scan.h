@@ -27,11 +27,11 @@ class MvccSeqScanExecutor : public AbstractExecutor {
     RmFileHandle *fh_;                  // 表文件句柄
     std::vector<ColMeta> cols_;         // 输出列的元数据
     size_t len_;                        // 记录总长度(字节)
-    std::vector<Condition> fed_conds_;  // 优化后的条件
     Rid rid_;                           // 当前记录的RID
     std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
     SmManager *sm_manager_;             // 系统管理器指针
     TransactionManager *txn_mgr_;       // 事务管理器指针
+    std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
 
    public:
     /**
@@ -57,21 +57,23 @@ class MvccSeqScanExecutor : public AbstractExecutor {
 
         context_ = context;
         txn_mgr_ = txn_mgr;
-        fed_conds_ = conds_;  // 暂未优化的条件列表
     }
 
     /**
      * @brief 初始化扫描并定位第一条符合条件的记录
      */
     void beginTuple() override {
+        TRACE_FUNCTION
+        INFO("beginTuple record at table {}", tab_name_);
         // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
 
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
+            auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
+                rec_ = std::move(rec);
                 return;
             }
             scan_->next();
@@ -83,6 +85,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @throw InternalError 当扫描器未初始化时
      */
     void nextTuple() override {
+        TRACE_FUNCTION
+        INFO("Next record at table {}", tab_name_);
         // 检查扫描器状态
         if (scan_ == nullptr) {
             throw InternalError("Scan not initialized at " + getType());
@@ -96,8 +100,9 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            std::unique_ptr<RmRecord> rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
-            if (rec != nullptr && eval_conds(cols_, fed_conds_, rec)) {
+            auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
+                rec_ = std::move(rec);
                 return;
             }
             scan_->next();
@@ -114,7 +119,10 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @brief 获取当前记录的数据
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
-    std::unique_ptr<RmRecord> Next() override { return mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_); }
+    std::unique_ptr<RmRecord> Next() override {
+        TRACE_FUNCTION
+        return std::move(rec_);
+    }
 
     /**
      * @brief 获取记录的总长度

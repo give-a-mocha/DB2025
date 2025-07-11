@@ -26,54 +26,24 @@ void LogManager::add_log_to_buffer(LogRecord *log_record) {
     add_log_to_buffer_without_lock(log_record);
 }
 
+// 优化的日志添加方法，类型安全且高效
 void LogManager::add_log_to_buffer_without_lock(LogRecord *log_record) {
-    switch (log_record->log_type_) {
-        case LogType::BEGIN: {
-            auto begin_log_record_ = dynamic_cast<BeginLogRecord *>(log_record);
-            begin_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-            log_buffer_.offset_ += begin_log_record_->log_tot_len_;
-            break;
-        }
-        case LogType::COMMIT: {
-            auto commit_log_record_ = dynamic_cast<CommitLogRecord *>(log_record);
-            commit_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-            log_buffer_.offset_ += commit_log_record_->log_tot_len_;
-            break;
-        }
-        case LogType::ABORT: {
-            auto abort_log_record_ = dynamic_cast<AbortLogRecord *>(log_record);
-            abort_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-            log_buffer_.offset_ += abort_log_record_->log_tot_len_;
-            break;
-        }
-        case LogType::INSERT: {
-            auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
-            insert_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-            log_buffer_.offset_ += insert_log_record_->log_tot_len_;
-            break;
-        }
-        case LogType::DELETE: {
-            auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
-            delete_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-            log_buffer_.offset_ += delete_log_record_->log_tot_len_;
-            break;
-        }
-        case LogType::UPDATE: {
-            auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
-            update_log_record_->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
-            log_buffer_.offset_ += update_log_record_->log_tot_len_;
-            break;
-        }
-        default: {
-            throw RMDBError("not supported log type");
-        }
+    // 检查缓冲区空间是否足够
+    if (log_buffer_.is_full(log_record->log_tot_len_)) {
+        flush_log_to_disk_without_lock();
     }
-    // 超过一半写入
+    
+    // 使用虚函数多态机制，这比dynamic_cast更高效
+    // 每个子类都正确重写了serialize方法，会自动调用正确的版本
+    log_record->serialize(log_buffer_.buffer_ + log_buffer_.offset_);
+    log_buffer_.offset_ += log_record->log_tot_len_;
+    
+    // 超过一半写入磁盘
     if (log_buffer_.offset_ > (LOG_BUFFER_SIZE >> 1)) {
-        // 已经锁上
         flush_log_to_disk_without_lock();
     }
 }
+
 /**
  * @description: 将日志缓冲区内容刷写到磁盘
  * @warning 由于系统只有一个日志缓冲区：
@@ -87,108 +57,97 @@ void LogManager::flush_log_to_disk() {
 }
 
 void LogManager::flush_log_to_disk_without_lock() {
+    if (log_buffer_.offset_ == 0) return;  // 优化：避免不必要的磁盘写入
+    
     // 将缓冲区内容写入磁盘
     disk_manager_->write_log(log_buffer_.buffer_, static_cast<int>(log_buffer_.offset_));
-    // 清空缓冲区
-    log_buffer_.offset_ = 0;
+    log_buffer_.reset();
 }
 
-void LogManager::add_insert_log(txn_id_t txn_id, const RmRecord &insert_value, const Rid &rid,
+void LogManager::add_insert_log(txn_id_t txn_id, std::unique_ptr<RmRecord> insert_value, const Rid &rid,
                                 const std::string &table_name) {
-    InsertLogRecord *insert_log = new InsertLogRecord(txn_id, insert_value, rid, table_name);
-    add_log_to_buffer(insert_log);
-    delete insert_log;
+    InsertLogRecord insert_log(txn_id, std::move(insert_value), rid, table_name);
+    add_log_to_buffer(&insert_log);
 }
 
-void LogManager::add_delete_log(txn_id_t txn_id, const RmRecord &delete_value, const Rid &rid,
+void LogManager::add_delete_log(txn_id_t txn_id, std::unique_ptr<RmRecord> delete_value, const Rid &rid,
                                 const std::string &table_name) {
-    DeleteLogRecord *delete_log = new DeleteLogRecord(txn_id, delete_value, rid, table_name);
-    add_log_to_buffer(delete_log);
-    delete delete_log;
+    DeleteLogRecord delete_log(txn_id, std::move(delete_value), rid, table_name);
+    add_log_to_buffer(&delete_log);
 }
 
-void LogManager::add_update_log(txn_id_t txn_id, const RmRecord &new_rec, const RmRecord &old_rec, const Rid &rid,
+void LogManager::add_update_log(txn_id_t txn_id, std::unique_ptr<RmRecord> new_rec, std::unique_ptr<RmRecord> old_rec, const Rid &rid,
                                 const std::string &table_name) {
-    UpdateLogRecord *update_log = new UpdateLogRecord(txn_id, new_rec, old_rec, rid, table_name);
-    add_log_to_buffer(update_log);
-    delete update_log;
+    UpdateLogRecord update_log(txn_id, std::move(old_rec), std::move(new_rec), rid, table_name);
+    add_log_to_buffer(&update_log);
 }
 
 void LogManager::add_begin_log(txn_id_t txn_id) {
-    BeginLogRecord *begin_log = new BeginLogRecord(txn_id);
-    add_log_to_buffer(begin_log);
-    delete begin_log;
+    BeginLogRecord begin_log(txn_id);
+    add_log_to_buffer(&begin_log);
 }
 
 void LogManager::add_commit_log(txn_id_t txn_id) {
-    CommitLogRecord *commit_log = new CommitLogRecord(txn_id);
-    add_log_to_buffer(commit_log);
-    delete commit_log;
+    CommitLogRecord commit_log(txn_id);
+    add_log_to_buffer(&commit_log);
 }
 
 void LogManager::add_abort_log(txn_id_t txn_id) {
-    AbortLogRecord *abort_log = new AbortLogRecord(txn_id);
-    add_log_to_buffer(abort_log);
-    delete abort_log;
+    AbortLogRecord abort_log(txn_id);
+    add_log_to_buffer(&abort_log);
 }
 
 std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t offset) {
     std::vector<std::unique_ptr<LogRecord>> log_records_;
-    const auto file_size_ = disk_manager_->get_file_size(LOG_FILE_NAME);
-    auto buffer = std::make_unique<char[]>(std::max(file_size_, 1));
+    const auto file_size_ = static_cast<size_t>(disk_manager_->get_file_size(LOG_FILE_NAME));
+    if (file_size_ <= offset) return log_records_;  // 优化：早期返回
+    
+    // 优化：预估容器大小，减少重新分配
+    log_records_.reserve((file_size_ - offset) / LOG_HEADER_SIZE);
+    
+    auto buffer = std::make_unique<char[]>(file_size_);
     disk_manager_->read_log(buffer.get(), file_size_, static_cast<int>(offset));
-    auto tmp_log_ = std::make_unique<LogRecord>();
 
     auto start_offset = offset;
     while (offset < file_size_) {
-        tmp_log_->deserialize(buffer.get() + offset - start_offset);
-        switch (tmp_log_->log_type_) {
+        // 优化：直接读取日志类型，避免创建临时对象
+        LogType log_type = *reinterpret_cast<const LogType*>(buffer.get() + offset - start_offset);
+        
+        std::unique_ptr<LogRecord> log_record_;
+        switch (log_type) {
             case LogType::BEGIN: {
-                auto log_record_ = std::make_unique<BeginLogRecord>();
-                log_record_->deserialize(buffer.get() + offset - start_offset);
-                offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(std::move(log_record_));
+                log_record_ = std::make_unique<BeginLogRecord>();
                 break;
             }
             case LogType::COMMIT: {
-                auto log_record_ = std::make_unique<CommitLogRecord>();
-                log_record_->deserialize(buffer.get() + offset - start_offset);
-                offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(std::move(log_record_));
+                log_record_ = std::make_unique<CommitLogRecord>();
                 break;
             }
             case LogType::ABORT: {
-                auto log_record_ = std::make_unique<AbortLogRecord>();
-                log_record_->deserialize(buffer.get() + offset - start_offset);
-                offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(std::move(log_record_));
+                log_record_ = std::make_unique<AbortLogRecord>();
                 break;
             }
             case LogType::DELETE: {
-                auto log_record_ = std::make_unique<DeleteLogRecord>();
-                log_record_->deserialize(buffer.get() + offset - start_offset);
-                offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(std::move(log_record_));
+                log_record_ = std::make_unique<DeleteLogRecord>();
                 break;
             }
             case LogType::INSERT: {
-                auto log_record_ = std::make_unique<InsertLogRecord>();
-                log_record_->deserialize(buffer.get() + offset - start_offset);
-                offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(std::move(log_record_));
+                log_record_ = std::make_unique<InsertLogRecord>();
                 break;
             }
             case LogType::UPDATE: {
-                auto log_record_ = std::make_unique<UpdateLogRecord>();
-                log_record_->deserialize(buffer.get() + offset - start_offset);
-                offset += log_record_->log_tot_len_;
-                log_records_.emplace_back(std::move(log_record_));
+                log_record_ = std::make_unique<UpdateLogRecord>();
                 break;
             }
             default: {
                 throw RMDBError("not supported log type");
             }
         }
+        
+        // 统一反序列化和处理
+        log_record_->deserialize(buffer.get() + offset - start_offset);
+        offset += log_record_->log_tot_len_;
+        log_records_.emplace_back(std::move(log_record_));
     }
 
     return log_records_;

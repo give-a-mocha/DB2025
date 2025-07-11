@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include <list>
 #include <unordered_map>
 #include <vector>
+#include <deque>
 
 #include "disk_manager.h"
 #include "errors.h"
@@ -32,7 +33,7 @@ class BufferPoolInstance {
     size_t pool_size_;                                   // 缓冲池大小（帧数）
     Page* pages_;                                        // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
-    std::list<frame_id_t> free_list_;                    // 空闲帧链表
+    std::deque<frame_id_t> free_list_;                   // 空闲帧链表
     DiskManager* disk_manager_;                          // 磁盘管理器
     Replacer* replacer_;                                 // 页面替换策略实现
     std::mutex latch_;                                   // 并发控制锁
@@ -133,11 +134,11 @@ class BufferPoolInstance {
 
     auto new_page_guarded(PageId* page_id) -> BasicPageGuard;
 
-    auto fetch_page_basic(PageId page_id) -> BasicPageGuard;
+    auto fetch_basic_page(PageId page_id) -> BasicPageGuard;
 
-    auto fetch_page_read(PageId page_id) -> ReadPageGuard;
+    auto fetch_read_page(PageId page_id) -> ReadPageGuard;
 
-    auto fetch_page_write(PageId page_id) -> WritePageGuard;
+    auto fetch_write_page(PageId page_id) -> WritePageGuard;
 
    private:
     /**

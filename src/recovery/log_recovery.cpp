@@ -18,8 +18,8 @@ void RecoveryManager::recovery() {
     std::unordered_map<std::string, int> tab_page_num;
 
     // 辅助lambda函数：处理表操作日志记录（INSERT、DELETE、UPDATE）
-    auto process_table_operation = [&](auto *log_record_) {
-        std::string table_name = std::string(log_record_->table_name_, log_record_->table_name_size_);
+    auto process_table_operation = [&](const auto *log_record_) {
+        const std::string& table_name = log_record_->table_name_;  // 修复：直接使用std::string
         if (sm_manager_->fhs_.find(table_name) != sm_manager_->fhs_.end()) {
             tab_page_num[table_name] = std::max(tab_page_num[table_name], log_record_->rid_.page_no);
         }
@@ -121,18 +121,18 @@ void RecoveryManager::redo(LogRecord *log_record) {
     switch (log_record->log_type_) {
         case LogType::INSERT: {
             auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
-            std::string table_name = std::string(insert_log_record_->table_name_, insert_log_record_->table_name_size_);
+            const std::string& table_name = insert_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
             // 在原本位置插入值
             sm_manager_->fhs_.at(table_name)
-                ->insert_record_force(insert_log_record_->rid_, insert_log_record_->insert_value_.data);
+                ->insert_record_force(insert_log_record_->rid_, insert_log_record_->insert_value_->data);
             break;
         }
         case LogType::DELETE: {
             auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
-            std::string table_name = std::string(delete_log_record_->table_name_, delete_log_record_->table_name_size_);
+            const std::string& table_name = delete_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
@@ -141,13 +141,13 @@ void RecoveryManager::redo(LogRecord *log_record) {
         }
         case LogType::UPDATE: {
             auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
-            std::string table_name = std::string(update_log_record_->table_name_, update_log_record_->table_name_size_);
+            const std::string& table_name = update_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
             // 在原本位置更新值
             sm_manager_->fhs_.at(table_name)
-                ->update_record(update_log_record_->rid_, update_log_record_->after_value_.data, nullptr);
+                ->update_record(update_log_record_->rid_, update_log_record_->after_value_->data, nullptr);
             break;
         }
         default: {
@@ -163,33 +163,34 @@ void RecoveryManager::undo(LogRecord *log_record) {
     switch (log_record->log_type_) {
         case LogType::INSERT: {
             auto insert_log_record_ = dynamic_cast<InsertLogRecord *>(log_record);
-            std::string table_name = std::string(insert_log_record_->table_name_, insert_log_record_->table_name_size_);
+            const std::string& table_name = insert_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
-            // 在原本位置插入值
+            // 撤销插入：删除记录
             sm_manager_->fhs_.at(table_name)->delete_record(insert_log_record_->rid_, nullptr);
             break;
         }
         case LogType::DELETE: {
             auto delete_log_record_ = dynamic_cast<DeleteLogRecord *>(log_record);
-            std::string table_name = std::string(delete_log_record_->table_name_, delete_log_record_->table_name_size_);
+            const std::string& table_name = delete_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
+            // 撤销删除：重新插入记录
             sm_manager_->fhs_.at(table_name)
-                ->insert_record_force(delete_log_record_->rid_, delete_log_record_->delete_value_.data);
+                ->insert_record_force(delete_log_record_->rid_, delete_log_record_->delete_value_->data);
             break;
         }
         case LogType::UPDATE: {
             auto update_log_record_ = dynamic_cast<UpdateLogRecord *>(log_record);
-            std::string table_name = std::string(update_log_record_->table_name_, update_log_record_->table_name_size_);
+            const std::string& table_name = update_log_record_->table_name_;  // 修复：直接使用std::string
             if (sm_manager_->fhs_.find(table_name) == sm_manager_->fhs_.end()) {
                 return;
             }
-            // 在原本位置更新值
+            // 撤销更新：恢复到更新前的值
             sm_manager_->fhs_.at(table_name)
-                ->update_record(update_log_record_->rid_, update_log_record_->before_value_.data, nullptr);
+                ->update_record(update_log_record_->rid_, update_log_record_->before_value_->data, nullptr);
             break;
         }
         default: {

@@ -11,6 +11,10 @@ See the Mulan PSL v2 for more details. */
 #include "buffer_pool_manager.h"
 #include "common/TraceStack.hpp"
 
+size_t BufferPoolManager::get_instance_no(const PageId& page_id) const {
+    return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE;
+}
+
 /**
  * @description: 获取指定的页面
  *
@@ -113,17 +117,17 @@ auto BufferPoolManager::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     return buffer_pool_instances_[get_instance_no(*page_id)]->new_page_guarded(page_id);
 }
 
-auto BufferPoolManager::fetch_page_basic(PageId page_id) -> BasicPageGuard {
+auto BufferPoolManager::fetch_basic_page(PageId page_id) -> BasicPageGuard {
     TRACE_FUNCTION
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page_basic(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_basic_page(page_id);
 }
 
-auto BufferPoolManager::fetch_page_read(PageId page_id) -> ReadPageGuard {
+auto BufferPoolManager::fetch_read_page(PageId page_id) -> ReadPageGuard {
     TRACE_FUNCTION
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page_read(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_read_page(page_id);
 }
 
-auto BufferPoolManager::fetch_page_write(PageId page_id) -> WritePageGuard {
+auto BufferPoolManager::fetch_write_page(PageId page_id) -> WritePageGuard {
     TRACE_FUNCTION
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page_write(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_write_page(page_id);
 }

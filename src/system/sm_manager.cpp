@@ -443,7 +443,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
         // 值：记录的RID
         auto&& res = ih_->insert_entry_without_lock(key, rmScan.rid());
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
-        if (res == INVALID_PAGE_ID) {
+        if (!res) {
             drop_index(tab_name, col_names, context);
             return;
         }
@@ -513,7 +513,7 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-bool SmManager::insert_index_without_lock(const std::string& tab_name, RmRecord& rec, Rid rid) {
+bool SmManager::insert_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid) {
     TabMeta& tab_ = db_.get_table(tab_name);
     std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
     inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
@@ -528,13 +528,13 @@ bool SmManager::insert_index_without_lock(const std::string& tab_name, RmRecord&
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
         for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
             offset += index.cols[j].len;
         }
 
         // 插入索引项
-        auto res = ih->insert_entry_without_lock(key.get(), rid);
-        if (res == INVALID_PAGE_ID) {
+        bool res = ih->insert_entry_without_lock(key.get(), rid);
+        if (!res) {
             // 插入失败，回滚已插入的索引
             for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
                 auto& rollback_index = tab_.indexes[rollback_i];
@@ -548,7 +548,7 @@ bool SmManager::insert_index_without_lock(const std::string& tab_name, RmRecord&
     return true;
 }
 
-bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
+bool SmManager::insert_index_force(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
@@ -557,19 +557,16 @@ bool SmManager::insert_index_force(const std::string& tab_name, RmRecord& rec, R
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
         for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
             offset += index.cols[j].len;
         }
         // 插入索引项
-        auto res = ih->insert_entry_force(key.get(), rid, txn);
-        if (res == INVALID_PAGE_ID) {
-            return false;
-        }
+        ih->insert_entry_force(key.get(), rid, txn);
     }
     return true;
 }
 
-bool SmManager::delete_index_without_lock(const std::string& tab_name, RmRecord& rec) {
+bool SmManager::delete_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
@@ -578,7 +575,7 @@ bool SmManager::delete_index_without_lock(const std::string& tab_name, RmRecord&
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
         for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
             offset += index.cols[j].len;
         }
         // 删除索引项
@@ -587,7 +584,7 @@ bool SmManager::delete_index_without_lock(const std::string& tab_name, RmRecord&
     return true;
 }
 
-bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec, Rid rid, Transaction* txn) {
+bool SmManager::delete_index_with_rid(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(tab_name);
     // 遍历表的所有索引
     for (size_t i = 0; i < tab_.indexes.size(); ++i) {
@@ -596,7 +593,7 @@ bool SmManager::delete_index_with_rid(const std::string& tab_name, RmRecord& rec
         auto key = std::make_unique<char[]>(index.col_tot_len);
         int offset = 0;
         for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec.data + index.cols[j].offset, index.cols[j].len);
+            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
             offset += index.cols[j].len;
         }
         // 删除索引项
@@ -677,7 +674,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
         count++;
 
         // 插入索引
-        RmRecord rec(record_size, record_data + start_offset);
+        auto rec = std::make_unique<RmRecord>(record_size, record_data + start_offset);
         insert_index_without_lock(table_name, rec, rid_);
 
         // 检查是否需要创建新页
