@@ -48,7 +48,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         // 添加间隙锁
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
+        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), std::move(conds_));
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);

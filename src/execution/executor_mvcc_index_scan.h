@@ -32,6 +32,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     SmManager *sm_manager_;         // 系统管理器
     TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
+    TupleMeta tuple_meta_;           // 元组元数据
     Iid lower_iid;                   // 索引下界
     Iid upper_iid;                   // 索引上界
 
@@ -167,6 +168,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = base_meta;  // 设置元数据
                 return;
             }
             scan_->next();
@@ -190,6 +192,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = base_meta;  // 更新元数据
                 return;
             }
             scan_->next();
@@ -236,6 +239,10 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @return 当前记录的RID引用
      */
     Rid &rid() override { return rid_; }
+
+    TupleMeta &tuple_meta() override {
+        return tuple_meta_;
+    }
 
     /**
      * @brief 获取执行器类型名称

@@ -57,7 +57,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         // 加锁间隙
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
+        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), std::move(conds_));
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
@@ -135,21 +135,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            // 获取全局条件
-            std::vector<Condition> conds_ =
-                txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
-            if (!conds_.empty() && eval_conds(tab_.cols, conds_, new_rec)) {
-                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-            }
 
             // update = delete + insert
-
-            // 获取全局条件
-            std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
-
-            if (!conds.empty() && eval_conds(tab_.cols, conds, new_rec)) {
-                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-            }
             // 删除旧记录
             TupleMeta delete_meta;
             delete_meta.is_deleted_ = true;  // 设置元组为已删除状态

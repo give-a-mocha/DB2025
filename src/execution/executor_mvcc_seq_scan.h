@@ -32,6 +32,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
     SmManager *sm_manager_;             // 系统管理器指针
     TransactionManager *txn_mgr_;       // 事务管理器指针
     std::unique_ptr<RmRecord> rec_;     // 当前记录的智能指针
+    TupleMeta tuple_meta_;              // 元组元数据，用于存储列信息
 
    public:
     /**
@@ -78,6 +79,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = base_meta;
                 return;
             }
             scan_->next();
@@ -111,6 +113,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = base_meta;
                 return;
             }
             scan_->next();
@@ -153,6 +156,10 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @return 当前记录的RID引用
      */
     Rid &rid() override { return rid_; }
+
+    TupleMeta &tuple_meta() override {
+        return tuple_meta_;
+    }
 
     /**
      * @brief 获取执行器类型名称

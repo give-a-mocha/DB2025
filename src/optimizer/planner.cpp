@@ -22,10 +22,8 @@
 #include <unordered_set>
 
 #include "common/TraceStack.hpp"
-#include "execution/executor_index_scan.h"
 #include "execution/executor_nestedloop_join.h"
 #include "execution/executor_projection.h"
-#include "execution/executor_seq_scan.h"
 #include "index/ix.h"
 #include "record_printer.h"
 

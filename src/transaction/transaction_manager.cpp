@@ -26,6 +26,7 @@
 #include "common/print.hpp"
 #include "record/rm_file_handle.h"
 #include "system/sm_manager.h"
+#include "execution/executor_abstract.h"
 
 std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
 
@@ -92,15 +93,35 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 如果需要支持MVCC请在上述过程中添加代码
 
     std::unique_lock<std::mutex> commit_lock(commit_mutex_);  // 确保提交操作的互斥性
-    txn->set_state(TransactionState::COMMITTED);
-    timestamp_t commit_ts = INVALID_TS;
-    if (concurrency_mode_ == ConcurrencyMode::MVCC) {
-        commit_ts = get_next_timestamp();
-        txn->set_commit_ts(commit_ts);  // 设置提交时间戳
-        last_commit_ts_.store(std::max(last_commit_ts_.load(), commit_ts));
+
+    // FOCC 检查当前事务等写集和其他未提交事务等读集是否有冲突
+    for (size_t i = 0; i < txn->get_write_set()->size(); ++i) {
+        const auto& write_record = (*txn->get_write_set())[i];
+        const auto& table_name = write_record->GetTableName();
+        const auto& rid = write_record->GetRid();
+        TabMeta& tab_ = sm_manager_->db_.get_table(table_name);
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
+        std::vector<Condition> conds_ = lock_manager_->get_gap_condition(fh_->GetFd(), txn);
+        auto [base_meta, rec] = fh_->get_record(rid);
+        auto pre_link = txn->GetUndoLog(i)->prev_version_;
+        bool is_deleted = base_meta.is_deleted_;
+
+        // 最新记录是删除，前一次是空说明是insert+delete 组合我应该跳过
+        if (is_deleted && pre_link.IsValid() && !GetUndoLog(pre_link)->is_deleted_) {
+            is_deleted = false;
+        }
+        if(is_deleted) continue;
+        if (!conds_.empty() && AbstractExecutor::eval_conds(tab_.cols, conds_, rec)){
+            throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+        }
     }
+    commit_lock.unlock();  // 提交操作完成后释放锁
 
     txn->CommitUndoLogs();  // 提交事务的撤销日志
+
+    txn->set_state(TransactionState::COMMITTED);
+    txn->set_commit_ts(get_next_timestamp());  // 设置提交时间戳
+    last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
@@ -121,7 +142,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // log_manager->add_commit_log(txn->get_transaction_id());
     // log_manager->flush_log_to_disk();
 
-    running_txns_.UpdateCommitTs(commit_ts);      // 更新水位线的提交时间戳
+    running_txns_.UpdateCommitTs(txn->get_commit_ts());      // 更新水位线的提交时间戳
     running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
 }
 

@@ -85,13 +85,6 @@ class MvccInsertExecutor : public AbstractExecutor {
             values_[i].init_raw(col.len);
             memcpy(rec->data + col.offset, values_[i].raw->data, col.len);
         }
-
-        // 获取全局条件
-        std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
-
-        if (!conds.empty() && eval_conds(tab_.cols, conds, rec)) {
-            throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-        }
         
         bool is_exist = sm_manager_->exist_in_index(tab_, rec, rid_, context_->txn_);
         if (is_exist) {
@@ -105,6 +98,7 @@ class MvccInsertExecutor : public AbstractExecutor {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
             }
+            //!等原子操作可以去掉这个锁
             txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
             fh_->insert_record_force(rid_, rec->data);
             if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {

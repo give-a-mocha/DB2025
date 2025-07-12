@@ -115,14 +115,14 @@ class AbstractExecutor {
      * @return 列的迭代器位置
      * @throw ColumnNotFoundError 当列不存在时
      */
-    std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
+    static std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
                                                  bool cmp_agg_type = false) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
             return col.tab_name == target.tab_name && col.name == target.col_name &&
                    (!cmp_agg_type || col.agg_type == target.agg_type);
         });
         if (pos == rec_cols.end()) {
-            throw ColumnNotFoundError(target.tab_name + '.' + target.col_name + " at " + getType());
+            throw ColumnNotFoundError(target.tab_name + '.' + target.col_name + " at StaticEval");
         }
         return pos;
     }
@@ -142,7 +142,7 @@ class AbstractExecutor {
      * @return true表示满足所有条件
      * @throw ExecutionError 当评估过程出错时
      */
-    bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds,
+    static bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds,
                     const std::unique_ptr<RmRecord> &rec) {
         for (const auto &cond : conds) {
             if (!eval_cond(rec_cols, cond, rec)) {
@@ -161,7 +161,7 @@ class AbstractExecutor {
      * @throw IncompatibleTypeError 当类型不兼容时
      * @throw InternalError 当遇到非法操作符时
      */
-    bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const std::unique_ptr<RmRecord> &rec) {
+    static bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const std::unique_ptr<RmRecord> &rec) {
         TRACE_FUNCTION
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
         char *lhs_data = rec->data + lhs_col->offset;
@@ -237,7 +237,7 @@ class AbstractExecutor {
             case CompOp::OP_GE:
                 return cmp >= 0;
             default:
-                throw InternalError("eval_cond::Unexpected op type at " + getType());
+                throw InternalError("eval_cond::Unexpected op type at StaticEval");
         }
     }
 
