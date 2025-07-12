@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <optional>
 #include <shared_mutex>
 #include <unordered_map>
+#include <array>
 
 #include "common/exception.h"
 #include "concurrency/lock_manager.h"
@@ -37,7 +38,7 @@ class TransactionManager {
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
-    std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
+    // std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
 
     /**
      * @brief 为 MVCC 存储单个页面内所有槽的版本信息。
@@ -53,9 +54,18 @@ class TransactionManager {
     };
 
     /** 保护版本信息 */
-    std::shared_mutex version_info_mutex_;
+    // std::shared_mutex version_info_mutex_;
     /** 存储表堆中每个元组的先前版本。 */
-    std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>> version_info_;
+    // std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>> version_info_;
+
+    static constexpr size_t VERSION_INFO_SHARDS = 256;
+
+    struct PageVersionInfoShard {
+        std::shared_mutex mutex_;
+        std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>> version_info_;
+    };
+
+    std::array<PageVersionInfoShard, VERSION_INFO_SHARDS> version_info_shards_;
 
    private:
     // 事务使用的并发控制算法，目前只需要考虑2PL
@@ -168,6 +178,8 @@ class TransactionManager {
     auto CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog*>;
 
    private:
+    auto GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard&;
+    
     /** @brief 检查事务是否可以被垃圾回收 */
     bool is_transaction_expired(Transaction *txn, timestamp_t watermark) const;
 

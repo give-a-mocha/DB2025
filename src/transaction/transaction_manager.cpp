@@ -92,8 +92,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-    std::unique_lock<std::mutex> commit_lock(commit_mutex_);  // 确保提交操作的互斥性
-
     // FOCC 检查当前事务等写集和其他未提交事务等读集是否有冲突
     for (size_t i = 0; i < txn->get_write_set()->size(); ++i) {
         const auto& write_record = (*txn->get_write_set())[i];
@@ -115,7 +113,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
     }
-    commit_lock.unlock();  // 提交操作完成后释放锁
 
     
     txn->set_state(TransactionState::COMMITTED);
@@ -201,19 +198,24 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
 }
 
+auto TransactionManager::GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard& {
+    return version_info_shards_[std::hash<PageId>{}(page_id) % VERSION_INFO_SHARDS];
+}
+
 /**
  * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
  * 在更新之前，将调用 `check` 函数以确保有效性。
  */
 bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
-    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
-    auto it = version_info_.find(page_id);
-    if (it == version_info_.end()) {
+    auto& shard = GetVersionInfoShard(page_id);
+    std::unique_lock<std::shared_mutex> lock(shard.mutex_);
+    auto it = shard.version_info_.find(page_id);
+    if (it == shard.version_info_.end()) {
         // 如果没有找到对应的版本信息，则创建一个新的
         auto new_version_info = std::make_shared<PageVersionInfo>();
-        version_info_[page_id] = new_version_info;
-        it = version_info_.find(page_id);
+        shard.version_info_[page_id] = new_version_info;
+        it = shard.version_info_.find(page_id);
     }
     auto& version_info = it->second;
     lock.unlock();
@@ -225,14 +227,16 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
 }
 
 void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn) {
-    // 获取对应的版本信息
-    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
-    auto it = version_info_.find(page_id);
-    if (it == version_info_.end()) {
+    auto& shard = GetVersionInfoShard(page_id);
+    // 获取对应的版本信息
+    std::unique_lock<std::shared_mutex> lock(shard.mutex_);
+    auto it = shard.version_info_.find(page_id);
+    if (it == shard.version_info_.end()) {
         return ;
     }
     auto& version_info = it->second;
+    lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -254,10 +258,11 @@ void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
 UndoLink TransactionManager::GetUndoLink(const int& fd, Rid rid) {
-    std::shared_lock<std::shared_mutex> lock(version_info_mutex_);
     PageId page_id{fd, rid.page_no};
-    auto it = version_info_.find(page_id);
-    if (it == version_info_.end()) {
+    auto& shard = GetVersionInfoShard(page_id);
+    std::shared_lock<std::shared_mutex> lock(shard.mutex_);
+    auto it = shard.version_info_.find(page_id);
+    if (it == shard.version_info_.end()) {
         return UndoLink{};  // 如果没有找到对应的版本信息，则返回空的 UndoLink
     }
     auto& version_info = it->second;
@@ -340,27 +345,28 @@ bool TransactionManager::is_transaction_expired(Transaction* txn, timestamp_t wa
 }
 
 void TransactionManager::cleanup_expired_versions(timestamp_t watermark) {
-    std::unique_lock<std::shared_mutex> lock(version_info_mutex_);
+    for (auto& shard : version_info_shards_) {
+        std::unique_lock<std::shared_mutex> lock(shard.mutex_);
+        for (auto it = shard.version_info_.begin(); it != shard.version_info_.end();) {
+            auto& version_info = it->second;
+            std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
 
-    for (auto it = version_info_.begin(); it != version_info_.end();) {
-        auto& version_info = it->second;
-        std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
-
-        // 清理过期的版本链接
-        for (auto version_it = version_info->prev_version_.begin(); version_it != version_info->prev_version_.end();) {
-            const UndoLog* undo_log = GetUndoLog(version_it->second);
-            if (undo_log->ts_ <= GetWatermark()) {
-                version_it = version_info->prev_version_.erase(version_it);
-            } else {
-                ++version_it;
+            // 清理过期的版本链接
+            for (auto version_it = version_info->prev_version_.begin(); version_it != version_info->prev_version_.end();) {
+                const UndoLog* undo_log = GetUndoLog(version_it->second);
+                if (undo_log->ts_ <= GetWatermark()) {
+                    version_it = version_info->prev_version_.erase(version_it);
+                } else {
+                    ++version_it;
+                }
             }
-        }
 
-        // 如果版本信息为空，删除整个版本信息
-        if (version_info->prev_version_.empty()) {
-            it = version_info_.erase(it);  // 删除空的版本信息
-        } else {
-            ++it;
+            // 如果版本信息为空，删除整个版本信息
+            if (version_info->prev_version_.empty()) {
+                it = shard.version_info_.erase(it);  // 删除空的版本信息
+            } else {
+                ++it;
+            }
         }
     }
 }
