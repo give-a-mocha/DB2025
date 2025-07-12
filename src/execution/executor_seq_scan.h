@@ -32,7 +32,7 @@ class SeqScanExecutor : public AbstractExecutor {
     std::unique_ptr<RecScan> scan_;     // 表扫描迭代器
     SmManager *sm_manager_;             // 系统管理器指针
     std::unique_ptr<RmRecord> rec_;     // 当前记录的智能指针
-    BatchArray<std::unique_ptr<RmRecord>, BATCHSIZE> batch_rec_;
+    std::unique_ptr<BatchRecord> batch_rec_;
 
    public:
     /**
@@ -65,14 +65,15 @@ class SeqScanExecutor : public AbstractExecutor {
     void beginTuple() override {
         // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
+        batch_rec_ = std::make_unique<BatchRecord>();
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
                 // rec_ = std::move(rec);
-                batch_rec_.push_back(std::move(rec));
-                if (batch_rec_.full()) return;
+                batch_rec_->push_back(std::move(rec));
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }
@@ -92,14 +93,14 @@ class SeqScanExecutor : public AbstractExecutor {
         if (!scan_->is_end()) {
             scan_->next();
         }
-
+        batch_rec_ = std::make_unique<BatchRecord>();
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(cols_, fed_conds_, rec)) {
-                batch_rec_.push_back(std::move(rec));
-                if (batch_rec_.full()) return;
+                batch_rec_->push_back(std::move(rec));
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }
@@ -115,7 +116,7 @@ class SeqScanExecutor : public AbstractExecutor {
      * @brief 获取当前记录的数据
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
-    BatchRecord Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         return std::move(batch_rec_);  // 返回当前记录并清空智能指针
     }
 

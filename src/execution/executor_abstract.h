@@ -92,7 +92,7 @@ class AbstractExecutor {
      * @return 下一条记录
      * @throw ExecutionError 当获取失败时
      */
-    virtual BatchRecord Next() = 0;
+    virtual std::unique_ptr<BatchRecord> Next() = 0;
 
     /**
      * @brief 获取列的偏移和元数据信息

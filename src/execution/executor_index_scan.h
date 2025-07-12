@@ -30,9 +30,10 @@ class IndexScanExecutor : public AbstractExecutor {
     Rid rid_;                        // 当前记录ID
     std::unique_ptr<IxScan> scan_;   // 扫描迭代器
     SmManager *sm_manager_;          // 系统管理器
-    std::unique_ptr<RmRecord> rec_;  // 当前记录
     Iid lower_iid;                   // 索引下界
     Iid upper_iid;                   // 索引上界
+
+    std::unique_ptr<BatchRecord> batch_rec_;
 
    public:
     IndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
@@ -45,8 +46,7 @@ class IndexScanExecutor : public AbstractExecutor {
           index_meta_(*tab_.get_index_meta(index_col_names)),
           rid_(),
           scan_(nullptr),
-          sm_manager_(sm_manager),
-          rec_(nullptr) {
+          sm_manager_(sm_manager) {
         TRACE_FUNCTION
         context_ = context;  // Initialize context_ in the constructor body
         //! 先留着按道理应该在plan部分被调整顺序
@@ -150,12 +150,13 @@ class IndexScanExecutor : public AbstractExecutor {
         TRACE_FUNCTION
         scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
         // 移动到第一个满足条件的记录
+        batch_rec_ = std::make_unique<BatchRecord>();
         while (!is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(tab_.cols, conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_->push_back(std::move(rec));
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }
@@ -174,12 +175,13 @@ class IndexScanExecutor : public AbstractExecutor {
             scan_->next();
         }
         // 移动到下一个满足条件的记录
+        batch_rec_ = std::make_unique<BatchRecord>();
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = fh_->get_record(rid_, context_);
             if (eval_conds(tab_.cols, conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_->push_back(std::move(rec));
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }
@@ -196,7 +198,7 @@ class IndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
+    std::unique_ptr<BatchRecord> Next() override { return std::move(batch_rec_); }
 
     /**
      * @brief 获取记录的物理长度

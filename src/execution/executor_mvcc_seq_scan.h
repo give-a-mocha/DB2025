@@ -31,7 +31,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
     std::unique_ptr<RecScan> scan_;  // 表扫描迭代器
     SmManager *sm_manager_;          // 系统管理器指针
     TransactionManager *txn_mgr_;    // 事务管理器指针
-    std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
+    std::unique_ptr<BatchRecord> batch_rec_;
 
    public:
     /**
@@ -67,14 +67,14 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         INFO("beginTuple record at table {}", tab_name_);
         // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
-
+        batch_rec_ = std::make_unique<BatchRecord>();
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_->push_back(std::move(rec));
+                if(batch_rec_->full()) return ;
             }
             scan_->next();
         }
@@ -96,14 +96,14 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         if (!scan_->is_end()) {
             scan_->next();
         }
-
+        batch_rec_ = std::make_unique<BatchRecord>();
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_->push_back(std::move(rec));
+                if(batch_rec_->full()) return ;
             }
             scan_->next();
         }
@@ -119,9 +119,9 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @brief 获取当前记录的数据
      * @return 记录的智能指针，扫描结束时返回nullptr
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         TRACE_FUNCTION
-        return std::move(rec_);
+        return std::move(batch_rec_);
     }
 
     /**

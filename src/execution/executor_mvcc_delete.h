@@ -49,7 +49,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @brief 执行批量删除操作
      * @return nullptr，因为DELETE不产生结果集
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 添加间隙锁
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         int i = 0;

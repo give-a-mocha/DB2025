@@ -9,37 +9,28 @@
 template <typename T, size_t batch_size>
 class BatchArray {
    private:
-    T data_[batch_size];
+    T* data_;
     size_t size_ = 0;  // 初始化成员变量
 
    public:
-    BatchArray() = default;
-    ~BatchArray() = default;
+    BatchArray() {
+        data_ = new T[batch_size];
+    }
+    ~BatchArray() {
+        delete[] data_;
+    }
     BatchArray(const BatchArray&) = delete;
     BatchArray& operator=(const BatchArray&) = delete;
     BatchArray(BatchArray&& other) noexcept : size_(other.size_) {
-        if constexpr (std::is_trivially_copyable_v<T>) {
-            std::memcpy(data_, other.data_, other.size_ * sizeof(T));
-        } else {
-            for (size_t i = 0; i < other.size_; i++) {
-                data_[i] = std::move(other.data_[i]);
-            }
-        }
-        size_ = other.size_;
-        other.size_ = 0;
+        data_ = other.data_;
+        other.data_ = nullptr;
     }
 
     BatchArray& operator=(BatchArray&& other) noexcept {
         if (this != &other) {
-            if constexpr (std::is_trivially_copyable_v<T>) {
-                std::memcpy(data_, other.data_, other.size_ * sizeof(T));
-            } else {
-                for (size_t i = 0; i < other.size_; i++) {
-                    data_[i] = std::move(other.data_[i]);
-                }
-            }
             size_ = other.size_;
-            other.size_ = 0;
+            data_ = other.data_;
+            other.data_ = nullptr;
         }
         return *this;
     }

@@ -32,6 +32,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     SmManager *sm_manager_;         // 系统管理器
     TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
+    std::unique_ptr<BatchRecord> batch_rec_;
     Iid lower_iid;                   // 索引下界
     Iid upper_iid;                   // 索引上界
 
@@ -158,13 +159,14 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     void beginTuple() override {
         TRACE_FUNCTION
         scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        batch_rec_ = std::make_unique<BatchRecord>();
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, tab_.cols);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_->push_back(std::move(rec));
+                if(batch_rec_->full()) return ;
             }
             scan_->next();
         }
@@ -178,13 +180,14 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         if (!scan_->is_end()) {
             scan_->next();
         }
+        batch_rec_ = std::make_unique<BatchRecord>();
         // 移动到下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, tab_.cols);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+                batch_rec_->push_back(std::move(rec));
+                if(batch_rec_->full()) return ;
             }
             scan_->next();
         }
@@ -201,7 +204,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @return 记录的智能指针
      * @throw InternalError 当记录访问失败
      */
-    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
+    std::unique_ptr<BatchRecord> Next() override { return std::move(batch_rec_); }
 
     /**
      * @brief 获取记录的物理长度

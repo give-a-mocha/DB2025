@@ -57,7 +57,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
      * @throw IncompatibleTypeError 当值的类型与列类型不兼容时
      * @throw RMDBError 当索引更新失败需要回滚时
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 加锁间隙
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (size_t i = 0; i < rids_.size(); ++i) {

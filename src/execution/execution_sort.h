@@ -70,7 +70,8 @@ class SortExecutor : public AbstractExecutor {
         // 读取所有元组
         prev_->beginTuple();
         while (!prev_->is_end()) {
-            sorted_tuples_.push_back(prev_->Next());
+            auto batch = prev_->Next();
+            sorted_tuples_.insert(sorted_tuples_.end(), batch->begin(), batch->end());
             prev_->nextTuple();
         }
 
@@ -85,7 +86,7 @@ class SortExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         if (!is_end()) {
-            current_index_++;
+            current_index_ += 10;
         }
     }
 
@@ -93,11 +94,17 @@ class SortExecutor : public AbstractExecutor {
      * @brief 返回当前排序位置的元组
      * @return 当前元组的智能指针
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
+        auto batch = std::make_unique<BatchRecord>();
         if (is_end()) {
-            return nullptr;
+            return batch;
         }
-        return std::make_unique<RmRecord>(*sorted_tuples_[current_index_]);
+        
+        while(current_index_ < sorted_tuples_.size() && !batch->full()) {
+            batch->push_back(std::make_unique<RmRecord>(*sorted_tuples_[current_index_]));
+            current_index_++;
+        }
+        return batch;
     }
 
     bool is_end() const override { return current_index_ >= sorted_tuples_.size(); }

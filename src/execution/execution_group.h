@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <string_view>
 
 #include "common/Hash.h"
 #include "common/TraceStack.hpp"
@@ -26,6 +27,7 @@ class GroupExecutor : public AbstractExecutor {
     std::vector<ColMeta> cols_;               ///< SELECT 子句中选择的列的元数据
     std::vector<ColMeta> group_cols_;         ///< GROUP BY 子句中用于分组的列的元数据
     std::vector<Condition> having_conds_;     ///< HAVING 子句中的过滤条件
+    std::unique_ptr<BatchRecord> batch_record_;
 
    public:
     /**
@@ -64,9 +66,12 @@ class GroupExecutor : public AbstractExecutor {
         prev_->beginTuple();      // 初始化上一个执行器
         grouped_records.clear();  // 清空上一次执行的分组记录
         while (!prev_->is_end()) {
-            auto tuple = prev_->Next();
-            std::list<std::string_view> group_key = generateGroupKey(tuple);
-            grouped_records[group_key].emplace_back(std::move(tuple));
+            auto tuples = prev_->Next();
+            for (const auto& tuple : *tuples) {
+                std::list<std::string_view> group_key = generateGroupKey(tuple);
+                grouped_records[group_key].emplace_back(std::move(tuple));
+            }
+
             prev_->nextTuple();  // 移动到上一个执行器的下一个元组
         }
 
@@ -81,6 +86,10 @@ class GroupExecutor : public AbstractExecutor {
             }
         }
         now_iter = grouped_records.begin();
+        batch_record_ = std::make_unique<BatchRecord>();
+        while(now_iter != grouped_records.end() && !batch_record_->full()) {
+            batch_record_->push_back(std::move(now_iter->second.front()));
+        }
     }
 
     /**
@@ -89,8 +98,9 @@ class GroupExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         TRACE_FUNCTION
-        if (now_iter != grouped_records.end()) {
-            now_iter++;
+        batch_record_ = std::make_unique<BatchRecord>();
+        while(now_iter != grouped_records.end() && !batch_record_->full()) {
+            batch_record_->push_back(std::move(now_iter->second.front()));
         }
     }
 
@@ -99,9 +109,8 @@ class GroupExecutor : public AbstractExecutor {
      * @return 指向当前分组代表元组的智能指针。
      * 注意：返回的元组所有权被转移。
      */
-    std::unique_ptr<RmRecord> Next() override {
-        const auto& front = now_iter->second.front();
-        return std::make_unique<RmRecord>(front->size, front->data);
+    std::unique_ptr<BatchRecord> Next() override {
+        return std::move(batch_record_);
     }
 
     /**
@@ -137,7 +146,7 @@ class GroupExecutor : public AbstractExecutor {
      * @param record 指向要生成键的记录的智能指针
      * @return 生成的分组键字符串。
      */
-    std::list<std::string_view> generateGroupKey(std::unique_ptr<RmRecord>& record) {
+    std::list<std::string_view> generateGroupKey(const std::unique_ptr<RmRecord>& record) {
         TRACE_FUNCTION
         std::list<std::string_view> group_key_list;
         // 遍历所有分组列

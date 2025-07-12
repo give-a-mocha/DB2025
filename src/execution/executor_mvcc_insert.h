@@ -62,7 +62,7 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @throw IncompatibleTypeError 当值的类型与列类型不兼容时
      * @throw RMDBError 当索引更新失败需要回滚时
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 创建记录缓冲区
         std::unique_ptr<RmRecord> rec = std::make_unique<RmRecord>(fh_->get_file_hdr().record_size);
 

@@ -100,7 +100,7 @@ class ProjectionExecutor : public AbstractExecutor {
      */
     bool is_end() const override { return prev_->is_end(); }
 
-    std::unique_ptr<RmRecord> get_copy_record(const auto &prev_cols, const RmRecord *prev_rec) {
+    std::unique_ptr<RmRecord> get_copy_record(const std::vector<ColMeta> &prev_cols, const RmRecord *prev_rec) {
         // 复制选中的列数据
         auto proj_rec = std::make_unique<RmRecord>(len_);
         for (size_t i = 0; i < sel_idxs_.size(); ++i) {
@@ -118,23 +118,22 @@ class ProjectionExecutor : public AbstractExecutor {
      * @brief 获取投影后的结果记录
      * @return 投影记录的智能指针，如果输入为空返回nullptr
      */
-    BatchRecord Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 获取输入记录
-        BatchRecord prev_rec = prev_->Next();
+        std::unique_ptr<BatchRecord> prev_rec = prev_->Next();
 
-        if (prev_rec.empty()) {
+        if (prev_rec == nullptr) {
             ERROR("ProjectionExecutor: No more records in previous executor");
-            return prev_rec;
+            return nullptr;
         }
 
         // 创建投影结果记录
         // auto proj_rec = std::make_unique<RmRecord>(len_);
-        BatchRecord batch_proj_rec;
-        auto &prev_cols = prev_->cols();
+        auto batch_proj_rec = std::make_unique<BatchRecord>();
+        const std::vector<ColMeta> &prev_cols = prev_->cols();
 
-        for (auto &rec : prev_rec) {
-            batch_proj_rec.push_back(get_copy_record(prev_cols, rec.get()));
-        }
+        for (auto &rec : *prev_rec) {
+            batch_proj_rec->push_back(get_copy_record(prev_cols, rec.get()));        }
 
         return batch_proj_rec;
     }
