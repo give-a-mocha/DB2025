@@ -33,8 +33,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
     std::unique_ptr<BatchRecord> batch_rec_;
-    Iid lower_iid;                   // 索引下界
-    Iid upper_iid;                   // 索引上界
+    Iid lower_iid;  // 索引下界
+    Iid upper_iid;  // 索引上界
 
    public:
     MvccIndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
@@ -166,7 +166,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, tab_.cols);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 batch_rec_->push_back(std::move(rec));
-                if(batch_rec_->full()) return ;
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }
@@ -187,7 +187,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, tab_.cols);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 batch_rec_->push_back(std::move(rec));
-                if(batch_rec_->full()) return ;
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }

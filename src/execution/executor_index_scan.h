@@ -21,17 +21,17 @@ See the Mulan PSL v2 for more details. */
  */
 class IndexScanExecutor : public AbstractExecutor {
    private:
-    TabMeta &tab_;                   // 表元数据
-    std::vector<Condition> conds_;   // 原始条件
-    RmFileHandle *fh_;               // 表文件句柄
-    IxIndexHandle *ih_;              // 索引句柄
-    size_t len_;                     // 记录长度
-    IndexMeta &index_meta_;          // 索引元数据
-    Rid rid_;                        // 当前记录ID
-    std::unique_ptr<IxScan> scan_;   // 扫描迭代器
-    SmManager *sm_manager_;          // 系统管理器
-    Iid lower_iid;                   // 索引下界
-    Iid upper_iid;                   // 索引上界
+    TabMeta &tab_;                  // 表元数据
+    std::vector<Condition> conds_;  // 原始条件
+    RmFileHandle *fh_;              // 表文件句柄
+    IxIndexHandle *ih_;             // 索引句柄
+    size_t len_;                    // 记录长度
+    IndexMeta &index_meta_;         // 索引元数据
+    Rid rid_;                       // 当前记录ID
+    std::unique_ptr<IxScan> scan_;  // 扫描迭代器
+    SmManager *sm_manager_;         // 系统管理器
+    Iid lower_iid;                  // 索引下界
+    Iid upper_iid;                  // 索引上界
 
     std::unique_ptr<BatchRecord> batch_rec_;
 

@@ -87,7 +87,7 @@ class GroupExecutor : public AbstractExecutor {
         }
         now_iter = grouped_records.begin();
         batch_record_ = std::make_unique<BatchRecord>();
-        while(now_iter != grouped_records.end() && !batch_record_->full()) {
+        while (now_iter != grouped_records.end() && !batch_record_->full()) {
             batch_record_->push_back(std::move(now_iter->second.front()));
         }
     }
@@ -99,7 +99,7 @@ class GroupExecutor : public AbstractExecutor {
     void nextTuple() override {
         TRACE_FUNCTION
         batch_record_ = std::make_unique<BatchRecord>();
-        while(now_iter != grouped_records.end() && !batch_record_->full()) {
+        while (now_iter != grouped_records.end() && !batch_record_->full()) {
             batch_record_->push_back(std::move(now_iter->second.front()));
         }
     }
@@ -109,9 +109,7 @@ class GroupExecutor : public AbstractExecutor {
      * @return 指向当前分组代表元组的智能指针。
      * 注意：返回的元组所有权被转移。
      */
-    std::unique_ptr<BatchRecord> Next() override {
-        return std::move(batch_record_);
-    }
+    std::unique_ptr<BatchRecord> Next() override { return std::move(batch_record_); }
 
     /**
      * @brief 获取输出列的元数据。

@@ -15,9 +15,7 @@ class MemoryPool {
             list.push_back(malloc(sizeof(T)));
         }
     }
-    T* malloc() {
-        
-    }
+    T* malloc() {}
 };
 
 #endif
