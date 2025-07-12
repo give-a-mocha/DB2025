@@ -117,12 +117,12 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     }
     commit_lock.unlock();  // 提交操作完成后释放锁
 
-    txn->CommitUndoLogs();  // 提交事务的撤销日志
-
+    
     txn->set_state(TransactionState::COMMITTED);
     txn->set_commit_ts(get_next_timestamp());  // 设置提交时间戳
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
-
+    txn->CommitUndoLogs();  // 提交事务的撤销日志
+    
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
     auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
