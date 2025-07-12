@@ -92,24 +92,48 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-    // FOCC 检查当前事务等写集和其他未提交事务等读集是否有冲突
+    // FOCC Validation Phase 1: Collect conditions under a shared lock
+    std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
+    lock_manager_->lock_gap_set_shared();
+    
+    std::unordered_set<int> processed_fds;
+    for (const auto& write_record : *txn->get_write_set()) {
+        const auto& table_name = write_record->GetTableName();
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
+        int fd = fh_->GetFd();
+        if (processed_fds.find(fd) == processed_fds.end()) {
+            conditions_by_fd[fd] = lock_manager_->get_gap_condition(fd, txn);
+            processed_fds.insert(fd);
+        }
+    }
+    lock_manager_->unlock_gap_set_shared();
+
+    // FOCC Validation Phase 2: Fetch records and evaluate lock-free
     for (size_t i = 0; i < txn->get_write_set()->size(); ++i) {
         const auto& write_record = (*txn->get_write_set())[i];
         const auto& table_name = write_record->GetTableName();
         const auto& rid = write_record->GetRid();
         TabMeta& tab_ = sm_manager_->db_.get_table(table_name);
         std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
-        std::vector<Condition> conds_ = lock_manager_->get_gap_condition(fh_->GetFd(), txn);
+        int fd = fh_->GetFd();
+
+        if (conditions_by_fd.find(fd) == conditions_by_fd.end() || conditions_by_fd.at(fd).empty()) {
+            continue;
+        }
+        const auto& conds = conditions_by_fd.at(fd);
+
         auto [base_meta, rec] = fh_->get_record(rid);
         auto pre_link = txn->GetUndoLog(i)->prev_version_;
         bool is_deleted = base_meta.is_deleted_;
 
-        // 最新记录是删除，前一次是空说明是insert+delete 组合我应该跳过
         if (is_deleted && pre_link.IsValid() && !GetUndoLog(pre_link)->is_deleted_) {
             is_deleted = false;
         }
-        if(is_deleted) continue;
-        if (!conds_.empty() && AbstractExecutor::eval_conds(tab_.cols, conds_, rec)){
+        if (is_deleted) {
+            continue;
+        }
+
+        if (AbstractExecutor::eval_conds(tab_.cols, conds, rec)) {
             throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
         }
     }

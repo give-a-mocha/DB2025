@@ -13,6 +13,7 @@ See the Mulan PSL v2 for more details. */
 #include <condition_variable>
 #include <list>
 #include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 
 #include "common/common.h"
@@ -67,6 +68,8 @@ class LockManager {
    private:
     // 用于锁表的并发
     std::mutex latch_;
+    // 用于保护间隙锁表的读写锁
+    std::shared_mutex gap_lock_set_latch_;
     // 全局锁表
     std::unordered_map<LockDataId, LockRequestQueue> lock_table_;
     // 全局间隙锁表, key 为 fd_
@@ -76,6 +79,9 @@ class LockManager {
     LockManager() {}
 
     ~LockManager() {}
+
+    void lock_gap_set_shared() { gap_lock_set_latch_.lock_shared(); }
+    void unlock_gap_set_shared() { gap_lock_set_latch_.unlock_shared(); }
 
     bool lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd);
 

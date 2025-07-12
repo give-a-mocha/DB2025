@@ -319,7 +319,7 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 }
 
 bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
-    std::scoped_lock<std::mutex> lock(latch_);
+    std::unique_lock<std::shared_mutex> w_lock(gap_lock_set_latch_);
 
     auto queue_it = gap_lock_table_.find(tab_fd);
     if (queue_it == gap_lock_table_.end()) {
@@ -334,7 +334,6 @@ bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> 
 }
 
 std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* txn) {
-    std::scoped_lock<std::mutex> lock(latch_);
     std::vector<Condition> gap_conditions;
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
@@ -351,7 +350,7 @@ std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* t
 }
 
 bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
-    std::scoped_lock<std::mutex> lock(latch_);
+    std::unique_lock<std::shared_mutex> w_lock(gap_lock_set_latch_);
 
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
