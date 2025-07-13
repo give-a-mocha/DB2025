@@ -47,32 +47,20 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @return nullptr，因为DELETE不产生结果集
      */
     std::unique_ptr<RmRecord> Next() override {
-        // 添加间隙锁
+        // 收集谓词
         txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), std::move(conds_));
-        for (auto &rec_tuple : old_recs_) {
+        for (auto & rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
             auto &rid = std::get<2>(rec_tuple);
             auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
-            // 先获取写锁
+            
             if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
-            bool ok = txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
-            if (!ok) {
-                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
-            }
-            if (base_meta.is_deleted_) {
-                // 如果元组已经被删除，跳过
-                continue;
-            }
-            TupleMeta delete_meta;
-            delete_meta.is_deleted_ = true;  // 设置元组为已删除状态
-            fh_->update_tuple_meta(rid, delete_meta);
-            if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {
-                txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid, old_rec, base_meta, context_->txn_);
-                context_->txn_->append_write_record(
-                    std::make_unique<WriteRecord>(tab_name_, rid));
+            TupleMeta new_meta(context_->txn_->get_transaction_id(), true);
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid, base_meta, new_meta, old_rec, nullptr, context_->txn_)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             // context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
         }

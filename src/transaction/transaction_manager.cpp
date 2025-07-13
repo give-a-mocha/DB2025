@@ -197,7 +197,15 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             fh_->update_tuple_meta(rid, delete_meta);
             // log_manager->add_delete_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid, table_name);
         } else {
-            fh_->insert_record_force(rid, undolog->record_.data);
+            TupleMeta base_meta;
+            auto pre_link = undolog->prev_version_;
+            if (!pre_link.IsValid()) {
+                base_meta = {0, false};
+            } else {
+                const UndoLog* pre_log = GetUndoLog(pre_link);
+                TupleMeta base_meta(pre_log->ts_, false);
+            }
+            fh_->insert_record_force(rid, base_meta, undolog->record_.data);
             // log_manager->add_insert_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid, table_name);
         }
     }
@@ -459,6 +467,9 @@ bool TransactionManager::should_perform_gc() {
     return terminated_count > txn_map.size() * 0.3;
 }
 
+/** @brief 生成新的撤销日志并更新版本链接。 
+ * @details 根据磁盘现在的TupleMeta和RmRecord生成新的撤销日志。
+*/
 auto TransactionManager::GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta, Transaction *txn) -> bool {
     TRACE_FUNCTION
     auto log = std::make_unique<UndoLog>();
@@ -497,4 +508,104 @@ auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transactio
         undo_link = undo_log->prev_version_;
     }
     return undo_logs;
+}
+
+
+
+auto TransactionManager::GetTupleAndUndoLink(RmFileHandle* fh_, const Rid &rid) -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink> {
+    auto page_guard = fh_->AcquirePageReadLock(rid);
+    auto [base_meta, rec] = fh_->GetTupleWithLockAcquired(rid, page_guard.GetData());
+    auto link = GetUndoLink(fh_->GetFd(), rid);
+    return std::make_tuple(base_meta, std::move(rec), link);
+}
+
+auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid &rid, TupleMeta& base_meta, TupleMeta& new_meta, const std::unique_ptr<RmRecord> &old_rec, const std::unique_ptr<RmRecord> &new_rec, Transaction *txn) -> bool {
+    auto page_guard = fh_->AcquirePageWriteLock(rid);
+    auto meta = fh_->GetTupleMetaWithLockAcquired(rid, page_guard.GetData());
+    if (meta != base_meta) {
+        return false;  // 如果元数据不匹配，返回 false
+    }
+
+    // 更新当前记录
+    if (new_meta.is_deleted_) {
+        fh_->UpdateTupleMetaWithLockAcquired(rid, new_meta, page_guard.GetDataMut());
+    } else {
+        fh_->UpdateTupleWithLockAcquired(rid, new_meta, new_rec, page_guard.GetDataMut());
+    }
+
+    // 添加撤销日志
+    if (meta.ts_ != txn->get_transaction_id()) {
+        // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
+        GenerateNewUndoLog(fh_->GetFd(), rid, old_rec, meta, txn);
+        txn->append_write_record(std::make_unique<WriteRecord>(tab_name_, rid));
+    }
+    return true;  // 更新成功
+}
+
+auto TransactionManager::AtomicUpdate(
+    const std::string& tab_name, 
+    RmFileHandle* fh_, 
+    Rid& delete_rid, 
+    TupleMeta& delete_base_meta,
+    const std::unique_ptr<RmRecord>& delete_rec,
+    Rid& insert_rid,
+    TupleMeta& insert_base_meta,
+    const std::unique_ptr<RmRecord>& insert_old_rec,
+    const std::unique_ptr<RmRecord>& insert_new_rec,
+    Transaction* txn
+) -> bool {
+    auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
+    auto meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
+    if (meta != delete_base_meta) {
+        WARN("AtomicUpdate: Metadata mismatch for delete_rid: {}, expected: {}, actual: {}", 
+             delete_rid, delete_base_meta, meta);
+        return false;  // 如果元数据不匹配，返回 false
+    }
+    // 先delete
+    TupleMeta delete_new_meta(txn->get_transaction_id(), true);
+    fh_->UpdateTupleMetaWithLockAcquired(delete_rid, delete_new_meta, page_guard.GetDataMut());
+    
+    if (meta.ts_ != txn->get_transaction_id()) {
+        // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
+        GenerateNewUndoLog(fh_->GetFd(), delete_rid, delete_rec, meta, txn);
+        txn->append_write_record(std::make_unique<WriteRecord>(tab_name, delete_rid));
+    }
+
+    if (insert_rid == delete_rid) {
+        insert_base_meta = delete_new_meta;  // 如果插入和删除的RID相同，使用删除的元数据
+    }
+
+    // 然后这里的rid 是index中的rid
+    if (delete_rid.page_no != insert_rid.page_no) {
+        auto new_page_guard = fh_->AcquirePageWriteLock(insert_rid);
+        meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, new_page_guard.GetData());
+        if (meta != insert_base_meta) {
+            WARN("AtomicUpdate: Metadata mismatch for index insert_rid: {}, expected: {}, actual: {}", 
+                 insert_rid, insert_base_meta, meta);
+            return false;  // 如果新元数据不匹配，返回 false
+        }
+        TupleMeta insert_new_meta(txn->get_transaction_id(), false);
+        fh_->UpdateTupleWithLockAcquired(insert_rid, insert_new_meta, insert_new_rec, new_page_guard.GetDataMut());
+        if (meta.ts_ != txn->get_transaction_id()) {
+            // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
+            GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
+            txn->append_write_record(std::make_unique<WriteRecord>(tab_name, insert_rid));
+        }
+    } else {    
+        meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
+        if (meta != insert_base_meta) {
+            WARN("AtomicUpdate: Metadata mismatch for insert_rid: {}, expected: {}, actual: {}", 
+                 insert_rid, insert_base_meta, meta);
+            return false;  // 如果新元数据不匹配，返回 false
+        }
+        TupleMeta insert_new_meta(txn->get_transaction_id(), false);
+        fh_->UpdateTupleWithLockAcquired(insert_rid, insert_new_meta, insert_new_rec, page_guard.GetDataMut());
+        if (meta.ts_ != txn->get_transaction_id()) {
+            // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
+            GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
+            txn->append_write_record(std::make_unique<WriteRecord>(tab_name, insert_rid));
+        }
+    }
+
+    return true;
 }

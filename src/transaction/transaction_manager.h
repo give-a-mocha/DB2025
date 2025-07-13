@@ -168,14 +168,26 @@ class TransactionManager {
 
     auto GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta, Transaction *txn) -> bool;
 
-    //先占位
-    auto UpdateTupleAndUndoLink() -> void;
-    //先占位
-    auto GetTupleAndUndoLink() -> void;
+    auto UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid &rid, TupleMeta& base_meta, TupleMeta& new_meta, const std::unique_ptr<RmRecord> &old_rec, const std::unique_ptr<RmRecord> &new_rec, Transaction *txn) -> bool;
+
+    auto GetTupleAndUndoLink(RmFileHandle* fh_, const Rid &rid) -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink>;
 
     void do_delete(Transaction *txn);
 
     auto CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog*>;
+
+    auto AtomicUpdate(
+        const std::string& tab_name, 
+        RmFileHandle* fh_, 
+        Rid& delete_rid, 
+        TupleMeta& delete_base_meta,
+        const std::unique_ptr<RmRecord>& delete_rec,
+        Rid& insert_rid,
+        TupleMeta& insert_base_meta,
+        const std::unique_ptr<RmRecord>& insert_old_rec,
+        const std::unique_ptr<RmRecord>& insert_new_rec,
+        Transaction* txn
+    ) -> bool;
 
    private:
     auto GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard&;

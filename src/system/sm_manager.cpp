@@ -31,10 +31,12 @@
 #include <fcntl.h>
 
 #include <fstream>
+#include <utility>
 
 #include "index/ix.h"
 #include "record/rm.h"
 #include "record_printer.h"
+#include "record/rm_file_handle.h"
 
 /**
  * @brief 判断指定路径是否为一个文件夹
@@ -605,15 +607,17 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
     char* current_pos = std::find(start_pos, end_pos, '\n');  // 跳过第一行（表头）
     current_pos++;                                            // 跳过换行符
 
-    auto page_handle = fh_->create_new_page_handle();
-
+    auto page_guard = fh_->GetNewWritePageGuard();
     auto batch_copy = [&]() {
+        auto page_handle = RmPageHandle(&fh_->get_file_hdr(), page_guard.GetDataMut());
         page_handle.page_hdr->num_records = count;
         fh_->file_hdr_.record_num += count;
         char* slot = page_handle.get_slot(0);
         memcpy(slot, record_data, offset);
         Bitmap::batch_set_fast(page_handle.bitmap, 0, count);
-
+        if (count == max_record_num) {
+            fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
+        }
         memset(record_data, 0, len);
         offset = 0;
         count = 0;
@@ -654,7 +658,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
         }
 
         // 插入记录
-        Rid rid_ = {page_handle.page->get_page_id().page_no, count};
+        Rid rid_ = {page_guard.PageId().page_no, count};
         count++;
 
         // 插入索引
@@ -664,15 +668,12 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
         // 检查是否需要创建新页
         if (count == max_record_num) {
             batch_copy();
-            fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
-            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
-            page_handle = fh_->create_new_page_handle();  // 创建新页
+            page_guard = fh_->GetNewWritePageGuard();
         }
     }
 
     // 确保最后一页被写入
     batch_copy();
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
     // for(const auto &index : tab_.indexes) {
     //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
     //     ih->debug_print_tree();

@@ -56,7 +56,25 @@ constexpr int RM_MAX_RECORD_SIZE = 1024;
  * 2. 实现记录的软删除
  */
 struct TupleMeta {
+    timestamp_t ts_{0};  // 元组的时间戳，用于版本控制
     bool is_deleted_{false};  // 元组是否被删除的标记
+
+    TupleMeta() = default;
+
+    TupleMeta(timestamp_t ts, bool is_deleted) : ts_(ts), is_deleted_(is_deleted) {}
+
+    friend bool operator==(const TupleMeta &lhs, const TupleMeta &rhs) {
+        return lhs.ts_ == rhs.ts_ && lhs.is_deleted_ == rhs.is_deleted_;
+    }
+
+    friend bool operator!=(const TupleMeta &lhs, const TupleMeta &rhs) {
+        return !(lhs == rhs);
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const TupleMeta &meta) {
+        os << "TupleMeta(ts: " << meta.ts_ << ", is_deleted: " << (meta.is_deleted_ ? "true" : "false") << ")";
+        return os;
+    }
 };
 
 constexpr int TUPLE_META_SIZE = sizeof(TupleMeta);

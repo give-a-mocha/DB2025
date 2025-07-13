@@ -87,33 +87,26 @@ class MvccInsertExecutor : public AbstractExecutor {
         }
         
         bool is_exist = sm_manager_->exist_in_index(tab_, rec, rid_, context_->txn_);
+        TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         if (is_exist) {
-            auto [tuple_meta, old_rec] = fh_->get_record(rid_);
-            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid_);
+            auto [base_meta, old_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
             if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             // 主键冲突
-            if (tuple_meta.is_deleted_ == false) {
-                throw TransactionAbortException(context_->txn_->get_transaction_id(),
-                                                    AbortReason::UPGRADE_CONFLICT);
+            if (base_meta.is_deleted_ == false) {
+                txn_mgr_->abort(context_, context_->log_mgr_);
+                throw InternalError("Primary key conflict, duplicate insert");
             }
-            //!等原子操作可以去掉这个锁
-            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
-            fh_->insert_record_force(rid_, rec->data);
-            if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {
-                txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid_, old_rec, tuple_meta, context_->txn_);
-                context_->txn_->append_write_record(
-                    std::make_unique<WriteRecord>(tab_name_, rid_));
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec, context_->txn_)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
         } else {
-            rid_ = fh_->insert_record(rec->data);
-            txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
-            TupleMeta delete_meta;
-            delete_meta.is_deleted_ = true;  // 插入的记录不标记为
-            txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid_, nullptr, delete_meta, context_->txn_);
-            context_->txn_->append_write_record(std::make_unique<WriteRecord>(tab_.name, rid_));
-            //!插入到索引 在并发时可能有事务也插入
+            rid_ = fh_->GetNewRid();
+            TupleMeta base_meta(0, true);
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec, context_->txn_)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
             sm_manager_->insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);
         }
         // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);

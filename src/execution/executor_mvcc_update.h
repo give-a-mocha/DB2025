@@ -57,25 +57,15 @@ class MvccUpdateExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         // 加锁间隙
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), std::move(conds_));
+        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
             auto &rid = std::get<2>(rec_tuple);
             auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
-            // 先获取写锁
-            INFO("Update record at rid: {}", rid);
-            WARN("Rid TupleMeta: {}", base_meta.is_deleted_);
-            bool ok = txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd());
-            if (!ok) {
-                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::DEADLOCK_PREVENTION);
-            }
+
             if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-            }
-            if (base_meta.is_deleted_) {
-                // 如果元组已经被删除，跳过
-                continue;
             }
 
             // 创建新记录
@@ -135,49 +125,33 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-
-            // update = delete + insert
-            // 删除旧记录
-            TupleMeta delete_meta;
-            delete_meta.is_deleted_ = true;  // 设置元组为已删除状态
-            fh_->update_tuple_meta(rid, delete_meta);
-            if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {
-                txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), rid, old_rec, base_meta, context_->txn_);
-                context_->txn_->append_write_record(
-                    std::make_unique<WriteRecord>(tab_name_, rid));
-            }
-            // context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid, tab_.name);
-
-            // 插入新记录
+            
             Rid insert_rid;
             bool is_exist = sm_manager_->exist_in_index(tab_, new_rec, insert_rid, context_->txn_);
             if (is_exist) {
-                auto [tuple_meta, old_rec] = fh_->get_record(insert_rid);
-                auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), insert_rid);
+                auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, insert_rid);
                 if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
                 }
-                // 主键冲突
-                if (tuple_meta.is_deleted_ == false) {
+                // 不是我要删除的rid，主键冲突
+                if (insert_rid != rid && tuple_meta.is_deleted_ == false) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                       AbortReason::UPGRADE_CONFLICT);
                 }
-                txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd());
-                fh_->insert_record_force(insert_rid, new_rec->data);
-                if (link.IsValid() && link.prev_txn_ != context_->txn_->get_transaction_id()) {
-                    txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), insert_rid, old_rec, tuple_meta, context_->txn_);
-                    context_->txn_->append_write_record(
-                        std::make_unique<WriteRecord>(tab_name_, insert_rid));
+
+                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, tuple_meta, nullptr, new_rec, context_->txn_)) {
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                      AbortReason::UPGRADE_CONFLICT);
                 }
+                
             } else {
-                insert_rid = fh_->insert_record(new_rec->data);
-                txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd());
-                TupleMeta delete_meta;
-                delete_meta.is_deleted_ = true;  // 插入的记录不标记为
-                txn_mgr_->GenerateNewUndoLog(fh_->GetFd(), insert_rid, nullptr, delete_meta, context_->txn_);
-                context_->txn_->append_write_record(
-                    std::make_unique<WriteRecord>(tab_name_, insert_rid));
-                //插入到索引
+                TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
+                TupleMeta delete_meta(0, true);
+                insert_rid = fh_->GetNewRid();
+                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, delete_meta, nullptr, new_rec, context_->txn_)) {
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                      AbortReason::UPGRADE_CONFLICT);
+                }
                 sm_manager_->insert_index_with_tab_meta(tab_, new_rec, insert_rid, context_->txn_);
             }
             // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid, tab_.name);

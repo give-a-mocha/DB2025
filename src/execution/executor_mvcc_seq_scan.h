@@ -72,9 +72,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid_);
+            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
             auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
-            auto [base_meta, base_tuple] = fh_->get_record(rid_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
@@ -106,9 +105,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid_);
+            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
             auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
-            auto [base_meta, base_tuple] = fh_->get_record(rid_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
