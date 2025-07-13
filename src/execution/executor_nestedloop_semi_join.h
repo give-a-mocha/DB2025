@@ -152,7 +152,7 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
             reset_right_scan();
 
             while (!right_exhausted_) {
-                if(right_batch_){
+                if (right_batch_) {
                     for (size_t i = 0; i < right_batch_->size(); ++i) {
                         auto &right_rec = *(right_batch_->begin() + i);
                         auto joined_rec = std::make_unique<RmRecord>(left_->tupleLen() + right_->tupleLen());

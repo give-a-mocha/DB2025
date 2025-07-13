@@ -104,7 +104,8 @@ class AggregateExecutor : public AbstractExecutor {
             while (!prev_->is_end()) {
                 // records.push_back(prev_->Next());
                 auto prev_records = prev_->Next();
-                records.insert(records.end(), std::make_move_iterator(prev_records->begin()), std::make_move_iterator(prev_records->end()));
+                records.insert(records.end(), std::make_move_iterator(prev_records->begin()),
+                               std::make_move_iterator(prev_records->end()));
                 prev_->nextTuple();
             }
             auto record = aggregateGroup(records);

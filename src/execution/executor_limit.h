@@ -9,11 +9,11 @@
 
 class LimitExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> child_;  // 子执行器
-    int offset_;                               // 跳过的记录数
-    int count_;                                // 返回的记录数
-    int current_;                              // 当前处理的记录数
-    std::unique_ptr<BatchRecord> result_batch_; // 结果批次
+    std::unique_ptr<AbstractExecutor> child_;    // 子执行器
+    int offset_;                                 // 跳过的记录数
+    int count_;                                  // 返回的记录数
+    int current_;                                // 当前处理的记录数
+    std::unique_ptr<BatchRecord> result_batch_;  // 结果批次
 
    public:
     LimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count)
@@ -32,20 +32,15 @@ class LimitExecutor : public AbstractExecutor {
 
     void nextTuple() override {
         result_batch_ = std::make_unique<BatchRecord>();
-        if(is_end()) return;
-        
+        if (is_end()) return;
+
         auto child_batch = child_->Next();
-        if(child_batch)
-        {
-            for(auto& rec : *child_batch)
-            {
-                if(current_ < count_)
-                {
+        if (child_batch) {
+            for (auto &rec : *child_batch) {
+                if (current_ < count_) {
                     result_batch_->push_back(std::move(rec));
                     current_++;
-                }
-                else
-                {
+                } else {
                     break;
                 }
             }
