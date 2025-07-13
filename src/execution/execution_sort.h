@@ -72,7 +72,8 @@ class SortExecutor : public AbstractExecutor {
         prev_->beginTuple();
         while (!prev_->is_end()) {
             auto batch = prev_->Next();
-            sorted_tuples_.insert(sorted_tuples_.end(), std::make_move_iterator(batch->begin()), std::make_move_iterator(batch->end()));
+            sorted_tuples_.insert(sorted_tuples_.end(), std::make_move_iterator(batch->begin()),
+                                  std::make_move_iterator(batch->end()));
             prev_->nextTuple();
         }
 

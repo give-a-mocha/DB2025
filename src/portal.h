@@ -103,8 +103,8 @@ class Portal {
                     std::vector<std::unique_ptr<RmRecord>> old_recs;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         auto batch = scan->Next();
-                        if(batch) {
-                            for(auto& rec : *batch) {
+                        if (batch) {
+                            for (auto &rec : *batch) {
                                 rids.push_back(scan->rid());
                                 old_recs.push_back(std::move(rec));
                             }
@@ -123,8 +123,8 @@ class Portal {
                     std::vector<std::unique_ptr<RmRecord>> old_recs;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         auto batch = scan->Next();
-                        if(batch) {
-                            for(auto& rec : *batch) {
+                        if (batch) {
+                            for (auto &rec : *batch) {
                                 rids.push_back(scan->rid());
                                 old_recs.push_back(std::move(rec));
                             }
