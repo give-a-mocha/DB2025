@@ -23,21 +23,21 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;
     std::unique_ptr<AbstractExecutor> right_;
-    size_t len_;                           // 连接结果记录长度
-    std::vector<ColMeta> cols_;            // 结果集列元数据
-    std::vector<Condition> fed_conds_;     // 连接条件列表
-    bool _is_end;                          // 扫描结束标志
-    
+    size_t len_;                        // 连接结果记录长度
+    std::vector<ColMeta> cols_;         // 结果集列元数据
+    std::vector<Condition> fed_conds_;  // 连接条件列表
+    bool _is_end;                       // 扫描结束标志
+
     // 批处理相关状态
-    std::unique_ptr<BatchRecord> left_batch_;     // 当前左表批次
-    std::unique_ptr<BatchRecord> right_batch_;    // 当前右表批次
-    std::unique_ptr<BatchRecord> result_batch_;   // 结果批次
-    
+    std::unique_ptr<BatchRecord> left_batch_;    // 当前左表批次
+    std::unique_ptr<BatchRecord> right_batch_;   // 当前右表批次
+    std::unique_ptr<BatchRecord> result_batch_;  // 结果批次
+
     // 批次内索引
-    size_t left_idx_;           // 当前处理的左表记录索引
-    size_t right_idx_;          // 当前处理的右表记录索引
-    bool left_exhausted_;       // 左表是否已用完
-    bool right_exhausted_;      // 右表是否已用完
+    size_t left_idx_;       // 当前处理的左表记录索引
+    size_t right_idx_;      // 当前处理的右表记录索引
+    bool left_exhausted_;   // 左表是否已用完
+    bool right_exhausted_;  // 右表是否已用完
 
    public:
     /**
@@ -67,7 +67,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         cols_.insert(cols_.end(), right_cols.begin(), right_cols.end());
         _is_end = false;
         fed_conds_ = std::move(conds);
-        
+
         // 初始化批处理状态
         left_idx_ = 0;
         right_idx_ = 0;
@@ -87,17 +87,17 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         TRACE_FUNCTION
         left_->beginTuple();
         right_->beginTuple();
-        
+
         // 初始化批处理状态
         left_idx_ = 0;
         right_idx_ = 0;
         left_exhausted_ = false;
         right_exhausted_ = false;
-        
+
         // 获取第一批记录
         fetch_left_batch();
         fetch_right_batch();
-        
+
         // 生成第一批结果
         generate_result_batch();
     }
@@ -113,7 +113,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     void nextTuple() override {
         TRACE_FUNCTION
         if (is_end()) return;
-        
+
         // 生成下一批结果
         generate_result_batch();
     }
@@ -169,7 +169,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             left_idx_ = 0;
         }
     }
-    
+
     /**
      * @brief 获取右表下一批记录
      */
@@ -186,7 +186,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
             right_idx_ = 0;
         }
     }
-    
+
     /**
      * @brief 重置右表扫描
      */
@@ -196,14 +196,14 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         right_exhausted_ = false;
         fetch_right_batch();
     }
-    
+
     /**
      * @brief 生成结果批次
      */
     void generate_result_batch() {
         TRACE_FUNCTION
         result_batch_ = std::make_unique<BatchRecord>();
-        
+
         while (!left_exhausted_ && !result_batch_->full()) {
             // 如果右表批次用完，重置右表
             if (right_exhausted_ || right_idx_ >= right_batch_->size()) {
@@ -217,23 +217,23 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                 reset_right_scan();
                 continue;
             }
-            
+
             // 处理当前左右表记录对
             if (left_idx_ < left_batch_->size() && right_idx_ < right_batch_->size()) {
-                auto& left_rec = *(left_batch_->begin() + left_idx_);
-                auto& right_rec = *(right_batch_->begin() + right_idx_);
-                
+                auto &left_rec = *(left_batch_->begin() + left_idx_);
+                auto &right_rec = *(right_batch_->begin() + right_idx_);
+
                 // 创建连接记录
                 auto joined_rec = std::make_unique<RmRecord>(len_);
                 memcpy(joined_rec->data, left_rec->data, left_->tupleLen());
                 memcpy(joined_rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
-                
+
                 // 检查连接条件
                 if (eval_conds(cols_, fed_conds_, joined_rec)) {
                     result_batch_->push_back(std::move(joined_rec));
                 }
             }
-            
+
             // 移动到右表下一条记录
             right_idx_++;
             if (right_idx_ >= right_batch_->size()) {
@@ -241,7 +241,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
                 fetch_right_batch();
             }
         }
-        
+
         // 检查是否结束
         if (left_exhausted_ && (right_exhausted_ || result_batch_->empty())) {
             _is_end = true;
