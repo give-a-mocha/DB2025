@@ -110,7 +110,7 @@ class SeqScanExecutor : public AbstractExecutor {
      * @brief 检查扫描是否结束
      * @return true表示扫描结束，false表示还有记录
      */
-    bool is_end() const override { return scan_ == nullptr || scan_->is_end(); }
+    bool is_end() const override { return (scan_ == nullptr || scan_->is_end()) && batch_rec_->empty(); }
 
     /**
      * @brief 获取当前记录的数据
