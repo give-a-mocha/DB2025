@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief 顺序扫描执行器，负责实现表的全表顺序扫描功能

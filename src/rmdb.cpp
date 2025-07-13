@@ -39,7 +39,7 @@
 #define MAX_CONN_LIMIT 8
 
 // 是否开启 std::cout
-// #define ENABLE_COUT
+#define ENABLE_COUT
 
 // #define ENABLE_SERIALIZE
 

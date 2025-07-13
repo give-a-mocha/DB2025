@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "common/BatchArray.hpp"
 #include "execution/executor_abstract.h"
 
 class ExplainGroupExecutor : public AbstractExecutor {
@@ -23,7 +24,7 @@ class ExplainGroupExecutor : public AbstractExecutor {
         having_conds_ = std::move(conds);
     }
 
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         std::string res = std::string(offset_, '\t');
         res += "GroupBy(columns=[";
         for (size_t i = 0; i < group_cols_.size(); i++) {

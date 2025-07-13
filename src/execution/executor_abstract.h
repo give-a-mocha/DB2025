@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/TraceStack.hpp"
 #include "common/common.h"
+#include "common/BatchArray.hpp"
 #include "execution/execution_common.h"
 #include "execution_defs.h"
 #include "index/ix.h"

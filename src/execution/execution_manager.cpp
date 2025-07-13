@@ -25,6 +25,7 @@
 #include "executor_seq_scan.h"
 #include "index/ix.h"
 #include "record_printer.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief SQL命令帮助信息
@@ -227,30 +228,34 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     size_t num_rec = 0;
     // 执行query_plan
     for (executorTreeRoot->beginTuple(); !executorTreeRoot->is_end(); executorTreeRoot->nextTuple()) {
-        auto Tuple = executorTreeRoot->Next();
-        std::vector<std::string> columns;
-        for (auto &col : executorTreeRoot->cols()) {
-            std::string col_str;
-            char *rec_buf = Tuple->data + col.offset;
-            if (col.type == ColType::TYPE_INT) {
-                col_str = std::to_string(*(int *)rec_buf);
-            } else if (col.type == ColType::TYPE_FLOAT) {
-                col_str = std::to_string(*(float *)rec_buf);
-            } else if (col.type == ColType::TYPE_STRING) {
-                col_str = std::string((char *)rec_buf, col.len);
-                col_str.resize(strlen(col_str.c_str()));
+        auto batch_record = executorTreeRoot->Next();
+        if(!batch_record) continue;
+        for(auto& record : *batch_record)
+        {
+            std::vector<std::string> columns;
+            for (auto &col : executorTreeRoot->cols()) {
+                std::string col_str;
+                char *rec_buf = record->data + col.offset;
+                if (col.type == ColType::TYPE_INT) {
+                    col_str = std::to_string(*(int *)rec_buf);
+                } else if (col.type == ColType::TYPE_FLOAT) {
+                    col_str = std::to_string(*(float *)rec_buf);
+                } else if (col.type == ColType::TYPE_STRING) {
+                    col_str = std::string((char *)rec_buf, col.len);
+                    col_str.resize(strlen(col_str.c_str()));
+                }
+                columns.push_back(col_str);
             }
-            columns.push_back(col_str);
+            // print record into buffer
+            rec_printer.print_record(columns, context);
+            // print record into file
+            outfile << "|";
+            for (const std::string &column : columns) {
+                outfile << " " << column << " |";
+            }
+            outfile << "\n";
+            num_rec++;
         }
-        // print record into buffer
-        rec_printer.print_record(columns, context);
-        // print record into file
-        outfile << "|";
-        for (const std::string &column : columns) {
-            outfile << " " << column << " |";
-        }
-        outfile << "\n";
-        num_rec++;
     }
     outfile.close();
     // Print footer into buffer

@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief 索引扫描执行器，负责实现基于索引的高效记录访问

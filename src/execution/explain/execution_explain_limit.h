@@ -5,6 +5,7 @@
 #include "execution/executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 class ExplainLimitExecutor : public AbstractExecutor {
    private:
@@ -17,7 +18,7 @@ class ExplainLimitExecutor : public AbstractExecutor {
     ExplainLimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count, int output_offset)
         : child_(std::move(child)), offset_(offset), count_(count), output_offset_(output_offset) {}
 
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 按指定缩进生成输出
         std::string res = std::string(output_offset_, '\t');
         res += "Limit(offset=" + std::to_string(offset_) + ", count=" + std::to_string(count_) + ")\n";

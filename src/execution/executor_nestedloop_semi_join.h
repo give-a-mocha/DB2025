@@ -9,30 +9,32 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #pragma once
+#include "common/BatchArray.hpp"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "common/BatchArray.hpp"
 
 class NestedLoopSemiJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;   // 左子树执行器
     std::unique_ptr<AbstractExecutor> right_;  // 右子树执行器
-    size_t len_;                               // 连接结果记录长度
+    size_t len_;                               // 结果记录长度
     std::vector<ColMeta> cols_;                // 结果集列元数据
-    std::vector<ColMeta> tot_cols_;            // 左表列元数据
+    std::vector<ColMeta> tot_cols_;            // 左右表总列元数据
     std::vector<Condition> fed_conds_;         // 连接条件列表
     bool _is_end;                              // 扫描结束标志
 
     // 批处理相关状态
     std::unique_ptr<BatchRecord> left_batch_;    // 当前左表批次
+    std::unique_ptr<BatchRecord> right_batch_;   // 当前右表批次
     std::unique_ptr<BatchRecord> result_batch_;  // 结果批次
 
     // 处理状态
-    size_t left_idx_;      // 当前处理的左表记录索引
-    bool left_exhausted_;  // 左表是否已用完
+    size_t left_idx_;       // 当前处理的左表记录索引
+    bool left_exhausted_;   // 左表是否已用完
+    bool right_exhausted_;  // 右表是否已用完
 
    public:
     NestedLoopSemiJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
@@ -53,11 +55,12 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
         // 初始化批处理状态
         left_idx_ = 0;
         left_exhausted_ = false;
+        right_exhausted_ = false;
     }
 
     void beginTuple() override {
+        TRACE_FUNCTION
         left_->beginTuple();
-        right_->beginTuple();
 
         // 初始化批处理状态
         left_idx_ = 0;
@@ -71,21 +74,19 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     }
 
     void nextTuple() override {
+        TRACE_FUNCTION
         if (is_end()) return;
-        left_->nextTuple();
-        right_->beginTuple();
-        if (left_->is_end()) {
-            _is_end = true;
-            return;
-        }
-        if (!left_->is_end()) left_rec_ = left_->Next();
-        if (!right_->is_end()) right_rec_ = right_->Next();
-        find_record();
+
+        // 生成下一批结果
+        generate_result_batch();
     }
 
     bool is_end() const override { return _is_end; }
 
-    std::unique_ptr<RmRecord> Next() override { return std::move(rec_); }
+    std::unique_ptr<BatchRecord> Next() override {
+        TRACE_FUNCTION
+        return std::move(result_batch_);
+    }
 
     size_t tupleLen() const override { return len_; }
 
@@ -94,34 +95,93 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     Rid &rid() override { return _abstract_rid; }
 
    private:
-    void find_record() {
-        while (!is_end()) {
-            if (right_->is_end()) {
+    void fetch_left_batch() {
+        TRACE_FUNCTION
+        if (left_->is_end()) {
+            left_exhausted_ = true;
+            left_batch_.reset();
+            return;
+        }
+        left_batch_ = left_->Next();
+        if (!left_batch_ || left_batch_->empty()) {
+            left_exhausted_ = true;
+            left_batch_.reset();
+        } else {
+            left_idx_ = 0;
+        }
+    }
+
+    void fetch_right_batch() {
+        TRACE_FUNCTION
+        if (right_->is_end()) {
+            right_exhausted_ = true;
+            right_batch_.reset();
+            return;
+        }
+        right_batch_ = right_->Next();
+        if (!right_batch_ || right_batch_->empty()) {
+            right_exhausted_ = true;
+            right_batch_.reset();
+        }
+    }
+
+    void reset_right_scan() {
+        TRACE_FUNCTION
+        right_->beginTuple();
+        right_exhausted_ = false;
+        fetch_right_batch();
+    }
+
+    void generate_result_batch() {
+        TRACE_FUNCTION
+        result_batch_ = std::make_unique<BatchRecord>();
+
+        while (!left_exhausted_ && !result_batch_->full()) {
+            if (!left_batch_ || left_idx_ >= left_batch_->size()) {
                 left_->nextTuple();
-                if (left_->is_end()) {
-                    _is_end = true;
-                    return;
+                fetch_left_batch();
+                if (left_exhausted_) {
+                    break;
                 }
-                if (!left_->is_end()) {
-                    left_rec_ = left_->Next();
-                }
-                right_->beginTuple();
-                if (!right_->is_end()) right_rec_ = right_->Next();
                 continue;
             }
-            auto rec = std::make_unique<RmRecord>(left_->tupleLen() + right_->tupleLen());
-            memcpy(rec->data, left_rec_->data, left_->tupleLen());
-            memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
-            if (eval_conds(tot_cols_, fed_conds_, rec)) {
-                rec_ = std::make_unique<RmRecord>(*left_rec_);
-                return;
+
+            auto &left_rec = *(left_batch_->begin() + left_idx_);
+            bool match_found = false;
+
+            reset_right_scan();
+
+            while (!right_exhausted_) {
+                if(right_batch_){
+                    for (size_t i = 0; i < right_batch_->size(); ++i) {
+                        auto &right_rec = *(right_batch_->begin() + i);
+                        auto joined_rec = std::make_unique<RmRecord>(left_->tupleLen() + right_->tupleLen());
+                        memcpy(joined_rec->data, left_rec->data, left_->tupleLen());
+                        memcpy(joined_rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
+
+                        if (eval_conds(tot_cols_, fed_conds_, joined_rec)) {
+                            match_found = true;
+                            break;
+                        }
+                    }
+                }
+                if (match_found) {
+                    break;
+                }
+                right_->nextTuple();
+                fetch_right_batch();
             }
-            right_->nextTuple();
-            if (!right_->is_end()) {
-                right_rec_ = right_->Next();
+
+            if (match_found) {
+                result_batch_->push_back(std::make_unique<RmRecord>(*left_rec));
             }
+
+            left_idx_++;
         }
-        _is_end = true;
+
+        if (left_exhausted_ && (!result_batch_ || result_batch_->empty())) {
+            _is_end = true;
+        }
     }
 
     std::string getType() override { return "NestedLoopSemiJoinExecutor"; }

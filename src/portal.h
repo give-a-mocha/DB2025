@@ -102,8 +102,13 @@ class Portal {
                     std::vector<Rid> rids;
                     std::vector<std::unique_ptr<RmRecord>> old_recs;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
-                        rids.push_back(scan->rid());
-                        old_recs.push_back(scan->Next());
+                        auto batch = scan->Next();
+                        if(batch) {
+                            for(auto& rec : *batch) {
+                                rids.push_back(scan->rid());
+                                old_recs.push_back(std::move(rec));
+                            }
+                        }
                     }
                     std::unique_ptr<AbstractExecutor> root =
                         std::make_unique<MvccUpdateExecutor>(sm_manager_, x->tab_name_, x->set_clauses_, x->conds_,
@@ -117,8 +122,13 @@ class Portal {
                     std::vector<Rid> rids;
                     std::vector<std::unique_ptr<RmRecord>> old_recs;
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
-                        rids.push_back(scan->rid());
-                        old_recs.push_back(scan->Next());
+                        auto batch = scan->Next();
+                        if(batch) {
+                            for(auto& rec : *batch) {
+                                rids.push_back(scan->rid());
+                                old_recs.push_back(std::move(rec));
+                            }
+                        }
                     }
 
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(

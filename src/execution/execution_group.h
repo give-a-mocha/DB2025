@@ -10,6 +10,7 @@
 #include "common/Hash.h"
 #include "common/TraceStack.hpp"
 #include "executor_abstract.h"
+#include "common/BatchArray.hpp"
 
 struct ListHash {
     size_t operator()(const std::list<std::string_view>& v) const {
@@ -67,9 +68,9 @@ class GroupExecutor : public AbstractExecutor {
         grouped_records.clear();  // 清空上一次执行的分组记录
         while (!prev_->is_end()) {
             auto tuples = prev_->Next();
-            for (const auto& tuple : *tuples) {
+            for (auto& tuple : *tuples) {
                 std::list<std::string_view> group_key = generateGroupKey(tuple);
-                grouped_records[group_key].emplace_back(std::move(tuple));
+                grouped_records[group_key].push_back(std::move(tuple));
             }
 
             prev_->nextTuple();  // 移动到上一个执行器的下一个元组

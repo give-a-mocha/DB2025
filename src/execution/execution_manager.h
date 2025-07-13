@@ -41,6 +41,7 @@
 
 #include "common/common.h"
 #include "common/context.h"
+#include "common/BatchArray.hpp"
 #include "execution_defs.h"
 #include "executor_abstract.h"
 #include "optimizer/plan.h"

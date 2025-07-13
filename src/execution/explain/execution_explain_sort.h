@@ -20,6 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief 排序执行器，负责实现ORDER BY的排序功能
@@ -59,7 +60,7 @@ class ExplainSortExecutor : public AbstractExecutor {
      * @brief 返回当前排序位置的元组
      * @return 当前元组的智能指针
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 按指定缩进生成输出
         std::string res = std::string(offset_, '\t');
         res += "Sort(columns=[";

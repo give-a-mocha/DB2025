@@ -23,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief 投影操作执行计划的解释器
@@ -57,7 +58,7 @@ class ExplainProjectExecutor : public AbstractExecutor {
      * @brief 生成当前节点的执行计划说明
      * @return nullptr,因为解释器不实际生成记录
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         // 按指定缩进生成输出
         std::string res = std::string(offset_, '\t');
         res += "Project(columns=[";

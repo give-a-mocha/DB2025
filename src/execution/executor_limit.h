@@ -5,6 +5,7 @@
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 class LimitExecutor : public AbstractExecutor {
    private:
@@ -12,6 +13,7 @@ class LimitExecutor : public AbstractExecutor {
     int offset_;                               // 跳过的记录数
     int count_;                                // 返回的记录数
     int current_;                              // 当前处理的记录数
+    std::unique_ptr<BatchRecord> result_batch_; // 结果批次
 
    public:
     LimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count)
@@ -24,18 +26,38 @@ class LimitExecutor : public AbstractExecutor {
         for (int i = 0; i < offset_ && !child_->is_end(); i++) {
             child_->nextTuple();
         }
+        // 获取第一批数据
+        nextTuple();
     }
 
     void nextTuple() override {
+        result_batch_ = std::make_unique<BatchRecord>();
+        if(is_end()) return;
+        
+        auto child_batch = child_->Next();
+        if(child_batch)
+        {
+            for(auto& rec : *child_batch)
+            {
+                if(current_ < count_)
+                {
+                    result_batch_->push_back(std::move(rec));
+                    current_++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
         child_->nextTuple();
-        current_++;
     }
 
-    std::unique_ptr<RmRecord> Next() override {
-        if (is_end()) {
+    std::unique_ptr<BatchRecord> Next() override {
+        if (is_end() && (!result_batch_ || result_batch_->empty())) {
             return nullptr;
         }
-        return child_->Next();
+        return std::move(result_batch_);
     }
 
     bool is_end() const override { return child_->is_end() || (current_ >= count_); }

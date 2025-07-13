@@ -49,9 +49,9 @@ class BatchArray {
     void clear() { size_ = 0; }
 
     T* begin() { return data_; }
-    const T* begin() { return data_; }
+    const T* begin() const { return data_; }
     T* end() { return data_ + size_; }
-    const T* end() { return data_ + size_; }
+    const T* end() const { return data_ + size_; }
 };
 
 using BatchRecord = BatchArray<std::unique_ptr<RmRecord>, BATCHSIZE>;

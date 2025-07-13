@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include <vector>
 
 #include "common/parallel/sort.h"
+#include "common/BatchArray.hpp"
 #include "execution_defs.h"
 #include "execution_manager.h"
 #include "executor_abstract.h"
@@ -71,7 +72,7 @@ class SortExecutor : public AbstractExecutor {
         prev_->beginTuple();
         while (!prev_->is_end()) {
             auto batch = prev_->Next();
-            sorted_tuples_.insert(sorted_tuples_.end(), batch->begin(), batch->end());
+            sorted_tuples_.insert(sorted_tuples_.end(), std::make_move_iterator(batch->begin()), std::make_move_iterator(batch->end()));
             prev_->nextTuple();
         }
 
