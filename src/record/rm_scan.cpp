@@ -48,7 +48,7 @@ void RmScan::next() {
         // 获取当前页面句柄
         auto page_guard = file_handle_->AcquirePageReadLock(rid_);
 
-        RmPageHandle page_handle = RmPageHandle(&file_handle_->file_hdr_, const_cast<char*>(page_guard.GetData()));
+        RmPageHandle page_handle = RmPageHandle(&file_handle_->file_hdr_, const_cast<char *>(page_guard.GetData()));
 
         // 在当前页面寻找下一个非空slot
         rid_.slot_no =

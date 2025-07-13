@@ -182,7 +182,8 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         //     // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有锁，当前事务应该死亡
         //     bool should_die = false;
         //     // 检查排他锁持有者
-        //     if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id()) {
+        //     if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id())
+        //     {
         //         should_die = true;
         //     }
 

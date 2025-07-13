@@ -89,9 +89,7 @@ class AbstractExecutor {
      */
     virtual Rid &rid() = 0;
 
-    virtual TupleMeta &tuple_meta() {
-        return _abstract_tuple_meta;
-    }
+    virtual TupleMeta &tuple_meta() { return _abstract_tuple_meta; }
 
     /**
      * @brief 获取下一个元组
@@ -116,7 +114,7 @@ class AbstractExecutor {
      * @throw ColumnNotFoundError 当列不存在时
      */
     static std::vector<ColMeta>::const_iterator get_col(const std::vector<ColMeta> &rec_cols, const TabCol &target,
-                                                 bool cmp_agg_type = false) {
+                                                        bool cmp_agg_type = false) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
             return col.tab_name == target.tab_name && col.name == target.col_name &&
                    (!cmp_agg_type || col.agg_type == target.agg_type);
@@ -143,7 +141,7 @@ class AbstractExecutor {
      * @throw ExecutionError 当评估过程出错时
      */
     static bool eval_conds(const std::vector<ColMeta> &rec_cols, const std::vector<Condition> &conds,
-                    const std::unique_ptr<RmRecord> &rec) {
+                           const std::unique_ptr<RmRecord> &rec) {
         for (const auto &cond : conds) {
             if (!eval_cond(rec_cols, cond, rec)) {
                 return false;
@@ -161,7 +159,8 @@ class AbstractExecutor {
      * @throw IncompatibleTypeError 当类型不兼容时
      * @throw InternalError 当遇到非法操作符时
      */
-    static bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond, const std::unique_ptr<RmRecord> &rec) {
+    static bool eval_cond(const std::vector<ColMeta> &rec_cols, const Condition &cond,
+                          const std::unique_ptr<RmRecord> &rec) {
         TRACE_FUNCTION
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
         char *lhs_data = rec->data + lhs_col->offset;

@@ -238,9 +238,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      */
     Rid &rid() override { return rid_; }
 
-    TupleMeta &tuple_meta() override {
-        return tuple_meta_;
-    }
+    TupleMeta &tuple_meta() override { return tuple_meta_; }
 
     /**
      * @brief 获取执行器类型名称

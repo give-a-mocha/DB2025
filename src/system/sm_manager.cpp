@@ -515,7 +515,8 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-std::unique_ptr<char[]> SmManager::make_index_key(const IndexMeta& index,const std::unique_ptr<IxIndexHandle>& ih, const std::unique_ptr<RmRecord>& rec) {
+std::unique_ptr<char[]> SmManager::make_index_key(const IndexMeta& index, const std::unique_ptr<IxIndexHandle>& ih,
+                                                  const std::unique_ptr<RmRecord>& rec) {
     auto key = std::make_unique<char[]>(index.col_tot_len);
     int offset = 0;
     for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
@@ -525,12 +526,14 @@ std::unique_ptr<char[]> SmManager::make_index_key(const IndexMeta& index,const s
     return key;
 }
 
-bool SmManager::insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid, Transaction* txn = nullptr) {
+bool SmManager::insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
+                                           Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
     return insert_index_with_tab_meta(tab_, rec, rid, txn);
 }
 
-bool SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Rid rid, Transaction* txn = nullptr) {
+bool SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Rid rid,
+                                           Transaction* txn = nullptr) {
     if (tab_.indexes.empty()) {
         return true;  // 没有索引，直接返回true
     }
@@ -549,12 +552,14 @@ bool SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::uniqu
     }
 }
 
-bool SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord> &rec, Transaction* txn = nullptr) {
+bool SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec,
+                                           Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
     return delete_index_with_tab_meta(tab_, rec, txn);
 }
 
-bool SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Transaction* txn = nullptr) {
+bool SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec,
+                                           Transaction* txn = nullptr) {
     if (tab_.indexes.empty()) {
         return true;  // 没有索引，直接返回true
     }
@@ -562,7 +567,7 @@ bool SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::uniqu
         throw InternalError("Multiple indexes not supported in delete_index_with_tab_meta");
     }
     auto& index = tab_.indexes[0];
-    //TODO :可以考虑优化
+    // TODO :可以考虑优化
     auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
     // 构造索引键值
     auto key = make_index_key(index, ih, rec);
@@ -573,8 +578,8 @@ bool SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::uniqu
     }
 }
 
-//!唯一索引
-bool SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord> &rec, Rid &rid, Transaction* txn) {
+//! 唯一索引
+bool SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Rid& rid, Transaction* txn) {
     if (tab_.indexes.empty()) {
         return false;  // 没有索引，直接返回false
     }

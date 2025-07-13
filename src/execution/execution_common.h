@@ -20,7 +20,8 @@ See the Mulan PSL v2 for more details. */
 
 std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &record, const std::vector<ColMeta> &cols_);
 
-auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& base_meta, const std::vector<const UndoLog*> &undo_logs) -> std::unique_ptr<RmRecord>;
+auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta &base_meta,
+                      const std::vector<const UndoLog *> &undo_logs) -> std::unique_ptr<RmRecord>;
 
 auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool;
 

@@ -34,16 +34,13 @@ class WriteRecord {
    public:
     WriteRecord() = default;
 
-    WriteRecord(const std::string &tab_name, const Rid &rid)
-        : tab_name_(tab_name), rid_(rid) {}
-
+    WriteRecord(const std::string &tab_name, const Rid &rid) : tab_name_(tab_name), rid_(rid) {}
 
     ~WriteRecord() = default;
 
     inline Rid &GetRid() { return rid_; }
 
     inline const std::string &GetTableName() const { return tab_name_; }
-
 };
 
 /* 多粒度锁，加锁对象的类型，包括记录和表 */

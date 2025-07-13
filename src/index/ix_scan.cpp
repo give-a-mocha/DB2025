@@ -34,6 +34,4 @@ void IxScan::next() {
  * @details 从RID缓存中返回当前索引对应的RID，支持溢出页
  * @return Rid 当前位置对应的记录标识符
  */
-Rid IxScan::rid() const {
-    return ih_->get_rid(iid_);
-}
+Rid IxScan::rid() const { return ih_->get_rid(iid_); }

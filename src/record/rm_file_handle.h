@@ -96,7 +96,7 @@ struct RmPageHandle {
         TupleMeta meta = *reinterpret_cast<TupleMeta *>(slot_data);
         char *record_data = slot_data + TUPLE_META_SIZE;
         auto record = std::make_unique<RmRecord>(record_size, record_data);
-        return { meta, std::move(record) };
+        return {meta, std::move(record)};
     }
 };
 
@@ -147,7 +147,6 @@ class RmFileHandle {
 
     const RmFileHdr &get_file_hdr() const { return file_hdr_; }
     int GetFd() { return fd_; }
-
 
     /**
      * @brief 获取指定记录
@@ -202,19 +201,21 @@ class RmFileHandle {
      */
     void update_tuple_meta(const Rid &rid, const TupleMeta &new_meta);
 
-    auto AcquirePageReadLock(const Rid& rid) const -> ReadPageGuard;
+    auto AcquirePageReadLock(const Rid &rid) const -> ReadPageGuard;
 
-    auto AcquirePageWriteLock(const Rid& rid) -> WritePageGuard;
+    auto AcquirePageWriteLock(const Rid &rid) -> WritePageGuard;
 
     auto GetNewWritePageGuard() -> WritePageGuard;
 
     auto GetNewRid() -> Rid;
 
-    auto GetTupleWithLockAcquired(const Rid& rid, const char* data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>>;
+    auto GetTupleWithLockAcquired(const Rid &rid,
+                                  const char *data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>>;
 
-    auto GetTupleMetaWithLockAcquired(const Rid& rid, const char* data) const -> TupleMeta;
+    auto GetTupleMetaWithLockAcquired(const Rid &rid, const char *data) const -> TupleMeta;
 
-    auto UpdateTupleWithLockAcquired(const Rid& rid, TupleMeta& meta, const std::unique_ptr<RmRecord> &rec, char* data) -> void;
+    auto UpdateTupleWithLockAcquired(const Rid &rid, TupleMeta &meta, const std::unique_ptr<RmRecord> &rec,
+                                     char *data) -> void;
 
-    auto UpdateTupleMetaWithLockAcquired(const Rid& rid, const TupleMeta& new_meta, char * data_) -> void;
+    auto UpdateTupleMetaWithLockAcquired(const Rid &rid, const TupleMeta &new_meta, char *data_) -> void;
 };

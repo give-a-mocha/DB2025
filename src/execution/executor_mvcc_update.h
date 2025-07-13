@@ -25,20 +25,21 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
-    TabMeta& tab_;                                       // 表的元数据
-    std::vector<Condition> conds_;                      // 更新条件列表
-    RmFileHandle *fh_;                                  // 表的数据文件句柄
-    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;   // 旧记录列表
-    std::string tab_name_;                              // 表名
-    std::vector<SetClause> set_clauses_;                // SET子句列表(新值)
-    SmManager *sm_manager_;                             // 系统管理器指针
-    TransactionManager *txn_mgr_;                       // 事务管理器指针
+    TabMeta &tab_;                                                                 // 表的元数据
+    std::vector<Condition> conds_;                                                 // 更新条件列表
+    RmFileHandle *fh_;                                                             // 表的数据文件句柄
+    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表
+    std::string tab_name_;                                                         // 表名
+    std::vector<SetClause> set_clauses_;                                           // SET子句列表(新值)
+    SmManager *sm_manager_;                                                        // 系统管理器指针
+    TransactionManager *txn_mgr_;                                                  // 事务管理器指针
 
    public:
     MvccUpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                       std::vector<Condition> conds, std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context,
+                       std::vector<Condition> conds,
+                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context,
                        TransactionManager *txn_mgr)
-                       : tab_(sm_manager->db_.get_table(tab_name)){
+        : tab_(sm_manager->db_.get_table(tab_name)) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
         set_clauses_ = std::move(set_clauses);
@@ -74,7 +75,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             // 处理每个SET子句
             for (const auto &set_clause : set_clauses_) {
                 auto col = tab_.get_col(set_clause.lhs.col_name);
-                Value value;                                // 将 value 的声明提前
+                Value value;  // 将 value 的声明提前
 
                 // 根据 rhs_type 获取值
                 if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
@@ -125,36 +126,39 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            
             Rid insert_rid;
             bool is_exist = sm_manager_->exist_in_index(tab_, new_rec, insert_rid, context_->txn_);
             if (is_exist) {
                 auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, insert_rid);
                 if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
-                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
                 // 不是我要删除的rid，主键冲突
                 if (insert_rid != rid && tuple_meta.is_deleted_ == false) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
-                                                      AbortReason::UPGRADE_CONFLICT);
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
 
-                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, tuple_meta, nullptr, new_rec, context_->txn_)) {
+                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, tuple_meta, nullptr,
+                                            new_rec, context_->txn_)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
-                                                      AbortReason::UPGRADE_CONFLICT);
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
-                
+
             } else {
                 TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
                 TupleMeta delete_meta(0, true);
                 insert_rid = fh_->GetNewRid();
-                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, delete_meta, nullptr, new_rec, context_->txn_)) {
+                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, delete_meta, nullptr,
+                                            new_rec, context_->txn_)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
-                                                      AbortReason::UPGRADE_CONFLICT);
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
                 sm_manager_->insert_index_with_tab_meta(tab_, new_rec, insert_rid, context_->txn_);
             }
-            // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid, tab_.name);
+            // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid,
+            // tab_.name);
         }
         return nullptr;
     }

@@ -24,7 +24,7 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccInsertExecutor : public AbstractExecutor {
    private:
-    TabMeta& tab_;                  // 表的元数据
+    TabMeta &tab_;                 // 表的元数据
     std::vector<Value> values_;    // 待插入的值列表
     RmFileHandle *fh_;             // 表的数据文件句柄
     std::string tab_name_;         // 表名
@@ -42,7 +42,8 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
      */
     MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context,
-                       TransactionManager *txn_mgr):tab_(sm_manager->db_.get_table(tab_name)) {
+                       TransactionManager *txn_mgr)
+        : tab_(sm_manager->db_.get_table(tab_name)) {
         sm_manager_ = sm_manager;
         values_ = values;
         tab_name_ = tab_name;
@@ -85,7 +86,7 @@ class MvccInsertExecutor : public AbstractExecutor {
             values_[i].init_raw(col.len);
             memcpy(rec->data + col.offset, values_[i].raw->data, col.len);
         }
-        
+
         bool is_exist = sm_manager_->exist_in_index(tab_, rec, rid_, context_->txn_);
         TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         if (is_exist) {
@@ -98,13 +99,15 @@ class MvccInsertExecutor : public AbstractExecutor {
                 txn_mgr_->abort(context_, context_->log_mgr_);
                 throw InternalError("Primary key conflict, duplicate insert");
             }
-            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec, context_->txn_)) {
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
+                                                  context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
         } else {
             rid_ = fh_->GetNewRid();
             TupleMeta base_meta(0, true);
-            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec, context_->txn_)) {
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
+                                                  context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             sm_manager_->insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);

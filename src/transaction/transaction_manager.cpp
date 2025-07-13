@@ -95,7 +95,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // FOCC Validation Phase 1: Collect conditions under a shared lock
     std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
     lock_manager_->lock_gap_set_shared();
-    
+
     std::unordered_set<int> processed_fds;
     for (const auto& write_record : *txn->get_write_set()) {
         const auto& table_name = write_record->GetTableName();
@@ -138,12 +138,11 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
         }
     }
 
-    
     txn->set_state(TransactionState::COMMITTED);
-    txn->set_commit_ts(get_next_timestamp());  // 设置提交时间戳
+    txn->set_commit_ts(get_next_timestamp());                                       // 设置提交时间戳
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
-    txn->CommitUndoLogs();  // 提交事务的撤销日志
-    
+    txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
+
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
     auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
@@ -163,8 +162,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // log_manager->add_commit_log(txn->get_transaction_id());
     // log_manager->flush_log_to_disk();
 
-    running_txns_.UpdateCommitTs(txn->get_commit_ts());      // 更新水位线的提交时间戳
-    running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
+    running_txns_.UpdateCommitTs(txn->get_commit_ts());  // 更新水位线的提交时间戳
+    running_txns_.RemoveTxn(txn->get_read_ts());         // 从水位线中移除事务
 }
 
 /**
@@ -195,7 +194,8 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
             TupleMeta delete_meta;
             delete_meta.is_deleted_ = true;  // 插入的记录不标记为
             fh_->update_tuple_meta(rid, delete_meta);
-            // log_manager->add_delete_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid, table_name);
+            // log_manager->add_delete_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid,
+            // table_name);
         } else {
             TupleMeta base_meta;
             auto pre_link = undolog->prev_version_;
@@ -206,7 +206,8 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
                 TupleMeta base_meta(pre_log->ts_, false);
             }
             fh_->insert_record_force(rid, base_meta, undolog->record_.data);
-            // log_manager->add_insert_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid, table_name);
+            // log_manager->add_insert_log(txn->get_transaction_id(), std::make_unique<RmRecord>(undolog->record_), rid,
+            // table_name);
         }
     }
     txn->get_write_set()->clear();  // 清空写集合
@@ -265,7 +266,7 @@ void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn
     std::unique_lock<std::shared_mutex> lock(shard.mutex_);
     auto it = shard.version_info_.find(page_id);
     if (it == shard.version_info_.end()) {
-        return ;
+        return;
     }
     auto& version_info = it->second;
     lock.unlock();
@@ -283,9 +284,9 @@ void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn
             // 如果撤销链接无效，则删除该版本链接
             prev_version_map.erase(prev_version_it);
         }
-        return ;
+        return;
     }
-    return ;
+    return;
 }
 
 /** @brief 获取表堆元组的第一个撤销日志。 */
@@ -359,9 +360,7 @@ const UndoLog* TransactionManager::GetUndoLogWithoutLock(UndoLink link) {
 /** @brief 获取系统中的最低读时间戳。 */
 timestamp_t TransactionManager::GetWatermark() { return running_txns_.GetWatermark(); }
 
-void TransactionManager::do_delete(Transaction* txn) {
-    
-}
+void TransactionManager::do_delete(Transaction* txn) {}
 
 bool TransactionManager::is_transaction_expired(Transaction* txn, timestamp_t watermark) const {
     if (txn == nullptr) return false;
@@ -384,7 +383,8 @@ void TransactionManager::cleanup_expired_versions(timestamp_t watermark) {
             std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
 
             // 清理过期的版本链接
-            for (auto version_it = version_info->prev_version_.begin(); version_it != version_info->prev_version_.end();) {
+            for (auto version_it = version_info->prev_version_.begin();
+                 version_it != version_info->prev_version_.end();) {
                 const UndoLog* undo_log = GetUndoLog(version_it->second);
                 if (undo_log->ts_ <= GetWatermark()) {
                     version_it = version_info->prev_version_.erase(version_it);
@@ -467,28 +467,29 @@ bool TransactionManager::should_perform_gc() {
     return terminated_count > txn_map.size() * 0.3;
 }
 
-/** @brief 生成新的撤销日志并更新版本链接。 
+/** @brief 生成新的撤销日志并更新版本链接。
  * @details 根据磁盘现在的TupleMeta和RmRecord生成新的撤销日志。
-*/
-auto TransactionManager::GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta, Transaction *txn) -> bool {
+ */
+auto TransactionManager::GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord>& value,
+                                            const TupleMeta& base_meta, Transaction* txn) -> bool {
     TRACE_FUNCTION
     auto log = std::make_unique<UndoLog>();
     if (base_meta.is_deleted_) {
         log->is_deleted_ = true;  // 如果是删除操作
     } else {
         log->is_deleted_ = false;  // 如果是插入或更新操作
-        log->record_ = RmRecord(*value);  
+        log->record_ = RmRecord(*value);
     }
     INFO("Generate new undo log for rid: {}", rid);
     INFO("Undo log ts: {}", txn->get_transaction_id());
-    log->ts_ = txn->get_transaction_id();  // 设置时间戳为当前事务ID
+    log->ts_ = txn->get_transaction_id();       // 设置时间戳为当前事务ID
     log->prev_version_ = GetUndoLink(fd, rid);  //
     auto link = txn->AppendUndoLog(std::move(log));
     UpdateUndoLink(fd, rid, link);  // 更新版本链接
     return true;
 }
 
-auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog*> {
+auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction* txn) -> std::vector<const UndoLog*> {
     if (!undo_link.IsValid()) {
         return {};
     }
@@ -510,16 +511,18 @@ auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transactio
     return undo_logs;
 }
 
-
-
-auto TransactionManager::GetTupleAndUndoLink(RmFileHandle* fh_, const Rid &rid) -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink> {
+auto TransactionManager::GetTupleAndUndoLink(RmFileHandle* fh_, const Rid& rid)
+    -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink> {
     auto page_guard = fh_->AcquirePageReadLock(rid);
     auto [base_meta, rec] = fh_->GetTupleWithLockAcquired(rid, page_guard.GetData());
     auto link = GetUndoLink(fh_->GetFd(), rid);
     return std::make_tuple(base_meta, std::move(rec), link);
 }
 
-auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid &rid, TupleMeta& base_meta, TupleMeta& new_meta, const std::unique_ptr<RmRecord> &old_rec, const std::unique_ptr<RmRecord> &new_rec, Transaction *txn) -> bool {
+auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
+                                                TupleMeta& base_meta, TupleMeta& new_meta,
+                                                const std::unique_ptr<RmRecord>& old_rec,
+                                                const std::unique_ptr<RmRecord>& new_rec, Transaction* txn) -> bool {
     auto page_guard = fh_->AcquirePageWriteLock(rid);
     auto meta = fh_->GetTupleMetaWithLockAcquired(rid, page_guard.GetData());
     if (meta != base_meta) {
@@ -542,29 +545,22 @@ auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, Rm
     return true;  // 更新成功
 }
 
-auto TransactionManager::AtomicUpdate(
-    const std::string& tab_name, 
-    RmFileHandle* fh_, 
-    Rid& delete_rid, 
-    TupleMeta& delete_base_meta,
-    const std::unique_ptr<RmRecord>& delete_rec,
-    Rid& insert_rid,
-    TupleMeta& insert_base_meta,
-    const std::unique_ptr<RmRecord>& insert_old_rec,
-    const std::unique_ptr<RmRecord>& insert_new_rec,
-    Transaction* txn
-) -> bool {
+auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle* fh_, Rid& delete_rid,
+                                      TupleMeta& delete_base_meta, const std::unique_ptr<RmRecord>& delete_rec,
+                                      Rid& insert_rid, TupleMeta& insert_base_meta,
+                                      const std::unique_ptr<RmRecord>& insert_old_rec,
+                                      const std::unique_ptr<RmRecord>& insert_new_rec, Transaction* txn) -> bool {
     auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
     auto meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
     if (meta != delete_base_meta) {
-        WARN("AtomicUpdate: Metadata mismatch for delete_rid: {}, expected: {}, actual: {}", 
-             delete_rid, delete_base_meta, meta);
+        WARN("AtomicUpdate: Metadata mismatch for delete_rid: {}, expected: {}, actual: {}", delete_rid,
+             delete_base_meta, meta);
         return false;  // 如果元数据不匹配，返回 false
     }
     // 先delete
     TupleMeta delete_new_meta(txn->get_transaction_id(), true);
     fh_->UpdateTupleMetaWithLockAcquired(delete_rid, delete_new_meta, page_guard.GetDataMut());
-    
+
     if (meta.ts_ != txn->get_transaction_id()) {
         // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
         GenerateNewUndoLog(fh_->GetFd(), delete_rid, delete_rec, meta, txn);
@@ -580,8 +576,8 @@ auto TransactionManager::AtomicUpdate(
         auto new_page_guard = fh_->AcquirePageWriteLock(insert_rid);
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, new_page_guard.GetData());
         if (meta != insert_base_meta) {
-            WARN("AtomicUpdate: Metadata mismatch for index insert_rid: {}, expected: {}, actual: {}", 
-                 insert_rid, insert_base_meta, meta);
+            WARN("AtomicUpdate: Metadata mismatch for index insert_rid: {}, expected: {}, actual: {}", insert_rid,
+                 insert_base_meta, meta);
             return false;  // 如果新元数据不匹配，返回 false
         }
         TupleMeta insert_new_meta(txn->get_transaction_id(), false);
@@ -591,11 +587,11 @@ auto TransactionManager::AtomicUpdate(
             GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
             txn->append_write_record(std::make_unique<WriteRecord>(tab_name, insert_rid));
         }
-    } else {    
+    } else {
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
         if (meta != insert_base_meta) {
-            WARN("AtomicUpdate: Metadata mismatch for insert_rid: {}, expected: {}, actual: {}", 
-                 insert_rid, insert_base_meta, meta);
+            WARN("AtomicUpdate: Metadata mismatch for insert_rid: {}, expected: {}, actual: {}", insert_rid,
+                 insert_base_meta, meta);
             return false;  // 如果新元数据不匹配，返回 false
         }
         TupleMeta insert_new_meta(txn->get_transaction_id(), false);

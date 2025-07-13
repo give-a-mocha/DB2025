@@ -30,7 +30,8 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
     return values;
 }
 
-auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& base_meta, const std::vector<const UndoLog*> &undo_logs) -> std::unique_ptr<RmRecord> {
+auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta &base_meta,
+                      const std::vector<const UndoLog *> &undo_logs) -> std::unique_ptr<RmRecord> {
     if (undo_logs.empty()) {
         if (base_meta.is_deleted_) {
             return nullptr;  // 如果基础元组已被删除，返回空指针
@@ -45,7 +46,7 @@ auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta& bas
 
 auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool {
     if (!undolink.IsValid()) return false;
-    const UndoLog* undo_log = txn_mgr->GetUndoLog(undolink);
+    const UndoLog *undo_log = txn_mgr->GetUndoLog(undolink);
     INFO("undo_log ts: {}", undo_log->ts_);
     if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ <= txn->get_read_ts()) {
         // 如果是当前事务的修改或者是已提交的事务
