@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 class NestedLoopSemiJoinExecutor : public AbstractExecutor {
    private:
@@ -24,9 +25,14 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> tot_cols_;            // 左表列元数据
     std::vector<Condition> fed_conds_;         // 连接条件列表
     bool _is_end;                              // 扫描结束标志
-    std::unique_ptr<RmRecord> left_rec_;       // 左表当前记录
-    std::unique_ptr<RmRecord> right_rec_;      // 右表当前记录
-    std::unique_ptr<RmRecord> rec_;            // 结果记录
+    
+    // 批处理相关状态
+    std::unique_ptr<BatchRecord> left_batch_;     // 当前左表批次
+    std::unique_ptr<BatchRecord> result_batch_;   // 结果批次
+    
+    // 处理状态
+    size_t left_idx_;           // 当前处理的左表记录索引
+    bool left_exhausted_;       // 左表是否已用完
 
    public:
     NestedLoopSemiJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
@@ -43,18 +49,25 @@ class NestedLoopSemiJoinExecutor : public AbstractExecutor {
         tot_cols_.insert(tot_cols_.end(), right_cols.begin(), right_cols.end());
         _is_end = false;
         fed_conds_ = std::move(conds);
+        
+        // 初始化批处理状态
+        left_idx_ = 0;
+        left_exhausted_ = false;
     }
 
     void beginTuple() override {
         left_->beginTuple();
         right_->beginTuple();
-        if (left_->is_end() || right_->is_end()) {
-            _is_end = true;
-            return;
-        }
-        if (!left_->is_end()) left_rec_ = left_->Next();
-        if (!right_->is_end()) right_rec_ = right_->Next();
-        find_record();
+        
+        // 初始化批处理状态
+        left_idx_ = 0;
+        left_exhausted_ = false;
+        
+        // 获取第一批左表记录
+        fetch_left_batch();
+        
+        // 生成第一批结果
+        generate_result_batch();
     }
 
     void nextTuple() override {

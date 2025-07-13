@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/BatchArray.hpp"
 
 /**
  * @brief 嵌套循环连接执行器，负责实现两个表的连接操作
@@ -26,9 +27,17 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     std::vector<ColMeta> cols_;            // 结果集列元数据
     std::vector<Condition> fed_conds_;     // 连接条件列表
     bool _is_end;                          // 扫描结束标志
-    std::unique_ptr<RmRecord> left_rec_;   // 左表当前记录
-    std::unique_ptr<RmRecord> right_rec_;  // 右表当前记录
-    std::unique_ptr<RmRecord> rec_;        // 结果当前记录
+    
+    // 批处理相关状态
+    std::unique_ptr<BatchRecord> left_batch_;     // 当前左表批次
+    std::unique_ptr<BatchRecord> right_batch_;    // 当前右表批次
+    std::unique_ptr<BatchRecord> result_batch_;   // 结果批次
+    
+    // 批次内索引
+    size_t left_idx_;           // 当前处理的左表记录索引
+    size_t right_idx_;          // 当前处理的右表记录索引
+    bool left_exhausted_;       // 左表是否已用完
+    bool right_exhausted_;      // 右表是否已用完
 
    public:
     /**
@@ -58,55 +67,55 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         cols_.insert(cols_.end(), right_cols.begin(), right_cols.end());
         _is_end = false;
         fed_conds_ = std::move(conds);
+        
+        // 初始化批处理状态
+        left_idx_ = 0;
+        right_idx_ = 0;
+        left_exhausted_ = false;
+        right_exhausted_ = false;
     }
 
     /**
      * @brief 开始连接操作
      *
-     * 初始化左右表的扫描并找到第一对满足条件的记录：
+     * 初始化批处理连接：
      * 1. 开始扫描左右表
-     * 2. 检查是否有记录可用
-     * 3. 查找第一对满足连接条件的记录
+     * 2. 获取第一批记录
+     * 3. 生成第一批连接结果
      */
     void beginTuple() override {
         TRACE_FUNCTION
         left_->beginTuple();
         right_->beginTuple();
-        if (left_->is_end() || right_->is_end()) {
-            _is_end = true;
-            return;
-        }
-        if (!left_->is_end()) left_rec_ = left_->Next();
-        if (!right_->is_end()) right_rec_ = right_->Next();
-        find_record();
+        
+        // 初始化批处理状态
+        left_idx_ = 0;
+        right_idx_ = 0;
+        left_exhausted_ = false;
+        right_exhausted_ = false;
+        
+        // 获取第一批记录
+        fetch_left_batch();
+        fetch_right_batch();
+        
+        // 生成第一批结果
+        generate_result_batch();
     }
 
     /**
-     * @brief 移动到下一对满足连接条件的记录
+     * @brief 移动到下一批连接结果
      *
-     * 使用嵌套循环策略查找下一组记录：
-     * 1. 移动左表记录
-     * 2. 如果左表到达末尾，移动右表记录并重置左表
-     * 3. 继续查找满足条件的记录对
+     * 批处理嵌套循环策略：
+     * 1. 继续从当前位置处理批次
+     * 2. 管理左右表批次的切换
+     * 3. 生成下一批连接结果
      */
     void nextTuple() override {
         TRACE_FUNCTION
         if (is_end()) return;
-        right_->nextTuple();
-        if (!right_->is_end()) right_rec_ = right_->Next();
-        if (right_->is_end()) {
-            left_->nextTuple();
-            if (left_->is_end()) {
-                _is_end = true;
-                return;
-            }
-            if (!left_->is_end()) {
-                left_rec_ = left_->Next();
-            }
-            right_->beginTuple();
-            if (!right_->is_end()) right_rec_ = right_->Next();
-        }
-        find_record();
+        
+        // 生成下一批结果
+        generate_result_batch();
     }
 
     /**
@@ -116,18 +125,13 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     bool is_end() const override { return _is_end; }
 
     /**
-     * @brief 获取当前连接结果记录
+     * @brief 获取当前批次的连接结果记录
      *
-     * 将左右表的当前记录合并成一条新记录：
-     * 1. 分别获取左右表的记录
-     * 2. 创建新记录并分配空间
-     * 3. 将左右表的记录数据复制到新记录中
-     *
-     * @return 合并后的记录指针，如果任一表的记录为空则返回nullptr
+     * @return 当前批次的连接结果
      */
-    std::unique_ptr<RmRecord> Next() override {
+    std::unique_ptr<BatchRecord> Next() override {
         TRACE_FUNCTION
-        return std::move(rec_);
+        return std::move(result_batch_);
     }
 
     /**
@@ -150,41 +154,98 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
 
    private:
     /**
-     * @brief 查找下一对满足连接条件的记录
+     * @brief 获取左表下一批记录
      */
-    void find_record() {
+    void fetch_left_batch() {
         TRACE_FUNCTION
-        // 先获取当前记录
-        while (!is_end()) {
-            if (right_->is_end()) {
-                left_->nextTuple();
-                if (left_->is_end()) {
-                    _is_end = true;
-                    return;
+        if (left_->is_end()) {
+            left_exhausted_ = true;
+            return;
+        }
+        left_batch_ = left_->Next();
+        if (!left_batch_ || left_batch_->empty()) {
+            left_exhausted_ = true;
+        } else {
+            left_idx_ = 0;
+        }
+    }
+    
+    /**
+     * @brief 获取右表下一批记录
+     */
+    void fetch_right_batch() {
+        TRACE_FUNCTION
+        if (right_->is_end()) {
+            right_exhausted_ = true;
+            return;
+        }
+        right_batch_ = right_->Next();
+        if (!right_batch_ || right_batch_->empty()) {
+            right_exhausted_ = true;
+        } else {
+            right_idx_ = 0;
+        }
+    }
+    
+    /**
+     * @brief 重置右表扫描
+     */
+    void reset_right_scan() {
+        TRACE_FUNCTION
+        right_->beginTuple();
+        right_exhausted_ = false;
+        fetch_right_batch();
+    }
+    
+    /**
+     * @brief 生成结果批次
+     */
+    void generate_result_batch() {
+        TRACE_FUNCTION
+        result_batch_ = std::make_unique<BatchRecord>();
+        
+        while (!left_exhausted_ && !result_batch_->full()) {
+            // 如果右表批次用完，重置右表
+            if (right_exhausted_ || right_idx_ >= right_batch_->size()) {
+                left_idx_++;
+                if (left_idx_ >= left_batch_->size()) {
+                    // 左表当前批次用完，获取下一批
+                    left_->nextTuple();
+                    fetch_left_batch();
+                    if (left_exhausted_) break;
                 }
-                if (!left_->is_end()) {
-                    left_rec_ = left_->Next();
-                }
-                right_->beginTuple();
-                if (!right_->is_end()) {
-                    right_rec_ = right_->Next();
-                }
+                reset_right_scan();
                 continue;
             }
-
-            auto rec = std::make_unique<RmRecord>(len_);
-            memcpy(rec->data, left_rec_->data, left_->tupleLen());
-            memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
-            if (eval_conds(cols_, fed_conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
+            
+            // 处理当前左右表记录对
+            if (left_idx_ < left_batch_->size() && right_idx_ < right_batch_->size()) {
+                auto& left_rec = *(left_batch_->begin() + left_idx_);
+                auto& right_rec = *(right_batch_->begin() + right_idx_);
+                
+                // 创建连接记录
+                auto joined_rec = std::make_unique<RmRecord>(len_);
+                memcpy(joined_rec->data, left_rec->data, left_->tupleLen());
+                memcpy(joined_rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
+                
+                // 检查连接条件
+                if (eval_conds(cols_, fed_conds_, joined_rec)) {
+                    result_batch_->push_back(std::move(joined_rec));
+                }
             }
-            right_->nextTuple();
-            if (!right_->is_end()) {
-                right_rec_ = right_->Next();
+            
+            // 移动到右表下一条记录
+            right_idx_++;
+            if (right_idx_ >= right_batch_->size()) {
+                right_->nextTuple();
+                fetch_right_batch();
             }
         }
-        _is_end = true;
+        
+        // 检查是否结束
+        if (left_exhausted_ && (right_exhausted_ || result_batch_->empty())) {
+            _is_end = true;
+        }
     }
 
     /**
