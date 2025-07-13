@@ -13,12 +13,8 @@ class BatchArray {
     size_t size_ = 0;  // 初始化成员变量
 
    public:
-    BatchArray() {
-        data_ = new T[batch_size];
-    }
-    ~BatchArray() {
-        delete[] data_;
-    }
+    BatchArray() { data_ = new T[batch_size]; }
+    ~BatchArray() { delete[] data_; }
     BatchArray(const BatchArray&) = delete;
     BatchArray& operator=(const BatchArray&) = delete;
     BatchArray(BatchArray&& other) noexcept : size_(other.size_) {

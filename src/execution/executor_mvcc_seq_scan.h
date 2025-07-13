@@ -74,7 +74,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 batch_rec_->push_back(std::move(rec));
-                if(batch_rec_->full()) return ;
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }
@@ -103,7 +103,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 batch_rec_->push_back(std::move(rec));
-                if(batch_rec_->full()) return ;
+                if (batch_rec_->full()) return;
             }
             scan_->next();
         }

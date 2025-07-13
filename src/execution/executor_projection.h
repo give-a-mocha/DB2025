@@ -133,7 +133,8 @@ class ProjectionExecutor : public AbstractExecutor {
         const std::vector<ColMeta> &prev_cols = prev_->cols();
 
         for (auto &rec : *prev_rec) {
-            batch_proj_rec->push_back(get_copy_record(prev_cols, rec.get()));        }
+            batch_proj_rec->push_back(get_copy_record(prev_cols, rec.get()));
+        }
 
         return batch_proj_rec;
     }

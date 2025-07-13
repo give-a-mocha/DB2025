@@ -99,8 +99,8 @@ class SortExecutor : public AbstractExecutor {
         if (is_end()) {
             return batch;
         }
-        
-        while(current_index_ < sorted_tuples_.size() && !batch->full()) {
+
+        while (current_index_ < sorted_tuples_.size() && !batch->full()) {
             batch->push_back(std::make_unique<RmRecord>(*sorted_tuples_[current_index_]));
             current_index_++;
         }
