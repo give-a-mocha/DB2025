@@ -117,36 +117,83 @@ def get_pid():
         os._exit(1)
     return pid
     
-def get_flame_graph(timestamp):
+def get_flame_graph(timestamp, mode='normal'):
     """生成火焰图，使用时间戳作为文件名"""
     base_path = current_dir
     
-    # 使用时间戳命名文件
+    # 使用时间戳和模式命名文件
     data_file = os.path.join(base_path, f"perf-{timestamp}.data")
     perf_file = os.path.join(base_path, f"perf-{timestamp}.perf")
     folded_file = os.path.join(base_path, f"perf-{timestamp}.folded")
-    diff_folded_file = os.path.join(base_path, f"diff-{timestamp}.folded")
-    svg_file = os.path.join(base_path, f"flamegraph-{timestamp}.svg")
-    
-    # 修改 perf script 命令，禁用符号解析或使用不同选项
-    run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} --no-inline > {perf_file}")
-    
-    # 或者使用 --no-demangle 选项
-    # run_command_simple(f"sudo perf script -i {data_file} --no-demangle > {perf_file}")
-    
-    run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && stackcollapse-perf.pl {perf_file} > {folded_file}")
-    if chaff_path is not None:
-        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && difffolded.pl {chaff_path} {folded_file} > {diff_folded_file}")
-        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && flamegraph.pl {diff_folded_file} > {svg_file}")
-    else:
-        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && flamegraph.pl {folded_file} > {svg_file}")
+    svg_file = os.path.join(base_path, f"flamegraph-{mode}-{timestamp}.svg")
 
-    
-    # 清理中间文件，保留最终的SVG文件
-    run_command_simple(f"rm -rf {data_file}")
-    run_command_simple(f"rm -rf {perf_file}")
-    # run_command_simple(f"rm -rf {folded_file}")
-    
+    if mode == 'normal':
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} --no-inline > {perf_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/stackcollapse-perf.pl {perf_file} > {folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/flamegraph.pl {folded_file} > {svg_file}")
+    elif mode == 'diff':
+        diff_folded_file = os.path.join(base_path, f"diff-{timestamp}.folded")
+        if chaff_path is None:
+            print("错误：差分模式需要一个基础 .folded 文件路径 (-c/--ch)。")
+            return None
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} --no-inline > {perf_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/stackcollapse-perf.pl {perf_file} > {folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/difffolded.pl {chaff_path} {folded_file} > {diff_folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/flamegraph.pl {diff_folded_file} > {svg_file}")
+    elif mode == 'on-cpu':
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} | {FlameGraph_path}/stackcollapse-perf.pl > {folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/flamegraph.pl --color=java {folded_file} > {svg_file}")
+    elif mode == 'off-cpu':
+        # 使用最通用的 stackcollapse-perf.pl 进行分步处理，以获得最佳兼容性
+        stacks_file = os.path.join(base_path, f"out-{timestamp}.stacks")
+        folded_file = os.path.join(base_path, f"perf-{timestamp}.folded")
+
+        # 1. perf script with specific format
+        script_command = f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} -F comm,pid,tid,cpu,time,period,event,ip,sym,dso,trace > {stacks_file}"
+        result = run_command_simple(script_command, realtime=False)
+        if result['returncode'] != 0:
+            print(f"错误：perf script 命令失败。\n{result['stderr']}")
+            return None
+
+        # 2. stackcollapse-perf.pl
+        collapse_command = f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/stackcollapse-perf.pl {stacks_file} > {folded_file}"
+        result = run_command_simple(collapse_command, realtime=False)
+        if result['returncode'] != 0:
+            print(f"错误：stackcollapse-perf.pl 命令失败。\n{result['stderr']}")
+            return None
+            
+        # 3. flamegraph.pl
+        flame_command = f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/flamegraph.pl --countname=us --color=io {folded_file} > {svg_file}"
+        result = run_command_simple(flame_command, realtime=False)
+        if result['returncode'] != 0:
+            print(f"错误：flamegraph.pl 命令失败。\n{result['stderr']}")
+            return None
+    elif mode == 'memory':
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} | {FlameGraph_path}/stackcollapse-perf.pl > {folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/flamegraph.pl --color=mem {folded_file} > {svg_file}")
+    elif mode == 'lock':
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && sudo perf script -i {data_file} | {FlameGraph_path}/stackcollapse-perf.pl > {folded_file}")
+        run_command_simple(f"export PATH=$PATH:{FlameGraph_path} && {FlameGraph_path}/flamegraph.pl {folded_file} > {svg_file}")
+
+    # 清理中间文件
+    run_command_simple(f"rm -f {data_file}")
+    if os.path.exists(perf_file):
+        run_command_simple(f"rm -f {perf_file}")
+    if os.path.exists(folded_file):
+        run_command_simple(f"rm -f {folded_file}")
+    if mode == 'diff':
+        diff_folded_file = os.path.join(base_path, f"diff-{timestamp}.folded")
+        if os.path.exists(diff_folded_file):
+            run_command_simple(f"rm -f {diff_folded_file}")
+    if mode == 'off-cpu':
+        # 清理 off-cpu 模式的中间文件
+        stacks_file = os.path.join(base_path, f"out-{timestamp}.stacks")
+        folded_file = os.path.join(base_path, f"perf-{timestamp}.folded")
+        if os.path.exists(stacks_file):
+            run_command_simple(f"rm -f {stacks_file}")
+        if os.path.exists(folded_file):
+            run_command_simple(f"rm -f {folded_file}")
+        
     return svg_file
 
 
@@ -163,6 +210,9 @@ if __name__ == "__main__":
                        help='FlameGraph 路径（必需）')
 
     parser.add_argument('-c', '--ch', type=str, help='差分路径（必需）')
+    parser.add_argument('-m', '--flame_mode', type=str, default='normal',
+                        choices=['normal', 'diff', 'on-cpu', 'off-cpu', 'memory', 'lock'],
+                        help='火焰图生成模式: normal, diff, on-cpu, off-cpu')
     
     args = parser.parse_args()
 
@@ -177,6 +227,7 @@ if __name__ == "__main__":
     test_path = args.tpcc_path
     FlameGraph_path = args.flamegraph_path
     chaff_path = args.ch
+    flame_mode = args.flame_mode
 
 
 
@@ -217,7 +268,16 @@ if __name__ == "__main__":
         # 使用时间戳命名性能数据文件
         perf_data_file = os.path.join(current_dir, f"perf-{timestamp}.data")
         print(f"性能数据文件: {perf_data_file}")
-        start_monitor = f"sudo perf record -F 5000 -p {pid} -g -o {perf_data_file} --call-graph=dwarf && echo '性能测试成功开启'"
+        if flame_mode in ['normal', 'diff']:
+            start_monitor = f"sudo perf record -F 5000 -p {pid} -g -o {perf_data_file} --call-graph=dwarf && echo '性能测试成功开启'"
+        elif flame_mode == 'on-cpu':
+            start_monitor = f"sudo perf record -F 99 -p {pid} -g -o {perf_data_file} && echo 'On-CPU性能测试成功开启'"
+        elif flame_mode == 'off-cpu':
+            start_monitor = f"sudo perf record -e 'sched:sched_stat_sleep' -e 'sched:sched_switch' -e 'sched:sched_process_exit' -p {pid} -g -o {perf_data_file} && echo 'Off-CPU性能测试成功开启'"
+        elif flame_mode == 'memory':
+            start_monitor = f"sudo perf record -e page-faults -p {pid} -g -o {perf_data_file} && echo '内存页错误性能测试成功开启'"
+        elif flame_mode == 'lock':
+            start_monitor = f"sudo perf record -e lock:contended -p {pid} -g -o {perf_data_file} && echo '锁竞争性能测试成功开启'"
         start_test = f"cd {test_path} && cd .. && python TPCC-Tester/runner.py --prepare --thread 8 --rw 150 --ro 150 --analyze --w {data_size}"
         
         print("启动性能监控...")
@@ -270,7 +330,7 @@ if __name__ == "__main__":
     
         # 生成火焰图
         print("开始生成火焰图...")
-        flame_graph_file = get_flame_graph(timestamp)
+        flame_graph_file = get_flame_graph(timestamp, flame_mode)
         print(f"测试完成！火焰图文件: {flame_graph_file}")
 
 
