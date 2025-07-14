@@ -230,7 +230,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     for (executorTreeRoot->beginTuple(); !executorTreeRoot->is_end(); executorTreeRoot->nextTuple()) {
         auto batch_record = executorTreeRoot->Next();
         for (auto &record : *batch_record) {
-            WARN("record: {} {}", *(int*)(record->data), *(int*)(record->data + sizeof(int)));
+            WARN("record: {} {}", *(int *)(record->data), *(int *)(record->data + sizeof(int)));
 
             std::vector<std::string> columns;
             for (auto &col : executorTreeRoot->cols()) {

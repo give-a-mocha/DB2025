@@ -134,9 +134,9 @@ class ProjectionExecutor : public AbstractExecutor {
 
         for (auto &rec : *prev_rec) {
             auto proj_rec = get_copy_record(prev_cols, rec.get());
-            WARN("old record: {} {}", *(int*)(rec->data), *(int*)(rec->data + sizeof(int)));
+            WARN("old record: {} {}", *(int *)(rec->data), *(int *)(rec->data + sizeof(int)));
 
-            WARN("new record: {} {}", *(int*)(proj_rec->data), *(int*)(proj_rec->data + sizeof(int)));
+            WARN("new record: {} {}", *(int *)(proj_rec->data), *(int *)(proj_rec->data + sizeof(int)));
             batch_proj_rec->push_back(std::move(proj_rec));
         }
 
