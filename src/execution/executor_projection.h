@@ -110,7 +110,7 @@ class ProjectionExecutor : public AbstractExecutor {
             auto &proj_col = cols_[i];
 
             // 将列数据复制到新位置
-            memcpy(proj_rec->data + proj_col.offset, prev_rec + prev_col.offset, proj_col.len);
+            memcpy(proj_rec->data + proj_col.offset, prev_rec->data + prev_col.offset, proj_col.len);
         }
         return proj_rec;
     }
@@ -129,12 +129,15 @@ class ProjectionExecutor : public AbstractExecutor {
         }
 
         // 创建投影结果记录
-        // auto proj_rec = std::make_unique<RmRecord>(len_);
         auto batch_proj_rec = std::make_unique<BatchRecord>();
         const std::vector<ColMeta> &prev_cols = prev_->cols();
 
         for (auto &rec : *prev_rec) {
-            batch_proj_rec->push_back(get_copy_record(prev_cols, rec.get()));
+            auto proj_rec = get_copy_record(prev_cols, rec.get());
+            WARN("old record: {} {}", *(int*)(rec->data), *(int*)(rec->data + sizeof(int)));
+
+            WARN("new record: {} {}", *(int*)(proj_rec->data), *(int*)(proj_rec->data + sizeof(int)));
+            batch_proj_rec->push_back(std::move(proj_rec));
         }
 
         return batch_proj_rec;

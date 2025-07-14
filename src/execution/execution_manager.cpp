@@ -229,8 +229,9 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     // 执行query_plan
     for (executorTreeRoot->beginTuple(); !executorTreeRoot->is_end(); executorTreeRoot->nextTuple()) {
         auto batch_record = executorTreeRoot->Next();
-        if (!batch_record) continue;
         for (auto &record : *batch_record) {
+            WARN("record: {} {}", *(int*)(record->data), *(int*)(record->data + sizeof(int)));
+
             std::vector<std::string> columns;
             for (auto &col : executorTreeRoot->cols()) {
                 std::string col_str;
