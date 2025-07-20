@@ -3,6 +3,10 @@
 #ifndef STACKSTRING_HPP
 #define STACKSTRING_HPP
 #include <cstddef>
+#include <cstring>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
 
 template <size_t SIZE = 1024, bool external_space = false, bool is_throw = false>
 class StackString {
@@ -66,7 +70,7 @@ class StackString {
 
     constexpr bool empty() const { return size_ == 0; }
 
-    constexpr std::string toString() const { return std::string(buf_, size_); }
+    std::string toString() const { return std::string(buf_, size_); }
 };
 
 #endif

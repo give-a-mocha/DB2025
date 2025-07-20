@@ -25,6 +25,7 @@ dist/
 build/
 out/
 target/
+.cache/
 
 # Logs
 logs/
