@@ -544,7 +544,7 @@ void SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::uniqu
             ih->insert_entry(key.get(), rid, txn);
         }
     }
-    return ;
+    return;
 }
 
 void SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec,
@@ -565,10 +565,11 @@ void SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::uniqu
             ih->delete_entry(key.get(), txn);
         }
     }
-    return ;
+    return;
 }
 
-std::vector<Rid> SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Transaction* txn) {
+std::vector<Rid> SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec,
+                                           Transaction* txn) {
     std::vector<Rid> rids;
     for (const auto& index : tab_.indexes) {
         auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));

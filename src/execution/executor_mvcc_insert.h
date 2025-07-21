@@ -87,7 +87,7 @@ class MvccInsertExecutor : public AbstractExecutor {
             memcpy(rec->data + col.offset, values_[i].raw->data, col.len);
         }
         std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, rec, context_->txn_);
-        
+
         // 唯一性检查
         TupleMeta base_meta_(0, true);
         for (const auto &rid : rids) {

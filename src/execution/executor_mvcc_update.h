@@ -136,7 +136,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid);
                 base_meta_ = tuple_meta;
                 if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
-                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
                 // 主键冲突
                 if (rid != rid_ && tuple_meta.is_deleted_ == false) {
