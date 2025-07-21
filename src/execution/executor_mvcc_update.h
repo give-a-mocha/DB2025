@@ -63,6 +63,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
             auto &rid_ = std::get<2>(rec_tuple);
+            WARN("Updating rid: {}", rid_);
             auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid_);
 
             if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
@@ -126,18 +127,19 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, old_rec, context_->txn_);
+            std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, new_rec, context_->txn_);
             Rid insert_rid;
             // 唯一性检查
             TupleMeta base_meta_(0, true);
             for (const auto &rid : rids) {
+                INFO("Checking unique constraint for rid: {}", rid);
                 auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid);
                 base_meta_ = tuple_meta;
                 if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
                 }
                 // 主键冲突
-                if (rid != rid_ && base_meta.is_deleted_ == false) {
+                if (rid != rid_ && tuple_meta.is_deleted_ == false) {
                     txn_mgr_->abort(context_, context_->log_mgr_);
                     throw InternalError("Primary key conflict, duplicate insert");
                 }

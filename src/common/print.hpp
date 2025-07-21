@@ -4,6 +4,7 @@
 
 #include <string>
 #include <string_view>
+#include <iostream>
 
 #include "common/Format.h"
 
