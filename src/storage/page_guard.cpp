@@ -42,6 +42,24 @@ auto BasicPageGuard::operator=(BasicPageGuard &&that) noexcept -> BasicPageGuard
 
 BasicPageGuard::~BasicPageGuard() { Drop(); }
 
+auto BasicPageGuard::UpgradeRead() -> ReadPageGuard {
+    page_->RLatch();
+    ReadPageGuard read_page_guard(bpi_, page_);
+    bpi_ = nullptr;
+    page_ = nullptr;
+    is_dirty_ = false;
+    return read_page_guard;
+}
+
+auto BasicPageGuard::UpgradeWrite() -> WritePageGuard {
+    page_->WLatch();
+    WritePageGuard write_page_guard(bpi_, page_);
+    bpi_ = nullptr;
+    page_ = nullptr;
+    is_dirty_ = false;
+    return write_page_guard;
+}
+
 // ReadPageGuard 实现
 
 ReadPageGuard::ReadPageGuard(ReadPageGuard &&that) noexcept : guard_(std::move(that.guard_)) {

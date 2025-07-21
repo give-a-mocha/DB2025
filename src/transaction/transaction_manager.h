@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <optional>
 #include <shared_mutex>
 #include <unordered_map>
+#include <array>
 
 #include "common/exception.h"
 #include "concurrency/lock_manager.h"
@@ -37,6 +38,8 @@ class TransactionManager {
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
+    // std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
+
     /**
      * @brief 为 MVCC 存储单个页面内所有槽的版本信息。
      */
@@ -51,9 +54,18 @@ class TransactionManager {
     };
 
     /** 保护版本信息 */
-    std::shared_mutex version_info_mutex_;
+    // std::shared_mutex version_info_mutex_;
     /** 存储表堆中每个元组的先前版本。 */
-    std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>> version_info_;
+    // std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>> version_info_;
+
+    static constexpr size_t VERSION_INFO_SHARDS = 256;
+
+    struct PageVersionInfoShard {
+        std::shared_mutex mutex_;
+        std::unordered_map<PageId, std::shared_ptr<PageVersionInfo>> version_info_;
+    };
+
+    std::array<PageVersionInfoShard, VERSION_INFO_SHARDS> version_info_shards_;
 
    private:
     // 事务使用的并发控制算法，目前只需要考虑2PL
@@ -126,13 +138,12 @@ class TransactionManager {
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
-    bool UpdateUndoLink(const int &fd, Rid rid, UndoLink prev_link);
+    bool UpdateUndoLink(const int &fd, Rid rid, UndoLink link);
 
     /**
      * @brief 删除txn的撤销链接
-     * @return 返回当前的最后一个撤销链接。
      */
-    UndoLink DeleteUndoLink(const int &fd, Rid rid, Transaction *txn);
+    void DeleteUndoLink(const int &fd, Rid rid, Transaction *txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
     UndoLink GetUndoLink(const int &fd, Rid rid);
 
@@ -155,17 +166,28 @@ class TransactionManager {
     /** @brief 检查是否需要执行垃圾回收 */
     bool should_perform_gc();
 
-    void add_insert_undo_log(Transaction *txn, const int &fd, Rid rid, const std::unique_ptr<RmRecord> &values);
+    auto GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta,
+                            Transaction *txn) -> bool;
 
-    void add_update_undo_log(Transaction *txn, const int &fd, Rid rid, const std::unique_ptr<RmRecord> &values);
+    auto UpdateTupleAndUndoLink(const std::string &tab_name_, RmFileHandle *fh_, const Rid &rid, TupleMeta &base_meta,
+                                TupleMeta &new_meta, const std::unique_ptr<RmRecord> &old_rec,
+                                const std::unique_ptr<RmRecord> &new_rec, Transaction *txn) -> bool;
 
-    void add_delete_undo_log(Transaction *txn, const int &fd, Rid rid);
+    auto GetTupleAndUndoLink(RmFileHandle *fh_,
+                             const Rid &rid) -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink>;
 
     void do_delete(Transaction *txn);
 
-    bool is_delete_record(int fd, Rid rid);
+    auto CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog *>;
+
+    auto AtomicUpdate(const std::string &tab_name, RmFileHandle *fh_, Rid &delete_rid, TupleMeta &delete_base_meta,
+                      const std::unique_ptr<RmRecord> &delete_rec, Rid &insert_rid, TupleMeta &insert_base_meta,
+                      const std::unique_ptr<RmRecord> &insert_old_rec, const std::unique_ptr<RmRecord> &insert_new_rec,
+                      Transaction *txn) -> bool;
 
    private:
+    auto GetVersionInfoShard(const PageId &page_id) -> PageVersionInfoShard &;
+
     /** @brief 检查事务是否可以被垃圾回收 */
     bool is_transaction_expired(Transaction *txn, timestamp_t watermark) const;
 

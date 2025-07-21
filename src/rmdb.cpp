@@ -80,7 +80,7 @@ static jmp_buf jmpbuf;
 void sigint_handler(int signo) {
     TRACE_FUNCTION
     should_exit = true;
-    log_manager->flush_log_to_disk();
+    // log_manager->flush_log_to_disk();
 #ifdef ENABLE_COUT
     std::cout << "The Server receive Crtl+C, will been closed\n";
 #endif
@@ -457,7 +457,7 @@ int main(int argc, char **argv) {
         sm_manager->open_db(db_name);
 
         // recovery database
-        recovery->recovery();
+        // recovery->recovery();
 
         // 开启服务端，开始接受客户端连接
         start_server();

@@ -56,27 +56,26 @@ constexpr int RM_MAX_RECORD_SIZE = 1024;
  * 2. 实现记录的软删除
  */
 struct TupleMeta {
-    timestamp_t ts_;   // 元组的时间戳
-    bool is_deleted_;  // 元组是否被删除的标记
+    timestamp_t ts_{0};       // 元组的时间戳，用于版本控制
+    bool is_deleted_{false};  // 元组是否被删除的标记
 
-    /**
-     * @brief 比较两个元组元数据是否相等
-     * @param a 第一个元组元数据
-     * @param b 第二个元组元数据
-     * @return 两个元组元数据是否完全相等
-     */
-    friend auto operator==(const TupleMeta& a, const TupleMeta& b) {
-        return a.ts_ == b.ts_ && a.is_deleted_ == b.is_deleted_;
+    TupleMeta() = default;
+
+    TupleMeta(timestamp_t ts, bool is_deleted) : ts_(ts), is_deleted_(is_deleted) {}
+
+    friend bool operator==(const TupleMeta& lhs, const TupleMeta& rhs) {
+        return lhs.ts_ == rhs.ts_ && lhs.is_deleted_ == rhs.is_deleted_;
     }
 
-    /**
-     * @brief 比较两个元组元数据是否不相等
-     * @param a 第一个元组元数据
-     * @param b 第二个元组元数据
-     * @return 两个元组元数据是否存在不同
-     */
-    friend auto operator!=(const TupleMeta& a, const TupleMeta& b) { return !(a == b); }
+    friend bool operator!=(const TupleMeta& lhs, const TupleMeta& rhs) { return !(lhs == rhs); }
+
+    friend std::ostream& operator<<(std::ostream& os, const TupleMeta& meta) {
+        os << "TupleMeta(ts: " << meta.ts_ << ", is_deleted: " << (meta.is_deleted_ ? "true" : "false") << ")";
+        return os;
+    }
 };
+
+constexpr int TUPLE_META_SIZE = sizeof(TupleMeta);
 
 /* 文件头，记录表数据文件的元信息，写入磁盘中文件的第0号页面 */
 /**

@@ -23,59 +23,24 @@ enum class TransactionState { DEFAULT, GROWING, SHRINKING, COMMITTED, ABORTED };
 /* 系统的隔离级别，当前赛题中为可串行化隔离级别 */
 enum class IsolationLevel { READ_UNCOMMITTED, REPEATABLE_READ, READ_COMMITTED, SERIALIZABLE };
 
-/* 事务写操作类型，包括插入、删除、更新三种操作 */
-enum class WType { INSERT_TUPLE = 0, DELETE_TUPLE, UPDATE_TUPLE };
-
 /**
  * @brief 事务的写操作记录，用于事务的回滚
- * INSERT
- * --------------------------------
- * | wtype | tab_name | tuple_rid |
- * --------------------------------
- * DELETE / UPDATE
- * ----------------------------------------------
- * | wtype | tab_name | tuple_rid | tuple_value |
- * ----------------------------------------------
  */
 class WriteRecord {
    private:
-    WType wtype_;
     std::string tab_name_;
     Rid rid_;
-    std::unique_ptr<RmRecord> record_;  // 使用智能指针管理内存
 
    public:
     WriteRecord() = default;
 
-    // constructor for insert operation
-    WriteRecord(WType wtype, const std::string &tab_name, const Rid &rid)
-        : wtype_(wtype), tab_name_(tab_name), rid_(rid), record_(nullptr) {}
-
-    // constructor for delete & update operation
-    WriteRecord(WType wtype, const std::string &tab_name, const Rid &rid, const std::unique_ptr<RmRecord> &record)
-        : wtype_(wtype), tab_name_(tab_name), rid_(rid) {
-        if (record) {
-            record_ = std::make_unique<RmRecord>(*record);
-        }
-    }
+    WriteRecord(const std::string &tab_name, const Rid &rid) : tab_name_(tab_name), rid_(rid) {}
 
     ~WriteRecord() = default;
 
-    inline std::unique_ptr<RmRecord> &GetRecord() { return record_; }
-
     inline Rid &GetRid() { return rid_; }
 
-    inline WType &GetWriteType() { return wtype_; }
-
-    inline std::string &GetTableName() { return tab_name_; }
-
-    inline std::tuple<WType, std::string, Rid, std::unique_ptr<RmRecord>> GetAll() {
-        if (record_) {
-            return std::make_tuple(wtype_, tab_name_, rid_, std::make_unique<RmRecord>(*record_));
-        } else {
-            return std::make_tuple(wtype_, tab_name_, rid_, std::unique_ptr<RmRecord>(nullptr));
-        }
-    }
+    inline const std::string &GetTableName() const { return tab_name_; }
 };
 
 /* 多粒度锁，加锁对象的类型，包括记录和表 */

@@ -30,6 +30,7 @@
 #include "bitmap.h"
 #include "common/context.h"
 #include "rm_defs.h"
+#include "storage/page_guard.h"
 
 class RmManager;
 
@@ -43,8 +44,7 @@ class RmManager;
  * 3. 数据槽位（slots）：存储实际的记录数据
  */
 struct RmPageHandle {
-    const RmFileHdr *file_hdr;  // 当前页面所在文件的文件头指针，包含表的元数据信息
-    Page *page;                 // 底层页面对象，负责实际的数据存储
+    const int record_size;
     RmPageHdr *page_hdr;  // 页面头部信息，指向页面数据的第一部分，存储页面级别的元数据
     char *bitmap;         // 页面的位图区域，用于跟踪槽位的使用情况
     char *slots;          // 实际记录存储区域，每个槽位存储一条记录
@@ -64,13 +64,13 @@ struct RmPageHandle {
      * |         ...            |
      * +-------------------------+
      */
-    RmPageHandle(const RmFileHdr *fhdr_, Page *page_) : file_hdr(fhdr_), page(page_) {
+    RmPageHandle(const RmFileHdr *fhdr_, char *data_) : record_size(fhdr_->record_size) {
         // 1. 初始化页面头指针（跳过页面预留的头部空间）
-        page_hdr = reinterpret_cast<RmPageHdr *>(page->get_data() + OFFSET_PAGE_HDR);
+        page_hdr = reinterpret_cast<RmPageHdr *>(data_ + OFFSET_PAGE_HDR);
         // 2. 初始化位图指针（跳过页面头部结构）
-        bitmap = page->get_data() + sizeof(RmPageHdr) + OFFSET_PAGE_HDR;
+        bitmap = data_ + sizeof(RmPageHdr) + OFFSET_PAGE_HDR;
         // 3. 初始化记录槽位指针（跳过位图区域）
-        slots = bitmap + file_hdr->bitmap_size;
+        slots = bitmap + fhdr_->bitmap_size;
     }
 
     // 返回指定slot_no的slot存储收地址
@@ -83,7 +83,21 @@ struct RmPageHandle {
      * 2. 偏移量为：槽位号 * 记录大小
      * @warning 调用前应确保槽位号有效，否则可能导致越界访问
      */
-    char *get_slot(int slot_no) const { return slots + slot_no * file_hdr->record_size; }
+    char *get_slot(int slot_no) const { return slots + slot_no * (TUPLE_META_SIZE + record_size); }
+
+    TupleMeta get_tuple_meta(int slot_no) const {
+        // 返回指定槽位的元组元数据指针
+        return *reinterpret_cast<TupleMeta *>(get_slot(slot_no));
+    }
+
+    std::pair<TupleMeta, std::unique_ptr<RmRecord>> get_tuple(int slot_no) const {
+        // 返回指定槽位的元组元数据和记录数据指针
+        char *slot_data = get_slot(slot_no);
+        TupleMeta meta = *reinterpret_cast<TupleMeta *>(slot_data);
+        char *record_data = slot_data + TUPLE_META_SIZE;
+        auto record = std::make_unique<RmRecord>(record_size, record_data);
+        return {meta, std::move(record)};
+    }
 };
 
 /**
@@ -135,18 +149,6 @@ class RmFileHandle {
     int GetFd() { return fd_; }
 
     /**
-     * @brief 检查指定RID位置是否存在有效记录
-     * @param rid 记录ID，包含页面号和槽位号
-     * @return true 如果记录存在，false 否则
-     * @note 此函数不会加载记录数据，只检查位图
-     * @warning 确保提供的RID在合法范围内，否则可能导致越界访问
-     */
-    bool is_record(const Rid &rid) const {
-        RmPageHandle page_handle = fetch_page_handle(rid.page_no);
-        return Bitmap::is_set(page_handle.bitmap, rid.slot_no);
-    }
-
-    /**
      * @brief 获取指定记录
      * @param rid 记录ID
      * @param context 事务上下文，包含事务信息和锁管理器
@@ -154,7 +156,7 @@ class RmFileHandle {
      * @throw RecordNotFoundError 如果记录不存在
      * @note 返回的是记录的副本，对其修改不会影响原始数据
      */
-    std::unique_ptr<RmRecord> get_record(const Rid &rid, Context *context) const;
+    std::pair<TupleMeta, std::unique_ptr<RmRecord>> get_record(const Rid &rid) const;
 
     int get_record_size() const {
         return file_hdr_.record_size;  // 返回每条记录的大小
@@ -168,63 +170,52 @@ class RmFileHandle {
      * @throw OutOfSpaceError 如果没有足够的空间
      * @note 系统自动分配插入位置，返回的RID用于后续访问
      */
-    Rid insert_record(char *buf, Context *context);
+    Rid insert_record(TupleMeta &new_meta, char *buf);
 
     /**
      * @brief 在指定位置插入记录
      * @param rid 指定的记录ID
      * @param buf 记录数据
      */
-    void insert_record(const Rid &rid, char *buf);
-
-    void insert_record_force(const Rid &rid, char *buf);
+    void insert_record_force(const Rid &rid, TupleMeta &new_meta, char *buf);
 
     /**
      * @brief 删除记录
      * @param rid 要删除的记录ID
      * @param context 事务上下文
      */
-    void delete_record(const Rid &rid, Context *context);
-
+    void delete_record(const Rid &rid);
     /**
      * @brief 更新记录
      * @param rid 要更新的记录ID
      * @param buf 新的记录数据
      * @param context 事务上下文
      */
-    void update_record(const Rid &rid, char *buf, Context *context);
+    void update_record(const Rid &rid, TupleMeta &new_meta, char *buf);
 
     /**
-     * @brief 创建新的页面句柄
-     * @return 新页面的句柄
-     * @throw OutOfMemoryError 如果无法分配新页面
-     * @note 新页面的所有槽位初始状态为未使用
+     * @brief 更新指定记录的 TupleMeta
+     * @param rid 要更新的记录ID
+     * @param new_meta 新的 TupleMeta 数据
+     * @throw RecordNotFoundError 如果记录不存在 (Optional, depending on desired behavior)
      */
-    RmPageHandle create_new_page_handle();
+    void update_tuple_meta(const Rid &rid, const TupleMeta &new_meta);
 
-    /**
-     * @brief 获取指定页面的句柄
-     * @param page_no 页面号
-     * @return 页面句柄
-     * @throw InvalidPageError 如果页面号无效
-     * @note 页面会被固定在缓冲池中，使用完后应调用release_page_handle释放
-     */
-    RmPageHandle fetch_page_handle(int page_no) const;
+    auto AcquirePageReadLock(const Rid &rid) const -> ReadPageGuard;
 
-   private:
-    /**
-     * @brief 创建页面句柄的内部方法
-     * @return 新创建的页面句柄
-     * @throw OutOfMemoryError 如果无法分配新页面
-     * @note 这是一个底层方法，通常通过create_new_page_handle调用
-     */
-    RmPageHandle create_page_handle();
+    auto AcquirePageWriteLock(const Rid &rid) -> WritePageGuard;
 
-    /**
-     * @brief 释放页面句柄
-     * @param page_handle 要释放的页面句柄
-     * @note 释放后不应继续使用该页面句柄
-     * @warning 如果页面在事务中被修改，应等事务提交后再释放
-     */
-    void release_page_handle(RmPageHandle &page_handle);
+    auto GetNewWritePageGuard() -> WritePageGuard;
+
+    auto GetNewRid() -> Rid;
+
+    auto GetTupleWithLockAcquired(const Rid &rid,
+                                  const char *data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>>;
+
+    auto GetTupleMetaWithLockAcquired(const Rid &rid, const char *data) const -> TupleMeta;
+
+    auto UpdateTupleWithLockAcquired(const Rid &rid, TupleMeta &meta, const std::unique_ptr<RmRecord> &rec,
+                                     char *data) -> void;
+
+    auto UpdateTupleMetaWithLockAcquired(const Rid &rid, const TupleMeta &new_meta, char *data_) -> void;
 };

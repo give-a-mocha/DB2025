@@ -444,13 +444,11 @@ auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
 auto BufferPoolInstance::fetch_read_page(PageId page_id) -> ReadPageGuard {
     TRACE_FUNCTION
     auto basic_guard = fetch_basic_page(page_id);
-    basic_guard.page_->RLatch();  // 获取读锁
-    return {this, basic_guard.page_};
+    return basic_guard.UpgradeRead();  // 获取读锁
 }
 
 auto BufferPoolInstance::fetch_write_page(PageId page_id) -> WritePageGuard {
     TRACE_FUNCTION
     auto basic_guard = fetch_basic_page(page_id);
-    basic_guard.page_->WLatch();  // 获取写锁
-    return {this, basic_guard.page_};
+    return basic_guard.UpgradeWrite();  // 获取写锁
 }

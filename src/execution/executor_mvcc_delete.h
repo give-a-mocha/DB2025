@@ -21,25 +21,23 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccDeleteExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                                      // 表的元数据
-    std::vector<Condition> conds_;                     // 删除条件列表
-    RmFileHandle *fh_;                                 // 表的数据文件句柄
-    std::vector<Rid> rids_;                            // 待删除记录的RID列表
-    std::vector<std::unique_ptr<RmRecord>> old_recs_;  // 旧记录列表
-    std::string tab_name_;                             // 表名
-    SmManager *sm_manager_;                            // 系统管理器指针
-    TransactionManager *txn_mgr_;                      // 事务管理器指针
+    TabMeta &tab_;                                                                 // 表的元数据
+    std::vector<Condition> conds_;                                                 // 删除条件列表
+    RmFileHandle *fh_;                                                             // 表的数据文件句柄
+    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表
+    std::string tab_name_;                                                         // 表名
+    SmManager *sm_manager_;                                                        // 系统管理器指针
+    TransactionManager *txn_mgr_;                                                  // 事务管理器指针
 
    public:
     MvccDeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                       std::vector<Rid> rids, std::vector<std::unique_ptr<RmRecord>> old_recs, Context *context,
-                       TransactionManager *txn_mgr) {
+                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context,
+                       TransactionManager *txn_mgr)
+        : tab_(sm_manager->db_.get_table(tab_name)) {
         sm_manager_ = sm_manager;
         tab_name_ = tab_name;
-        tab_ = sm_manager_->db_.get_table(tab_name);
         fh_ = sm_manager_->fhs_.at(tab_name).get();
         conds_ = std::move(conds);
-        rids_ = std::move(rids);
         old_recs_ = std::move(old_recs);
         context_ = context;
         txn_mgr_ = txn_mgr;
@@ -50,20 +48,24 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @return nullptr，因为DELETE不产生结果集
      */
     std::unique_ptr<RmRecord> Next() override {
-        // 添加间隙锁
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
-        int i = 0;
-        for (auto &rid : rids_) {
-            if (!get_lock_and_check_conflict(context_->txn_, txn_mgr_, fh_, rid)) {
-                continue;
+        // 收集谓词
+        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), std::move(conds_));
+        for (auto &rec_tuple : old_recs_) {
+            auto &base_meta = std::get<0>(rec_tuple);
+            auto &old_rec = std::get<1>(rec_tuple);
+            auto &rid = std::get<2>(rec_tuple);
+            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
+
+            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
-            // fh_->delete_record_tag(rid);
-            txn_mgr_->add_delete_undo_log(context_->txn_, fh_->GetFd(), rid);
-            context_->txn_->append_write_record(
-                std::make_unique<WriteRecord>(WType::DELETE_TUPLE, tab_.name, rid, old_recs_[i]));
-            context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_recs_[i]), rid,
-                                               tab_.name);
-            i++;
+            TupleMeta new_meta(context_->txn_->get_transaction_id(), true);
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid, base_meta, new_meta, old_rec, nullptr,
+                                                  context_->txn_)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
+            // context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid,
+            // tab_.name);
         }
         return nullptr;
     }

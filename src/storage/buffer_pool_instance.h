@@ -33,7 +33,7 @@ class BufferPoolInstance {
     size_t pool_size_;                                   // 缓冲池大小（帧数）
     Page* pages_;                                        // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
-    std::deque<frame_id_t> free_list_;                   // 空闲帧链表
+    std::list<frame_id_t> free_list_;                    // 空闲帧链表
     DiskManager* disk_manager_;                          // 磁盘管理器
     Replacer* replacer_;                                 // 页面替换策略实现
     std::mutex latch_;                                   // 并发控制锁

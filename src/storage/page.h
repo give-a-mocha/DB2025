@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/config.h"
 #include "common/debug_shared_mutex.h"
 #include "storage/rwlatch.h"
+#include <cstring>
 
 /**
  * @brief 页面标识符结构体
@@ -54,6 +55,7 @@ struct std::hash<PageId> {
  */
 class Page {
     friend class BufferPoolInstance;
+    friend class RmFileHandle;
 
    public:
     Page() {

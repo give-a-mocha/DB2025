@@ -46,13 +46,13 @@ void RmScan::next() {
 
     while (rid_.page_no < file_handle_->file_hdr_.num_pages) {
         // 获取当前页面句柄
-        RmPageHandle &&page_handle = file_handle_->fetch_page_handle(rid_.page_no);
+        auto page_guard = file_handle_->AcquirePageReadLock(rid_);
+
+        RmPageHandle page_handle = RmPageHandle(&file_handle_->file_hdr_, const_cast<char *>(page_guard.GetData()));
 
         // 在当前页面寻找下一个非空slot
         rid_.slot_no =
             Bitmap::next_bit(true, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page, rid_.slot_no);
-        // fetch完别忘了unpin
-        file_handle_->buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), false);
         if (rid_.slot_no < file_handle_->file_hdr_.num_records_per_page) {
             // 在当前页面找到了非空slot
             return;

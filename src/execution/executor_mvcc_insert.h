@@ -24,7 +24,7 @@ See the Mulan PSL v2 for more details. */
  */
 class MvccInsertExecutor : public AbstractExecutor {
    private:
-    TabMeta tab_;                  // 表的元数据
+    TabMeta &tab_;                 // 表的元数据
     std::vector<Value> values_;    // 待插入的值列表
     RmFileHandle *fh_;             // 表的数据文件句柄
     std::string tab_name_;         // 表名
@@ -42,9 +42,9 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
      */
     MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context,
-                       TransactionManager *txn_mgr) {
+                       TransactionManager *txn_mgr)
+        : tab_(sm_manager->db_.get_table(tab_name)) {
         sm_manager_ = sm_manager;
-        tab_ = sm_manager_->db_.get_table(tab_name);
         values_ = values;
         tab_name_ = tab_name;
         // 检查插入值的数量是否与表的列数匹配
@@ -63,6 +63,7 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
+        TRACE_FUNCTION
         // 创建记录缓冲区
         std::unique_ptr<RmRecord> rec = std::make_unique<RmRecord>(fh_->get_file_hdr().record_size);
 
@@ -85,24 +86,39 @@ class MvccInsertExecutor : public AbstractExecutor {
             values_[i].init_raw(col.len);
             memcpy(rec->data + col.offset, values_[i].raw->data, col.len);
         }
+        std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, rec, context_->txn_);
 
-        // 获取全局条件
-        std::vector<Condition> conds = txn_mgr_->get_lock_manager()->get_gap_condition(fh_->GetFd(), context_->txn_);
-
-        if (!conds.empty() && eval_conds(tab_.cols, conds, rec)) {
-            throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+        // 唯一性检查
+        TupleMeta base_meta_(0, true);
+        for (const auto &rid : rids) {
+            auto [base_meta, old_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid);
+            base_meta_ = base_meta;
+            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
+            // 主键冲突
+            if (base_meta.is_deleted_ == false) {
+                txn_mgr_->abort(context_, context_->log_mgr_);
+                throw InternalError("Primary key conflict, duplicate insert");
+            }
         }
-        rid_ = fh_->insert_record(rec->data, context_);
-        txn_mgr_->get_lock_manager()->lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd());
-        // 添加日志要在插入索引之后，因为abort会回滚索引
-        if (!mvcc_insert_index(tab_, rec, rid_, context_, txn_mgr_, sm_manager_)) {
-            fh_->delete_record(rid_, context_);
-            txn_mgr_->abort(context_, context_->log_mgr_);
-            throw RMDBError("Failed to insert into index, rolled back record insertion at " + getType());
+        TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
+        if (!rids.empty()) {
+            rid_ = rids.back();
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta_, new_meta, nullptr, rec,
+                                                  context_->txn_)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
+        } else {
+            rid_ = fh_->GetNewRid();
+            TupleMeta base_meta(0, true);
+            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
+                                                  context_->txn_)) {
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
+            sm_manager_->insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);
         }
-        txn_mgr_->add_insert_undo_log(context_->txn_, fh_->GetFd(), rid_, rec);
-        context_->txn_->append_write_record(std::make_unique<WriteRecord>(WType::INSERT_TUPLE, tab_.name, rid_, rec));
-        context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
+        // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
         return nullptr;
     }
 

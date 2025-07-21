@@ -19,10 +19,8 @@
 #include "execution_manager.h"
 
 #include "common/print.hpp"
-#include "executor_index_scan.h"
 #include "executor_nestedloop_join.h"
 #include "executor_projection.h"
-#include "executor_seq_scan.h"
 #include "index/ix.h"
 #include "record_printer.h"
 
@@ -156,7 +154,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
                 break;
             }
             case PlanTag::T_Create_StaticCheckPoint: {
-                recovery_manager_->create_static_check_point();
+                // recovery_manager_->create_static_check_point();
                 break;
             }
             default:

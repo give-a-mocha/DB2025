@@ -115,7 +115,7 @@ void check_equal(const RmFileHandle *file_handle,
     for (auto &entry : mock) {
         Rid rid = entry.first;
         auto mock_buf = (char *)entry.second.c_str();
-        auto rec = file_handle->get_record(rid, nullptr);
+        auto [tuple_meta, rec] = file_handle->get_record(rid);
         assert(memcmp(mock_buf, rec->data, file_handle->file_hdr_.record_size) == 0);
     }
     // Randomly get record
@@ -130,7 +130,7 @@ void check_equal(const RmFileHandle *file_handle,
     size_t num_records = 0;
     for (RmScan scan(file_handle); !scan.is_end(); scan.next()) {
         assert(mock.count(scan.rid()) > 0);
-        auto rec = file_handle->get_record(scan.rid(), nullptr);
+        auto [tuple_meta, rec] = file_handle->get_record(scan.rid());
         assert(memcmp(rec->data, mock.at(scan.rid()).c_str(), file_handle->file_hdr_.record_size) == 0);
         num_records++;
     }
@@ -621,7 +621,7 @@ TEST(RecordManagerTest, SimpleTest) {
         float dice = rand() * 1. / RAND_MAX;
         if (mock.empty() || dice < insert_prob) {
             rand_buf(file_handle->file_hdr_.record_size, write_buf);
-            Rid rid = file_handle->insert_record(write_buf, nullptr);
+            Rid rid = file_handle->insert_record(write_buf);
             mock[rid] = std::string((char *)write_buf, file_handle->file_hdr_.record_size);
             add_cnt++;
             //            std::cout << "insert " << rid << '\n'; // operator<<(cout,rid)
@@ -636,13 +636,13 @@ TEST(RecordManagerTest, SimpleTest) {
             if (rand() % 2 == 0) {
                 // update
                 rand_buf(file_handle->file_hdr_.record_size, write_buf);
-                file_handle->update_record(rid, write_buf, nullptr);
+                file_handle->update_record(rid, write_buf);
                 mock[rid] = std::string((char *)write_buf, file_handle->file_hdr_.record_size);
                 upd_cnt++;
                 //                std::cout << "update " << rid << '\n';
             } else {
                 // erase
-                file_handle->delete_record(rid, nullptr);
+                file_handle->delete_record(rid);
                 mock.erase(rid);
                 del_cnt++;
                 //                std::cout << "delete " << rid << '\n';

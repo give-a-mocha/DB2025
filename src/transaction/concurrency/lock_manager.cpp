@@ -172,94 +172,52 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         return true;
     } else {
         // no-wait策略
-        // return false;
+        return false;
 
         // wait-die策略
-        request_queue.request_queue_.push_back(current_request);
-        auto current_request_it = std::prev(request_queue.request_queue_.end());
+        // request_queue.request_queue_.push_back(current_request);
+        // auto current_request_it = std::prev(request_queue.request_queue_.end());
 
-        while (true) {
-            // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有锁，当前事务应该死亡
-            bool should_die = false;
-            // 检查排他锁持有者
-            if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-                should_die = true;
-            }
-            //! MVCC没有读锁
-            // else {
-            //     // 检查共享锁持有者
-            //     for (const auto& req : request_queue.request_queue_) {
-            //         if (req.granted_ && req.lock_mode_ == LockManager::LockMode::SHARED && req.txn_id_ <
-            //         txn->get_transaction_id()) {
-            //             should_die = true;
-            //             break;
-            //         }
-            //     }
-            // }
+        // while (true) {
+        //     // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有锁，当前事务应该死亡
+        //     bool should_die = false;
+        //     // 检查排他锁持有者
+        //     if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id())
+        //     {
+        //         should_die = true;
+        //     }
 
-            if (should_die) {
-                // 移除当前请求并返回false
-                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-                    request_queue.request_queue_.erase(current_request_it);
-                }
-                return false;
-            }
+        //     if (should_die) {
+        //         // 移除当前请求并返回false
+        //         if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
+        //             request_queue.request_queue_.erase(current_request_it);
+        //         }
+        //         return false;
+        //     }
 
-            request_queue.cv_.wait(lock, [&] {
-                if (txn->get_state() == TransactionState::ABORTED) {
-                    return true;
-                }
+        //     request_queue.cv_.wait(lock, [&] {
+        //         if (txn->get_state() == TransactionState::ABORTED) {
+        //             return true;
+        //         }
+        //         return request_queue.exclusive_holder_ == -1;
+        //     });
 
-                // 检查是否可以授予锁
-                // bool can_grant = true;
-                // for (const auto& req : request_queue.request_queue_) {
-                //     if (req.granted_) {
-                //         // 如果有其他事务持有锁（排他锁与任何锁冲突）
-                //         if (req.txn_id_ != txn->get_transaction_id()) {
-                //             can_grant = false;
-                //             break;
-                //         }
-                //         // 如果当前事务持有共享锁，不能升级为排他锁
-                //         if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
-                //             can_grant = false;
-                //             break;
-                //         }
-                //     }
-                // }
-                return request_queue.exclusive_holder_ == -1;
-            });
+        //     // 检查事务是否被中止
+        //     if (txn->get_state() == TransactionState::ABORTED) {
+        //         if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
+        //             request_queue.request_queue_.erase(current_request_it);
+        //         }
+        //         return false;
+        //     }
 
-            // 检查事务是否被中止
-            if (txn->get_state() == TransactionState::ABORTED) {
-                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-                    request_queue.request_queue_.erase(current_request_it);
-                }
-                return false;
-            }
-
-            // 再次检查是否存在冲突
-            // bool still_conflict = false;
-            // for (const auto& req : request_queue.request_queue_) {
-            //      if (req.granted_) {
-            //          if (req.txn_id_ != txn->get_transaction_id()) {
-            //              still_conflict = true;
-            //              break;
-            //          }
-            //          if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
-            //              still_conflict = true;
-            //              break;
-            //          }
-            //      }
-            // }
-
-            if (request_queue.exclusive_holder_ == -1) {
-                current_request_it->granted_ = true;
-                request_queue.exclusive_holder_ = txn->get_transaction_id();
-                request_queue.exclusive_holder_it_ = current_request_it;
-                txn->get_lock_set()->insert(lock_data_id);
-                return true;
-            }
-        }
+        //     if (request_queue.exclusive_holder_ == -1) {
+        //         current_request_it->granted_ = true;
+        //         request_queue.exclusive_holder_ = txn->get_transaction_id();
+        //         request_queue.exclusive_holder_it_ = current_request_it;
+        //         txn->get_lock_set()->insert(lock_data_id);
+        //         return true;
+        //     }
+        // }
     }
 }
 
@@ -362,7 +320,7 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 }
 
 bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
-    std::scoped_lock<std::mutex> lock(latch_);
+    std::unique_lock<std::shared_mutex> w_lock(gap_lock_set_latch_);
 
     auto queue_it = gap_lock_table_.find(tab_fd);
     if (queue_it == gap_lock_table_.end()) {
@@ -377,7 +335,6 @@ bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> 
 }
 
 std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* txn) {
-    std::scoped_lock<std::mutex> lock(latch_);
     std::vector<Condition> gap_conditions;
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {
@@ -394,7 +351,7 @@ std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* t
 }
 
 bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
-    std::scoped_lock<std::mutex> lock(latch_);
+    std::unique_lock<std::shared_mutex> w_lock(gap_lock_set_latch_);
 
     auto table_queue_it = gap_lock_table_.find(tab_fd);
     if (table_queue_it == gap_lock_table_.end()) {

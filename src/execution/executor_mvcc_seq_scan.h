@@ -32,6 +32,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
     SmManager *sm_manager_;          // 系统管理器指针
     TransactionManager *txn_mgr_;    // 事务管理器指针
     std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
+    TupleMeta tuple_meta_;           // 元组元数据，用于存储列信息
 
    public:
     /**
@@ -71,9 +72,13 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
+            auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
+            auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
+            INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = base_meta;
                 return;
             }
             scan_->next();
@@ -100,9 +105,13 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto rec = mvcc_get_record(rid_, context_, fh_, txn_mgr_, cols_);
+            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
+            auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
+            auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
+            INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
+                tuple_meta_ = base_meta;
                 return;
             }
             scan_->next();
@@ -145,6 +154,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @return 当前记录的RID引用
      */
     Rid &rid() override { return rid_; }
+
+    TupleMeta &tuple_meta() override { return tuple_meta_; }
 
     /**
      * @brief 获取执行器类型名称

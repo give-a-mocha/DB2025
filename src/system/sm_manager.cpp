@@ -31,10 +31,12 @@
 #include <fcntl.h>
 
 #include <fstream>
+#include <utility>
 
 #include "index/ix.h"
 #include "record/rm.h"
 #include "record_printer.h"
+#include "record/rm_file_handle.h"
 
 /**
  * @brief 判断指定路径是否为一个文件夹
@@ -429,7 +431,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 6. 扫描表中所有记录，构建B+树索引
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
-        auto record = fh_->get_record(rmScan.rid(), context);
+        auto record = fh_->get_record(rmScan.rid()).second;
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -441,7 +443,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
         // 将键值对插入B+树
         // 键：索引列值的组合
         // 值：记录的RID
-        auto&& res = ih_->insert_entry_without_lock(key, rmScan.rid());
+        auto res = ih_->insert_entry_without_lock(key, rmScan.rid());
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (!res) {
             drop_index(tab_name, col_names, context);
@@ -513,95 +515,71 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMet
     drop_index(tab_name, col_names, context);
 }
 
-bool SmManager::insert_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid) {
+std::unique_ptr<char[]> SmManager::make_index_key(const IndexMeta& index, const std::unique_ptr<IxIndexHandle>& ih,
+                                                  const std::unique_ptr<RmRecord>& rec) {
+    auto key = std::make_unique<char[]>(index.col_tot_len);
+    int offset = 0;
+    for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
+        memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
+        offset += index.cols[j].len;
+    }
+    return key;
+}
+
+void SmManager::insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
+                                           Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
-    std::vector<std::unique_ptr<char[]>> inserted_keys;  // 记录已插入的键值
-    inserted_keys.reserve(tab_.indexes.size());          // 预分配空间以提高性能
+    insert_index_with_tab_meta(tab_, rec, rid, txn);
+}
 
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        // 获取索引句柄
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-
-        // 构造索引键值
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-
+void SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Rid rid,
+                                           Transaction* txn = nullptr) {
+    for (const auto& index : tab_.indexes) {
+        auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+        auto key = make_index_key(index, ih, rec);
         // 插入索引项
-        bool res = ih->insert_entry_without_lock(key.get(), rid);
-        if (!res) {
-            // 插入失败，回滚已插入的索引
-            for (size_t rollback_i = 0; rollback_i < i; ++rollback_i) {
-                auto& rollback_index = tab_.indexes[rollback_i];
-                auto rollback_ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, rollback_index.cols)).get();
-                rollback_ih->delete_entry_without_lock(inserted_keys[rollback_i].get());
-            }
-            return false;
+        if (txn == nullptr) {
+            ih->insert_entry_without_lock(key.get(), rid);
+        } else {
+            ih->insert_entry(key.get(), rid, txn);
         }
-        inserted_keys.emplace_back(std::move(key));
     }
-    return true;
+    return;
 }
 
-bool SmManager::insert_index_force(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
-                                   Transaction* txn) {
+void SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec,
+                                           Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
-        // 插入索引项
-        ih->insert_entry_force(key.get(), rid, txn);
-    }
-    return true;
+    delete_index_with_tab_meta(tab_, rec, txn);
 }
 
-bool SmManager::delete_index_without_lock(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec) {
-    TabMeta& tab_ = db_.get_table(tab_name);
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
-        }
+void SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec,
+                                           Transaction* txn = nullptr) {
+    for (const auto& index : tab_.indexes) {
+        auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+        auto key = make_index_key(index, ih, rec);
         // 删除索引项
-        ih->delete_entry_without_lock(key.get());
+        if (txn == nullptr) {
+            ih->delete_entry_without_lock(key.get());
+        } else {
+            ih->delete_entry(key.get(), txn);
+        }
     }
-    return true;
+    return;
 }
 
-bool SmManager::delete_index_with_rid(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
-                                      Transaction* txn) {
-    TabMeta& tab_ = db_.get_table(tab_name);
-    // 遍历表的所有索引
-    for (size_t i = 0; i < tab_.indexes.size(); ++i) {
-        auto& index = tab_.indexes[i];
-        auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
-        auto key = std::make_unique<char[]>(index.col_tot_len);
-        int offset = 0;
-        for (size_t j = 0; j < static_cast<size_t>(index.col_num); ++j) {
-            memcpy(key.get() + offset, rec->data + index.cols[j].offset, index.cols[j].len);
-            offset += index.cols[j].len;
+std::vector<Rid> SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec,
+                                           Transaction* txn) {
+    std::vector<Rid> rids;
+    for (const auto& index : tab_.indexes) {
+        auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+        auto key = make_index_key(index, ih, rec);
+        Rid rid;
+        if (ih->get_value(key.get(), rid, txn)) {
+            rids.push_back(rid);
         }
-        // 删除索引项
-        ih->delete_entry_with_rid(key.get(), rid, txn);
     }
-    return true;
+    return rids;
 }
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
@@ -613,7 +591,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
 
     // 预分配记录缓冲区
     int max_record_num = fh_->file_hdr_.num_records_per_page;
-    int len = max_record_num * record_size;
+    int len = max_record_num * (record_size + TUPLE_META_SIZE);
     std::vector<char> record_buffer(len);
     char* record_data = record_buffer.data();
 
@@ -624,15 +602,17 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
     char* current_pos = std::find(start_pos, end_pos, '\n');  // 跳过第一行（表头）
     current_pos++;                                            // 跳过换行符
 
-    auto page_handle = fh_->create_new_page_handle();
-
+    auto page_guard = fh_->GetNewWritePageGuard();
     auto batch_copy = [&]() {
+        auto page_handle = RmPageHandle(&fh_->get_file_hdr(), page_guard.GetDataMut());
         page_handle.page_hdr->num_records = count;
         fh_->file_hdr_.record_num += count;
         char* slot = page_handle.get_slot(0);
         memcpy(slot, record_data, offset);
         Bitmap::batch_set_fast(page_handle.bitmap, 0, count);
-
+        if (count == max_record_num) {
+            fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
+        }
         memset(record_data, 0, len);
         offset = 0;
         count = 0;
@@ -640,6 +620,7 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
 
     // 批量处理数据
     while (current_pos < end_pos) {
+        offset += TUPLE_META_SIZE;
         size_t start_offset = offset;
         for (size_t i = 0; i < tab_.cols.size(); ++i) {
             char* line_end = std::find_if(current_pos, end_pos, [](char c) { return c == ',' || c == '\n'; });
@@ -672,25 +653,22 @@ void SmManager::load_data(char* start_pos, char* end_pos, const std::string& tab
         }
 
         // 插入记录
-        Rid rid_ = {page_handle.page->get_page_id().page_no, count};
+        Rid rid_ = {page_guard.PageId().page_no, count};
         count++;
 
         // 插入索引
         auto rec = std::make_unique<RmRecord>(record_size, record_data + start_offset);
-        insert_index_without_lock(table_name, rec, rid_);
+        insert_index_with_tab_meta(tab_, rec, rid_);
 
         // 检查是否需要创建新页
         if (count == max_record_num) {
             batch_copy();
-            fh_->file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
-            buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
-            page_handle = fh_->create_new_page_handle();  // 创建新页
+            page_guard = fh_->GetNewWritePageGuard();
         }
     }
 
     // 确保最后一页被写入
     batch_copy();
-    buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
     // for(const auto &index : tab_.indexes) {
     //     auto ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols)).get();
     //     ih->debug_print_tree();
