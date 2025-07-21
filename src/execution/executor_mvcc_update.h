@@ -62,8 +62,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
-            auto &rid = std::get<2>(rec_tuple);
-            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
+            auto &rid_ = std::get<2>(rec_tuple);
+            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid_);
 
             if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
@@ -126,31 +126,35 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
+            std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, old_rec, context_->txn_);
             Rid insert_rid;
-            bool is_exist = sm_manager_->exist_in_index(tab_, new_rec, insert_rid, context_->txn_);
-            if (is_exist) {
-                auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, insert_rid);
+            // 唯一性检查
+            TupleMeta base_meta_(0, true);
+            for (const auto &rid : rids) {
+                auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid);
+                base_meta_ = tuple_meta;
                 if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
-                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
-                                                    AbortReason::UPGRADE_CONFLICT);
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
                 }
-                // 不是我要删除的rid，主键冲突
-                if (insert_rid != rid && tuple_meta.is_deleted_ == false) {
-                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
-                                                    AbortReason::UPGRADE_CONFLICT);
+                // 主键冲突
+                if (rid != rid_ && base_meta.is_deleted_ == false) {
+                    txn_mgr_->abort(context_, context_->log_mgr_);
+                    throw InternalError("Primary key conflict, duplicate insert");
                 }
-
-                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, tuple_meta, nullptr,
+            }
+            TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
+            if (!rids.empty()) {
+                insert_rid = rids.back();
+                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, base_meta_, nullptr,
                                             new_rec, context_->txn_)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
-
             } else {
                 TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
                 TupleMeta delete_meta(0, true);
                 insert_rid = fh_->GetNewRid();
-                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid, base_meta, old_rec, insert_rid, delete_meta, nullptr,
+                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, delete_meta, nullptr,
                                             new_rec, context_->txn_)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);

@@ -526,70 +526,59 @@ std::unique_ptr<char[]> SmManager::make_index_key(const IndexMeta& index, const 
     return key;
 }
 
-bool SmManager::insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
+void SmManager::insert_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec, Rid rid,
                                            Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
-    return insert_index_with_tab_meta(tab_, rec, rid, txn);
+    insert_index_with_tab_meta(tab_, rec, rid, txn);
 }
 
-bool SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Rid rid,
+void SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Rid rid,
                                            Transaction* txn = nullptr) {
-    if (tab_.indexes.empty()) {
-        return true;  // 没有索引，直接返回true
+    for (const auto& index : tab_.indexes) {
+        auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+        auto key = make_index_key(index, ih, rec);
+        // 插入索引项
+        if (txn == nullptr) {
+            ih->insert_entry_without_lock(key.get(), rid);
+        } else {
+            ih->insert_entry(key.get(), rid, txn);
+        }
     }
-    if (tab_.indexes.size() > 1) {
-        throw InternalError("Multiple indexes not supported in insert_index_with_tab_meta");
-    }
-    auto& index = tab_.indexes[0];
-    auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
-    // 构造索引键值
-    auto key = make_index_key(index, ih, rec);
-    // 插入索引项
-    if (txn == nullptr) {
-        return ih->insert_entry_without_lock(key.get(), rid);
-    } else {
-        return ih->insert_entry(key.get(), rid, txn);
-    }
+    return ;
 }
 
-bool SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec,
+void SmManager::delete_index_with_tab_name(const std::string& tab_name, const std::unique_ptr<RmRecord>& rec,
                                            Transaction* txn = nullptr) {
     TabMeta& tab_ = db_.get_table(tab_name);
-    return delete_index_with_tab_meta(tab_, rec, txn);
+    delete_index_with_tab_meta(tab_, rec, txn);
 }
 
-bool SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec,
+void SmManager::delete_index_with_tab_meta(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec,
                                            Transaction* txn = nullptr) {
-    if (tab_.indexes.empty()) {
-        return true;  // 没有索引，直接返回true
+    for (const auto& index : tab_.indexes) {
+        auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+        auto key = make_index_key(index, ih, rec);
+        // 删除索引项
+        if (txn == nullptr) {
+            ih->delete_entry_without_lock(key.get());
+        } else {
+            ih->delete_entry(key.get(), txn);
+        }
     }
-    if (tab_.indexes.size() > 1) {
-        throw InternalError("Multiple indexes not supported in delete_index_with_tab_meta");
-    }
-    auto& index = tab_.indexes[0];
-    // TODO :可以考虑优化
-    auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
-    // 构造索引键值
-    auto key = make_index_key(index, ih, rec);
-    if (txn == nullptr) {
-        return ih->delete_entry_without_lock(key.get());
-    } else {
-        return ih->delete_entry(key.get(), txn);
-    }
+    return ;
 }
 
-//! 唯一索引
-bool SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Rid& rid, Transaction* txn) {
-    if (tab_.indexes.empty()) {
-        return false;  // 没有索引，直接返回false
+std::vector<Rid> SmManager::exist_in_index(const TabMeta& tab_, const std::unique_ptr<RmRecord>& rec, Transaction* txn) {
+    std::vector<Rid> rids;
+    for (const auto& index : tab_.indexes) {
+        auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
+        auto key = make_index_key(index, ih, rec);
+        Rid rid;
+        if (ih->get_value(key.get(), rid, txn)) {
+            rids.push_back(rid);
+        }
     }
-    if (tab_.indexes.size() > 1) {
-        throw InternalError("Multiple indexes not supported in exist_in_index");
-    }
-    auto& index = tab_.indexes[0];
-    auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
-    auto key = make_index_key(index, ih, rec);
-    return ih->get_value(key.get(), rid, txn);
+    return rids;
 }
 
 void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
