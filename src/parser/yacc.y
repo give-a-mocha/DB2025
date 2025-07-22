@@ -352,6 +352,14 @@ value:
     {
         $$ = std::make_shared<BoolLit>($1);
     }
+    | '-' VALUE_INT
+    {
+        $$ = std::make_shared<IntLit>(-1 * $2); // 负数整数字面量
+    }
+    | '-' VALUE_FLOAT
+    {
+        $$ = std::make_shared<FloatLit>(-1 * $2); // 负数浮点数字面量
+    }
     ;
 
 /* 条件表达式 - 用于WHERE子句 */
@@ -535,6 +543,10 @@ factor:
     |   col                                 // 列引用表达式
     {
         $$ = std::static_pointer_cast<Expr>($1);
+    }
+    | '-' col
+    {
+        $$ = std::make_shared<ArithExpr>(std::make_shared<IntLit>(0), SV_ARITH_MINUS, $2);
     }
     |   '(' expr ')'                      // 括号表达式
     {
