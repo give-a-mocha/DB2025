@@ -278,7 +278,7 @@ if __name__ == "__main__":
             start_monitor = f"sudo perf record -e page-faults -p {pid} -g -o {perf_data_file} && echo '内存页错误性能测试成功开启'"
         elif flame_mode == 'lock':
             start_monitor = f"sudo perf record -e lock:contended -p {pid} -g -o {perf_data_file} && echo '锁竞争性能测试成功开启'"
-        start_test = f"cd {test_path} && cd .. && python TPCC-Tester/runner.py --prepare --thread 8 --rw 150 --ro 150 --analyze --w {data_size}"
+        start_test = f"cd {test_path} && cd .. && python TPCC-Tester/runner.py --prepare --thread 8 --rw 150 --analyze --w {data_size}"
         
         print("启动性能监控...")
         monitor_feature = executor.submit(run_command_simple, start_monitor)
