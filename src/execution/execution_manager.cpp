@@ -214,12 +214,14 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     rec_printer.print_separator(context);
     // print header into file
     std::fstream outfile;
-    outfile.open("output.txt", std::ios::out | std::ios::app);
-    outfile << "|";
-    for (std::size_t i = 0; i < captions.size(); ++i) {
-        outfile << " " << captions[i] << " |";
+    if (sm_manager_->is_output_file_) {
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << "|";
+        for (std::size_t i = 0; i < captions.size(); ++i) {
+            outfile << " " << captions[i] << " |";
+        }
+        outfile << "\n";
     }
-    outfile << "\n";
 
     // Print records
     size_t num_rec = 0;
@@ -243,14 +245,18 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         // print record into buffer
         rec_printer.print_record(columns, context);
         // print record into file
-        outfile << "|";
-        for (const std::string &column : columns) {
-            outfile << " " << column << " |";
+        if (sm_manager_->is_output_file_) {
+            outfile << "|";
+            for (const std::string &column : columns) {
+                outfile << " " << column << " |";
+            }
+            outfile << "\n";
         }
-        outfile << "\n";
         num_rec++;
     }
-    outfile.close();
+    if (sm_manager_->is_output_file_) {
+        outfile.close();
+    }
     // Print footer into buffer
     rec_printer.print_separator(context);
     // Print record count into buffer
