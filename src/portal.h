@@ -71,10 +71,11 @@ class Portal {
     std::shared_ptr<PortalStmt> start(std::shared_ptr<Plan> plan, Context *context, TransactionManager *txn_mgr) {
         TRACE_FUNCTION
         // 这里可以将select进行拆分，例如：一个select，带有return的select等
-        if (plan->tag == PlanTag::T_Help || plan->tag == PlanTag::T_ShowTable || plan->tag == PlanTag::T_DescTable ||
+        if (plan->tag == PlanTag::T_Help || plan->tag == PlanTag::T_ShowTable || plan->tag == PlanTag::T_ShowIndex || plan->tag == PlanTag::T_DescTable ||
             plan->tag == PlanTag::T_Transaction_begin || plan->tag == PlanTag::T_Transaction_commit ||
             plan->tag == PlanTag::T_Transaction_abort || plan->tag == PlanTag::T_Transaction_rollback ||
-            plan->tag == PlanTag::T_LOAD || plan->tag == PlanTag::T_SetOutput || plan->tag == PlanTag::T_SetKnob) {
+            plan->tag == PlanTag::T_LOAD || plan->tag == PlanTag::T_SetOutput || plan->tag == PlanTag::T_SetKnob ||
+            plan->tag == PlanTag::T_Create_StaticCheckPoint) {
             return std::make_shared<PortalStmt>(PORTAL_CMD_UTILITY, std::vector<TabCol>(),
                                                 std::unique_ptr<AbstractExecutor>(), plan);
         } else if (plan->tag == PlanTag::T_CreateTable || plan->tag == PlanTag::T_DropTable ||
@@ -134,11 +135,11 @@ class Portal {
                     return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(sel_cols), std::move(root), plan);
                 }
                 default:
-                    throw InternalError("Unexpected field type");
+                    throw InternalError("Portal Unexpected field type");
                     break;
             }
         } else {
-            throw InternalError("Unexpected field type");
+            throw InternalError("Portal Unexpected field type");
         }
         return nullptr;
     }

@@ -379,7 +379,7 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
                     ColDef col_def = {.name = sv_col_def->col_name, .type = col_type, .len = col_len};
                     col_defs.push_back(col_def);
                 } else {
-                    throw InternalError("Unexpected field type");
+                    throw InternalError("Planner Unexpected field type");
                 }
             }
             plannerRoot =
