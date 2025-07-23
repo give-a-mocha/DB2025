@@ -240,7 +240,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
                     columns.emplace_back(buf);
                     break;
                 case ColType::TYPE_FLOAT:
-                    snprintf(buf, sizeof(buf), "%.6g", *(float *)rec_buf);  // 更简洁的浮点表示
+                    snprintf(buf, sizeof(buf), "%.6f", *(float *)rec_buf);  // 更简洁的浮点表示
                     columns.emplace_back(buf);
                     break;
                 case ColType::TYPE_STRING:
