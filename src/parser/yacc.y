@@ -544,10 +544,6 @@ factor:
     {
         $$ = std::static_pointer_cast<Expr>($1);
     }
-    | '-' col
-    {
-        $$ = std::make_shared<ArithExpr>(std::make_shared<IntLit>(0), SV_ARITH_MINUS, $2);
-    }
     |   '(' expr ')'                      // 括号表达式
     {
         $$ = $2; // Pass through the inner expression
