@@ -58,6 +58,6 @@ class BatchArray {
 
 using BatchRecord = BatchArray<std::unique_ptr<RmRecord>, BATCHSIZE>;
 using BatchTupleMeta = BatchArray<TupleMeta, BATCHSIZE>;
-// using 
+// using
 
 #endif
