@@ -67,13 +67,12 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
     txn_map.emplace(txn->get_transaction_id(), txn);
-    timestamp_t start_ts = get_next_timestamp();
     txn->set_read_ts(last_commit_ts_);  // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
     // log_manager->add_begin_log(txn->get_transaction_id());
 
-    // running_txns_.AddTxn(start_ts);  // 添加事务到水位线
+    // running_txns_.AddTxn(txn->get_read_ts());  // 添加事务到水位线
     return txn;
 }
 
