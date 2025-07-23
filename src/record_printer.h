@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/config.h"
 #include "common/context.h"
+#include "common/ConstexprString.h"
 
 #define RECORD_COUNT_LENGTH 40
 
@@ -30,8 +31,7 @@ class RecordPrinter {
 
     void print_separator(Context *context) const {
         for (size_t i = 0; i < num_cols; i++) {
-            // std::cout << '+' << std::string(COL_WIDTH + 2, '-');
-            std::string str = "+" + std::string(COL_WIDTH + 2, '-');
+            constexpr ConstexprString<COL_WIDTH + 2> str('-');
             if (context->ellipsis_ == false && *context->offset_ + RECORD_COUNT_LENGTH + str.length() < BUFFER_LENGTH) {
                 memcpy(context->data_send_ + *(context->offset_), str.c_str(), str.length());
                 *(context->offset_) = *(context->offset_) + str.length();
@@ -39,7 +39,7 @@ class RecordPrinter {
                 context->ellipsis_ = true;
             }
         }
-        std::string str = "+\n";
+        constexpr ConstexprString str("+\n");
         if (context->ellipsis_ == false && *context->offset_ + RECORD_COUNT_LENGTH + str.length() < BUFFER_LENGTH) {
             memcpy(context->data_send_ + *(context->offset_), str.c_str(), str.length());
             *(context->offset_) = *(context->offset_) + str.length();
@@ -54,7 +54,6 @@ class RecordPrinter {
             if (col.size() > COL_WIDTH) {
                 col = col.substr(0, COL_WIDTH - 3) + "...";
             }
-            // std::cout << "| " << std::setw(COL_WIDTH) << col << ' ';
             std::stringstream ss;
             ss << "| " << std::setw(COL_WIDTH) << col << " ";
             if (context->ellipsis_ == false &&
@@ -65,8 +64,7 @@ class RecordPrinter {
                 context->ellipsis_ = true;
             }
         }
-        // std::cout << "|\n";
-        std::string str = "|\n";
+        constexpr ConstexprString str("|\n");
         if (context->ellipsis_ == false && *context->offset_ + RECORD_COUNT_LENGTH + str.length() < BUFFER_LENGTH) {
             memcpy(context->data_send_ + *(context->offset_), str.c_str(), str.length());
             *(context->offset_) = *(context->offset_) + str.length();
@@ -74,8 +72,7 @@ class RecordPrinter {
     }
 
     static void print_record_count(size_t num_rec, Context *context) {
-        // std::cout << "Total record(s): " << num_rec << '\n';
-        std::string str = "";
+        std::string str;
         if (context->ellipsis_ == true) {
             str = "... ...\n";
         }
