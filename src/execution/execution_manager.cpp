@@ -226,21 +226,28 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     // Print records
     size_t num_rec = 0;
     // 执行query_plan
+    char buf[32];
     for (executorTreeRoot->beginTuple(); !executorTreeRoot->is_end(); executorTreeRoot->nextTuple()) {
         auto Tuple = executorTreeRoot->Next();
         std::vector<std::string> columns;
-        for (auto &col : executorTreeRoot->cols()) {
-            std::string col_str;
+        const auto &cols = executorTreeRoot->cols();
+        columns.reserve(cols.size());
+        for (auto &col : cols) {
             char *rec_buf = Tuple->data + col.offset;
-            if (col.type == ColType::TYPE_INT) {
-                col_str = std::to_string(*(int *)rec_buf);
-            } else if (col.type == ColType::TYPE_FLOAT) {
-                col_str = std::to_string(*(float *)rec_buf);
-            } else if (col.type == ColType::TYPE_STRING) {
-                col_str = std::string((char *)rec_buf, col.len);
-                col_str.resize(strlen(col_str.c_str()));
+            switch (col.type) {
+                case ColType::TYPE_INT:
+                    snprintf(buf, sizeof(buf), "%d", *(int *)rec_buf);
+                    columns.emplace_back(buf);
+                    break;
+                case ColType::TYPE_FLOAT:
+                    snprintf(buf, sizeof(buf), "%.6g", *(float *)rec_buf);  // 更简洁的浮点表示
+                    columns.emplace_back(buf);
+                    break;
+                case ColType::TYPE_STRING:
+                    size_t actual_len = strnlen((char *)rec_buf, col.len);
+                    columns.emplace_back((char *)rec_buf, actual_len);
+                    break;
             }
-            columns.push_back(col_str);
         }
         // print record into buffer
         rec_printer.print_record(columns, context);
