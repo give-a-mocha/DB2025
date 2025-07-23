@@ -96,8 +96,6 @@ class Transaction {
     lsn_t prev_lsn_;
     // 事务的ID，唯一标识符
     txn_id_t txn_id_;
-    // 事务的开始时间戳
-    timestamp_t start_ts_;
 
     // 事务包含的所有写操作
     std::shared_ptr<std::vector<std::unique_ptr<WriteRecord>>> write_set_;
@@ -152,10 +150,6 @@ class Transaction {
     inline void set_txn_mode(bool txn_mode) { txn_mode_ = txn_mode; }
 
     inline bool get_txn_mode() { return txn_mode_; }
-
-    inline void set_start_ts(timestamp_t start_ts) { start_ts_ = start_ts; }
-
-    inline timestamp_t get_start_ts() { return start_ts_; }
 
     inline IsolationLevel get_isolation_level() { return isolation_level_; }
 

@@ -68,7 +68,6 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
     txn_map.emplace(txn->get_transaction_id(), txn);
     timestamp_t start_ts = get_next_timestamp();
-    txn->set_start_ts(start_ts);        // 设置事务开始时间戳
     txn->set_read_ts(last_commit_ts_);  // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
