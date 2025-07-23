@@ -68,29 +68,29 @@ constexpr int help_info_len = strlen(help_info);
  * @throw InternalError 当遇到未预期的计划类型时抛出
  */
 void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
-    if (auto x = std::dynamic_pointer_cast<DDLPlan>(plan)) {
-        switch (x->tag) {
-            case PlanTag::T_CreateTable: {
-                sm_manager_->create_table(x->tab_name_, x->cols_, context);
-                break;
-            }
-            case PlanTag::T_DropTable: {
-                sm_manager_->drop_table(x->tab_name_, context);
-                break;
-            }
-            case PlanTag::T_CreateIndex: {
-                sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
-                break;
-            }
-            case PlanTag::T_DropIndex: {
-                sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
-                break;
-            }
-            default:
-                throw InternalError("Unexpected field type");
-                break;
+    auto x = std::static_pointer_cast<DDLPlan>(plan);
+    switch (x->tag) {
+        case PlanTag::T_CreateTable: {
+            sm_manager_->create_table(x->tab_name_, x->cols_, context);
+            break;
         }
+        case PlanTag::T_DropTable: {
+            sm_manager_->drop_table(x->tab_name_, context);
+            break;
+        }
+        case PlanTag::T_CreateIndex: {
+            sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
+            break;
+        }
+        case PlanTag::T_DropIndex: {
+            sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
+            break;
+        }
+        default:
+            throw InternalError("Unexpected field type");
+            break;
     }
+    
 }
 
 /**
@@ -102,87 +102,94 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
  * @throw InternalError 当遇到未预期的命令类型时抛出
  */
 void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Context *context) {
-    if (auto x = std::dynamic_pointer_cast<OtherPlan>(plan)) {
-        switch (x->tag) {
-            case PlanTag::T_Help: {
-                strcpy(context->data_send_ + *(context->offset_), help_info);
-                *(context->offset_) = help_info_len;
-                break;
-            }
-            case PlanTag::T_ShowTable: {
-                sm_manager_->show_tables(context);
-                break;
-            }
-            case PlanTag::T_ShowIndex: {
-                sm_manager_->show_index(x->tab_name_, context);
-                break;
-            }
-            case PlanTag::T_DescTable: {
-                sm_manager_->desc_table(x->tab_name_, context);
-                break;
-            }
-            case PlanTag::T_Transaction_begin: {
-                // 显示开启一个事务
-                context->txn_->set_txn_mode(true);
-                break;
-            }
-            case PlanTag::T_Transaction_commit: {
-                context->txn_ = txn_mgr_->get_transaction(*txn_id);
-                txn_mgr_->commit(context->txn_, context->log_mgr_);
-                // if (txn_mgr_->should_perform_gc()) {
-                //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
-                //     txn_mgr_->GarbageCollection();
-                // }
-                break;
-            }
-            case PlanTag::T_Transaction_rollback: {
-                context->txn_ = txn_mgr_->get_transaction(*txn_id);
-                txn_mgr_->abort(context, context->log_mgr_);
-                // if (txn_mgr_->should_perform_gc()) {
-                //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
-                //     txn_mgr_->GarbageCollection();
-                // }
-                break;
-            }
-            case PlanTag::T_Transaction_abort: {
-                context->txn_ = txn_mgr_->get_transaction(*txn_id);
-                txn_mgr_->abort(context, context->log_mgr_);
-                // if (txn_mgr_->should_perform_gc()) {
-                //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
-                //     txn_mgr_->GarbageCollection();
-                // }
-                break;
-            }
-            case PlanTag::T_Create_StaticCheckPoint: {
-                // recovery_manager_->create_static_check_point();
-                break;
-            }
-            default:
-                throw InternalError("Unexpected field type");
-                break;
+    switch (plan->tag) {
+        case PlanTag::T_Help: {
+            strcpy(context->data_send_ + *(context->offset_), help_info);
+            *(context->offset_) = help_info_len;
+            break;
         }
-
-    } else if (auto x = std::dynamic_pointer_cast<SetKnobPlan>(plan)) {
-        switch (x->set_knob_type_) {
-            case ast::SetKnobType::EnableNestLoop: {
-                planner_->set_enable_nestedloop_join(x->bool_value_);
-                break;
-            }
-            case ast::SetKnobType::EnableSortMerge: {
-                planner_->set_enable_sortmerge_join(x->bool_value_);
-                break;
-            }
-            default: {
-                throw RMDBError("Not implemented!\n");
-                break;
-            }
+        case PlanTag::T_ShowTable: {
+            sm_manager_->show_tables(context);
+            break;
         }
-    } else if (auto x = std::dynamic_pointer_cast<LoadPlan>(plan)) {
-        // Load数据到表中
-        sm_manager_->load_csv_data_auto(x->table_name_, x->file_path_, context->txn_);
-    } else if (auto x = std::dynamic_pointer_cast<SetOutputPlan>(plan)) {
-        // 设置输出文件
-        sm_manager_->set_output_file(x->enable_);
+        case PlanTag::T_ShowIndex: {
+            auto x = std::static_pointer_cast<OtherPlan>(plan);
+            sm_manager_->show_index(x->tab_name_, context);
+            break;
+        }
+        case PlanTag::T_DescTable: {
+            auto x = std::static_pointer_cast<OtherPlan>(plan);
+            sm_manager_->desc_table(x->tab_name_, context);
+            break;
+        }
+        case PlanTag::T_Transaction_begin: {
+            // 显示开启一个事务
+            context->txn_->set_txn_mode(true);
+            break;
+        }
+        case PlanTag::T_Transaction_commit: {
+            context->txn_ = txn_mgr_->get_transaction(*txn_id);
+            txn_mgr_->commit(context->txn_, context->log_mgr_);
+            // if (txn_mgr_->should_perform_gc()) {
+            //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
+            //     txn_mgr_->GarbageCollection();
+            // }
+            break;
+        }
+        case PlanTag::T_Transaction_rollback: {
+            context->txn_ = txn_mgr_->get_transaction(*txn_id);
+            txn_mgr_->abort(context, context->log_mgr_);
+            // if (txn_mgr_->should_perform_gc()) {
+            //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
+            //     txn_mgr_->GarbageCollection();
+            // }
+            break;
+        }
+        case PlanTag::T_Transaction_abort: {
+            context->txn_ = txn_mgr_->get_transaction(*txn_id);
+            txn_mgr_->abort(context, context->log_mgr_);
+            // if (txn_mgr_->should_perform_gc()) {
+            //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
+            //     txn_mgr_->GarbageCollection();
+            // }
+            break;
+        }
+        case PlanTag::T_Create_StaticCheckPoint: {
+            // recovery_manager_->create_static_check_point();
+            break;
+        }
+        case PlanTag::T_SetKnob: {
+            auto x = std::static_pointer_cast<SetKnobPlan>(plan);
+            switch (x->set_knob_type_) {
+                case ast::SetKnobType::EnableNestLoop: {
+                    planner_->set_enable_nestedloop_join(x->bool_value_);
+                    break;
+                }
+                case ast::SetKnobType::EnableSortMerge: {
+                    planner_->set_enable_sortmerge_join(x->bool_value_);
+                    break;
+                }
+                default: {
+                    throw RMDBError("Not implemented!\n");
+                    break;
+                }
+            }
+            break;
+        }
+        case PlanTag::T_LOAD: {
+            auto x = std::static_pointer_cast<LoadPlan>(plan);
+            // Load数据到表中
+            sm_manager_->load_csv_data_auto(x->table_name_, x->file_path_, context->txn_);
+            break;
+        }
+        case PlanTag::T_SetOutput: {
+            auto x = std::static_pointer_cast<SetOutputPlan>(plan);
+            // 设置输出文件
+            sm_manager_->set_output_file(x->enable_);
+            break;
+        }
+        default:
+            throw InternalError("Unexpected plan type in execution manager");
     }
 }
 
