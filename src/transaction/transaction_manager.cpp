@@ -140,8 +140,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 
     txn->set_state(TransactionState::COMMITTED);
     txn->set_commit_ts(get_next_timestamp());                                       // 设置提交时间戳
-    last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
+    last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
@@ -553,8 +553,6 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
     auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
     auto meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
     if (meta != delete_base_meta) {
-        WARN("AtomicUpdate: Metadata mismatch for delete_rid: {}, expected: {}, actual: {}", delete_rid,
-             delete_base_meta, meta);
         return false;  // 如果元数据不匹配，返回 false
     }
     // 先delete
@@ -576,8 +574,6 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
         auto new_page_guard = fh_->AcquirePageWriteLock(insert_rid);
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, new_page_guard.GetData());
         if (meta != insert_base_meta) {
-            WARN("AtomicUpdate: Metadata mismatch for index insert_rid: {}, expected: {}, actual: {}", insert_rid,
-                 insert_base_meta, meta);
             return false;  // 如果新元数据不匹配，返回 false
         }
         TupleMeta insert_new_meta(txn->get_transaction_id(), false);
@@ -590,8 +586,6 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
     } else {
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
         if (meta != insert_base_meta) {
-            WARN("AtomicUpdate: Metadata mismatch for insert_rid: {}, expected: {}, actual: {}", insert_rid,
-                 insert_base_meta, meta);
             return false;  // 如果新元数据不匹配，返回 false
         }
         TupleMeta insert_new_meta(txn->get_transaction_id(), false);

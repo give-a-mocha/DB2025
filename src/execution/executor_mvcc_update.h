@@ -159,6 +159,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 insert_rid = fh_->GetNewRid();
                 if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, delete_meta, nullptr,
                                             new_rec, context_->txn_)) {
+                    fh_->delete_record(insert_rid);
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
