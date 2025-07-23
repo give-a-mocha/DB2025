@@ -73,7 +73,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     txn->set_state(TransactionState::DEFAULT);
     // log_manager->add_begin_log(txn->get_transaction_id());
 
-    running_txns_.AddTxn(start_ts);  // 添加事务到水位线
+    // running_txns_.AddTxn(start_ts);  // 添加事务到水位线
     return txn;
 }
 
@@ -161,8 +161,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // log_manager->add_commit_log(txn->get_transaction_id());
     // log_manager->flush_log_to_disk();
 
-    running_txns_.UpdateCommitTs(txn->get_commit_ts());  // 更新水位线的提交时间戳
-    running_txns_.RemoveTxn(txn->get_read_ts());         // 从水位线中移除事务
+    // running_txns_.UpdateCommitTs(txn->get_commit_ts());  // 更新水位线的提交时间戳
+    // running_txns_.RemoveTxn(txn->get_read_ts());         // 从水位线中移除事务
 }
 
 /**
@@ -227,7 +227,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     txn->set_state(TransactionState::ABORTED);
     // log_manager->add_abort_log(txn->get_transaction_id());
 
-    running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
+    // running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
 }
 
 auto TransactionManager::GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard& {

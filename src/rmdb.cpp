@@ -97,12 +97,12 @@ void sigint_handler(int signo) {
 void SetTransaction(txn_id_t *txn_id, Context *context) {
     TRACE_FUNCTION
     // 获取事务对象
-    if (txn_manager->exsit_transaction(*txn_id)) {
-        // 如果事务ID存在，则获取对应的事务对象
-        context->txn_ = txn_manager->get_transaction(*txn_id);
-    } else {
-        context->txn_ = nullptr;
-    }
+    // if (txn_manager->exsit_transaction(*txn_id)) {
+    //     // 如果事务ID存在，则获取对应的事务对象
+    //     context->txn_ = txn_manager->get_transaction(*txn_id);
+    // } else {
+    //     context->txn_ = nullptr;
+    // }
     // 如果事务对象为空 或者已提交 或者已中止， 则创建新事务
     if (context->txn_ == nullptr || context->txn_->get_state() == TransactionState::COMMITTED ||
         context->txn_->get_state() == TransactionState::ABORTED) {
