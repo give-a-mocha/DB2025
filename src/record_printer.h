@@ -50,12 +50,13 @@ class RecordPrinter {
 
     void print_record(const std::vector<std::string> &rec_str, Context *context) const {
         assert(rec_str.size() == num_cols);
-        for (auto col : rec_str) {
-            if (col.size() > COL_WIDTH) {
-                col = col.substr(0, COL_WIDTH - 3) + "...";
-            }
+        for (auto &col : rec_str) {
             std::stringstream ss;
-            ss << "| " << std::setw(COL_WIDTH) << col << " ";
+            if (col.size() > COL_WIDTH) {
+                ss << "| " << std::setw(COL_WIDTH) << std::string_view(col).substr(0, COL_WIDTH - 3) << "..." << " ";
+            } else {
+                ss << "| " << std::setw(COL_WIDTH) << col << " ";
+            }
             if (context->ellipsis_ == false &&
                 *context->offset_ + RECORD_COUNT_LENGTH + ss.str().length() < BUFFER_LENGTH) {
                 memcpy(context->data_send_ + *(context->offset_), ss.str().c_str(), ss.str().length());
