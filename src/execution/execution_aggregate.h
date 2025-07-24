@@ -105,7 +105,7 @@ class AggregateExecutor : public AbstractExecutor {
         } else {
             // 没有分组，对所有记录执行聚合操作
             std::vector<std::unique_ptr<RmRecord>> records;
-            for(prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
+            for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
                 records.push_back(std::move(prev_->Next()));
             }
             auto record = aggregateGroup(records);
