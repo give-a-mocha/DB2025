@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "common/Hash.h"
+#include "common/utils/Hash.h"
 #include "common/TraceStack.hpp"
 #include "executor_abstract.h"
 
@@ -14,7 +14,7 @@ struct ListHash {
     size_t operator()(const std::list<std::string_view>& v) const {
         size_t hash = 5381;
         for (auto& i : v) {
-            hash = getHashCode(i, hash);
+            hash = util::getHashCode(i, hash);
         }
         return hash;
     }
