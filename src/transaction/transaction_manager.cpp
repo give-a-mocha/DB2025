@@ -249,7 +249,8 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
         it = shard.version_info_.find(page_id);
     }
     auto& version_info = it->second;
-    lock.unlock();
+    // auto version_info = it->second;
+    // lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -267,7 +268,8 @@ void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn
         return;
     }
     auto& version_info = it->second;
-    lock.unlock();
+    // auto version_info = it->second;
+    // lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -297,7 +299,8 @@ UndoLink TransactionManager::GetUndoLink(const int& fd, Rid rid) {
         return UndoLink{};  // 如果没有找到对应的版本信息，则返回空的 UndoLink
     }
     auto& version_info = it->second;
-    lock.unlock();
+    // auto version_info = it->second;
+    // lock.unlock();
     std::shared_lock<std::shared_mutex> version_lock(version_info->mutex_);
     auto prev_version_it = version_info->prev_version_.find(rid.slot_no);
     if (prev_version_it == version_info->prev_version_.end()) {
@@ -314,11 +317,9 @@ const UndoLog* TransactionManager::GetUndoLogOptional(UndoLink link) {
     std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
     auto it = TransactionManager::txn_map.find(link.prev_txn_);
     if (it == TransactionManager::txn_map.end()) {
-        lock.unlock();
         return nullptr;  // 如果事务不存在，则返回 nullptr
     }
     auto txn = it->second;
-    lock.unlock();
 
     // 检查撤销日志索引是否有效
     if (link.prev_log_idx_ < 0 || static_cast<size_t>(link.prev_log_idx_) >= txn->GetUndoLogNum()) {
