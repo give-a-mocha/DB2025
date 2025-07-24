@@ -61,7 +61,7 @@ struct TupleMeta {
 
     TupleMeta() = default;
 
-    TupleMeta(timestamp_t ts, bool is_deleted) : ts_(ts), is_deleted_(is_deleted) {}
+    constexpr TupleMeta(timestamp_t ts, bool is_deleted) : ts_(ts), is_deleted_(is_deleted) {}
 
     friend bool operator==(const TupleMeta& lhs, const TupleMeta& rhs) {
         return lhs.ts_ == rhs.ts_ && lhs.is_deleted_ == rhs.is_deleted_;
