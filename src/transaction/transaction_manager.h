@@ -117,13 +117,12 @@ class TransactionManager {
     Transaction *get_transaction(txn_id_t txn_id) {
         if (txn_id == INVALID_TXN_ID) return nullptr;
         std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
-        assert(TransactionManager::txn_map.find(txn_id) != TransactionManager::txn_map.end());
-        auto *res = TransactionManager::txn_map[txn_id];
+        auto it = TransactionManager::txn_map.find(txn_id);
+        assert(it != TransactionManager::txn_map.end());
         lock.unlock();
-        assert(res != nullptr);
-        assert(res->get_thread_id() == std::this_thread::get_id());
-
-        return res;
+        Transaction *txn = it->second;
+        assert(txn->get_thread_id() == std::this_thread::get_id());
+        return txn;
     }
 
     bool exsit_transaction(txn_id_t txn_id) {
