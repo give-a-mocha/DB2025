@@ -6,8 +6,6 @@
 
 namespace util {
 
-
-
 using uint64 = unsigned long long;
 
 inline uint64 getHashCode(std::string_view str, uint64 hash = 5381) {
@@ -17,7 +15,6 @@ inline uint64 getHashCode(std::string_view str, uint64 hash = 5381) {
     return hash;
 }
 
-
-}
+}  // namespace util
 
 #endif
