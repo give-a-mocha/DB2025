@@ -96,6 +96,12 @@ class AggregateExecutor : public AbstractExecutor {
                     aggregated_records_.push_back(std::move(record));
                 }
             }
+            if (group_executor->grouped_records.empty()) {
+                auto record = aggregateGroup(std::vector<std::unique_ptr<RmRecord>>());
+                if (record) {
+                    aggregated_records_.push_back(std::move(record));
+                }
+            }
         } else {
             // 没有分组，对所有记录执行聚合操作
             std::vector<std::unique_ptr<RmRecord>> records;
