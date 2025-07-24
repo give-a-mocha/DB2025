@@ -13,7 +13,7 @@ See the Mulan PSL v2 for more details. */
 #include <string>
 #include <vector>
 
-#include "common/Format.h"
+#include "common/utils/Format.h"
 
 namespace ast {
 

@@ -37,7 +37,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "common/Hash.h"
+#include "common/utils/Hash.h"
 #include "common/TraceStack.hpp"
 #include "common/common.h"
 #include "parser/parser.h"
