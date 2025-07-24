@@ -368,6 +368,12 @@ bool IxIndexHandle::get_value_without_lock(const char *key, Rid &result) {
     return ok;
 }
 
+bool IxIndexHandle::get_value_with_root_lock(const char *key, Rid &result) {
+    TRACE_FUNCTION
+    std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
+    return get_value_without_lock(key, result);
+}
+
 /**
  * @brief 将节点分裂成两个节点
  * @details 将一个满节点分裂成两个节点，键值对平均分配
@@ -560,6 +566,11 @@ bool IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &value)
     }
 }
 
+bool IxIndexHandle::insert_entry_with_root_lock(const char *key, const Rid &value) {
+    std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
+    return insert_entry_without_lock(key, value);
+}
+
 /**
  * @brief 从B+树中删除指定键值对
  * @details 删除键值对并处理可能的节点合并或重分配
@@ -634,6 +645,11 @@ bool IxIndexHandle::delete_entry_without_lock(const char *key) {
     buffer_pool_manager_->unpin_page(leaf_node->get_page_id(), true);
     delete leaf_node;
     return true;
+}
+
+bool IxIndexHandle::delete_entry_with_root_lock(const char *key) {
+    std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
+    return delete_entry_without_lock(key);
 }
 
 /**
@@ -925,6 +941,31 @@ Iid IxIndexHandle::lower_bound(const char *key) {
     return res;
 }
 
+Iid IxIndexHandle::lower_bound_with_root_lock(const char *key) {
+    TRACE_FUNCTION
+    std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
+    //! DO
+    if (is_empty()) {
+        return {-1, -1};
+    }
+    auto leaf_page = find_leaf_page_without_lock(key, Operation::FIND);
+    auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
+    int pos = leaf_node->lower_bound(key);
+    Iid res{};
+    if (pos == leaf_node->get_size()) {
+        if (leaf_node->get_page_no() == file_hdr_->last_leaf_) {
+            res = leaf_end();  // 返回叶子结点的结束位置
+        } else {
+            res = {leaf_node->get_next_leaf(), 0};
+        }
+    } else {
+        res = {leaf_node->get_page_no(), pos};
+    }
+    buffer_pool_manager_->unpin_page(leaf_page->get_page_id(), false);
+    delete leaf_node;  // 释放叶子结点内存
+    return res;
+}
+
 /**
  * @brief 查找第一个严格大于给定键值的索引项
  * @details 结合查找叶子节点和节点内查找两个操作
@@ -951,6 +992,31 @@ Iid IxIndexHandle::upper_bound(const char *key) {
         res = {leaf_node->get_page_no(), pos};
     }
     leaf_page->RUnlatch();
+    buffer_pool_manager_->unpin_page(leaf_page->get_page_id(), false);
+    delete leaf_node;  // 释放叶子结点内存
+    return res;
+}
+
+Iid IxIndexHandle::upper_bound_with_root_lock(const char *key) {
+    TRACE_FUNCTION
+    std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
+    //! DO
+    if (is_empty()) {
+        return {-1, -1};
+    }
+    auto leaf_page = find_leaf_page_without_lock(key, Operation::FIND);
+    auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
+    int pos = leaf_node->upper_bound(key);
+    Iid res{};
+    if (pos == leaf_node->get_size()) {
+        if (leaf_node->get_page_no() == file_hdr_->last_leaf_) {
+            res = leaf_end();  // 返回叶子结点的结束位置
+        } else {
+            res = {leaf_node->get_next_leaf(), 0};
+        }
+    } else {
+        res = {leaf_node->get_page_no(), pos};
+    }
     buffer_pool_manager_->unpin_page(leaf_page->get_page_id(), false);
     delete leaf_node;  // 释放叶子结点内存
     return res;
@@ -1333,4 +1399,52 @@ void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
 
     buffer_pool_manager_->unpin_page(page->get_page_id(), false);
     delete node;  // Release node memory
+}
+
+/**
+ * @brief 获取指定范围内的所有Rid
+ * @param lower 扫描起始位置
+ * @param upper 扫描终止位置
+ * @return std::vector<Rid> 包含所有符合条件的Rid
+ */
+std::vector<Rid> IxIndexHandle::get_rids_in_range(const Iid &lower, const Iid &upper) {
+    std::scoped_lock lock(root_latch_);
+    std::vector<Rid> rids;
+    Iid iid = lower;
+    Iid end = upper;
+
+    if (iid == end) {
+        return rids;
+    }
+
+    page_id_t curr_page_no = iid.page_no;
+    int curr_slot_no = iid.slot_no;
+
+    while (curr_page_no != INVALID_PAGE_ID) {
+        Page* page = buffer_pool_manager_->fetch_page({fd_, curr_page_no});
+        auto node = new IxNodeHandle(file_hdr_, page);
+
+        while (curr_slot_no < node->get_size()) {
+            Iid current_iid = {curr_page_no, curr_slot_no};
+            if (current_iid == end) {
+                buffer_pool_manager_->unpin_page(node->get_page_id(), false);
+                delete node;
+                return rids;
+            }
+            rids.push_back(*node->get_rid(curr_slot_no));
+            curr_slot_no++;
+        }
+
+        page_id_t next_page_no = node->get_next_leaf();
+        buffer_pool_manager_->unpin_page(node->get_page_id(), false);
+        delete node;
+
+        if (curr_page_no == end.page_no) {
+            break;
+        }
+
+        curr_page_no = next_page_no;
+        curr_slot_no = 0;
+    }
+    return rids;
 }

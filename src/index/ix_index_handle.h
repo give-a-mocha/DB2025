@@ -104,6 +104,7 @@ inline int ix_compare(const char *a, const char *b, const std::vector<ColType> &
 class IxNodeHandle {
     friend class IxIndexHandle;  // 允许 IxIndexHandle 类访问 IxNodeHandle 的私有成员
     friend class IxScan;         // 允许 IxScan 类访问 IxNodeHandle 的私有成员
+    friend class IxScanTemp;     // 允许 IxScanTemp 类访问 IxNodeHandle 的私有成员
 
    private:
     /**
@@ -308,6 +309,7 @@ class IxNodeHandle {
  */
 class IxIndexHandle {
     friend class IxScan;     // 允许 IxScan 类访问 IxIndexHandle 的私有成员
+    friend class IxScanTemp; // 允许 IxScanTemp 类访问 IxIndexHandle 的私有成员
     friend class IxManager;  // 允许 IxManager 类访问 IxIndexHandle 的私有成员
 
    private:
@@ -351,6 +353,8 @@ class IxIndexHandle {
     bool get_value(const char *key, Rid &result, Transaction *transaction);
 
     bool get_value_without_lock(const char *key, Rid &result);
+
+    bool get_value_with_root_lock(const char *key, Rid &result);
     /**
      * @brief 查找包含指定键的叶节点
      * @param key 目标键值
@@ -375,6 +379,8 @@ class IxIndexHandle {
     bool insert_entry(const char *key, const Rid &value, Transaction *transaction);
 
     bool insert_entry_without_lock(const char *key, const Rid &value);
+
+    bool insert_entry_with_root_lock(const char *key, const Rid &value);
 
     /**
      * @brief 分裂节点
@@ -401,6 +407,8 @@ class IxIndexHandle {
     bool delete_entry(const char *key, Transaction *transaction);
 
     bool delete_entry_without_lock(const char *key);
+
+    bool delete_entry_with_root_lock(const char *key);
 
     /**
      * @brief 从B+树中删除指定键和RID对
@@ -456,12 +464,17 @@ class IxIndexHandle {
      */
     Iid lower_bound(const char *key);
 
+    Iid lower_bound_with_root_lock(const char *key);
+
     /**
      * @brief 查找严格大于指定键的第一个位置
      * @param key 目标键值
      * @return 索引ID
      */
     Iid upper_bound(const char *key);
+
+    Iid upper_bound_with_root_lock(const char *key);
+
 
     /**
      * @brief 获取最后一个叶节点的末尾位置
@@ -474,6 +487,14 @@ class IxIndexHandle {
      * @return 索引ID
      */
     Iid leaf_begin() const;
+
+    /**
+     * @brief 获取指定范围内的所有Rid
+     * @param lower 扫描起始位置
+     * @param upper 扫描终止位置
+     * @return std::vector<Rid> 包含所有符合条件的Rid
+     */
+    std::vector<Rid> get_rids_in_range(const Iid &lower, const Iid &upper);
 
     //===== 调试函数 =====
 
