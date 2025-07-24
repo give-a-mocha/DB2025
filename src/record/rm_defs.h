@@ -29,6 +29,7 @@
 
 #include "defs.h"
 #include "storage/buffer_pool_manager.h"
+#include "common/MemoryPool/MemoryPool.h"
 
 /** @brief 表示无效的页面号 */
 constexpr int RM_NO_PAGE = -1;
@@ -140,7 +141,7 @@ struct RmRecord {
     // 禁用拷贝构造函数和拷贝赋值操作符
     RmRecord(const RmRecord& other) {
         size = other.size;
-        data = new char[size];
+        data = Malloc_data(size);
         memcpy(data, other.data, size);
         allocated_ = true;
     }
@@ -149,11 +150,11 @@ struct RmRecord {
         if (this != &other) {
             // 释放当前资源
             if (allocated_) {
-                delete[] data;
+                Free_data(data, size);
             }
             // 分配新空间并复制数据
             size = other.size;
-            data = new char[size];
+            data = Malloc_data(size);
             memcpy(data, other.data, size);
             allocated_ = true;
         }
@@ -177,7 +178,7 @@ struct RmRecord {
         if (this != &other) {
             // 释放当前资源
             if (allocated_) {
-                delete[] data;
+                Free_data(data, size);
             }
 
             // 移动资源
@@ -202,7 +203,7 @@ struct RmRecord {
      */
     RmRecord(int size_) {
         size = size_;
-        data = new char[size_];
+        data = Malloc_data(size);
         allocated_ = true;
     }
 
@@ -217,7 +218,7 @@ struct RmRecord {
      */
     RmRecord(int size_, char* data_) {
         size = size_;
-        data = new char[size_];
+        data = Malloc_data(size);
         memcpy(data, data_, size_);
         allocated_ = true;
     }
@@ -233,19 +234,33 @@ struct RmRecord {
      * @param data_ 序列化的数据缓冲区
      */
     void Deserialize(const char* data_) {
-        size = *reinterpret_cast<const int*>(data_);
         if (allocated_) {
-            delete[] data;
+            Free_data(data, size);
         }
-        data = new char[size];
+        size = *reinterpret_cast<const int*>(data_);
+        data = Malloc_data(size);
         memcpy(data, data_ + sizeof(int), size);
     }
 
     ~RmRecord() {
         if (allocated_) {
-            delete[] data;
+            Free_data(data, size);
         }
         allocated_ = false;
         data = nullptr;
+    }
+
+    static void* operator new(size_t size) { return MemoryPool<RmRecord>::getInstance().Malloc(); }
+    static void operator delete(void* ptr) { MemoryPool<RmRecord>::getInstance().Free(ptr); }
+    static void* operator new[](size_t size) { return MemoryPool<RmRecord>::getInstance().Malloc(); }
+    static void operator delete[](void* ptr) { MemoryPool<RmRecord>::getInstance().Free(ptr); }
+
+    char* Malloc_data(int SIZE) {
+        if (SIZE <= 4) return (char*)MemoryPool<int>::getInstance().Malloc();
+        else return new char[SIZE];
+    }
+    void Free_data(char* ptr, int SIZE) {
+        if (SIZE <= 4) MemoryPool<int>::getInstance().Free(ptr);
+        else delete[] ptr;
     }
 };
