@@ -119,8 +119,8 @@ class TransactionManager {
         std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
         auto it = TransactionManager::txn_map.find(txn_id);
         assert(it != TransactionManager::txn_map.end());
-        lock.unlock();
         Transaction *txn = it->second;
+        lock.unlock();
         assert(txn->get_thread_id() == std::this_thread::get_id());
         return txn;
     }
