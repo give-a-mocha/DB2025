@@ -314,9 +314,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
                     auto col = tab.get_col(set_clause.lhs.col_name);
                     // 允许数值类型之间的转换(INT与FLOAT)
-                    bool is_numeric =
-                        (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
-                        (set_clause.rhs_val.type == ColType::TYPE_INT || set_clause.rhs_val.type == ColType::TYPE_FLOAT);
+                    bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
+                                      (set_clause.rhs_val.type == ColType::TYPE_INT ||
+                                       set_clause.rhs_val.type == ColType::TYPE_FLOAT);
                     if (col->type != set_clause.rhs_val.type && !is_numeric) {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
                     }

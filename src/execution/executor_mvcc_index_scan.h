@@ -30,7 +30,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     Rid rid_;                       // 当前记录ID
     // std::unique_ptr<IxScan> scan_;  // 扫描迭代器
     std::unique_ptr<IxScanTemp> scan_;
-    SmManager *sm_manager_;         // 系统管理器
+    SmManager *sm_manager_;  // 系统管理器
     TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
     TupleMeta tuple_meta_;           // 元组元数据

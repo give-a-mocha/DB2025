@@ -308,9 +308,9 @@ class IxNodeHandle {
  * - 根节点管理
  */
 class IxIndexHandle {
-    friend class IxScan;     // 允许 IxScan 类访问 IxIndexHandle 的私有成员
-    friend class IxScanTemp; // 允许 IxScanTemp 类访问 IxIndexHandle 的私有成员
-    friend class IxManager;  // 允许 IxManager 类访问 IxIndexHandle 的私有成员
+    friend class IxScan;      // 允许 IxScan 类访问 IxIndexHandle 的私有成员
+    friend class IxScanTemp;  // 允许 IxScanTemp 类访问 IxIndexHandle 的私有成员
+    friend class IxManager;   // 允许 IxManager 类访问 IxIndexHandle 的私有成员
 
    private:
     /**
@@ -474,7 +474,6 @@ class IxIndexHandle {
     Iid upper_bound(const char *key);
 
     Iid upper_bound_with_root_lock(const char *key);
-
 
     /**
      * @brief 获取最后一个叶节点的末尾位置

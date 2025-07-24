@@ -403,14 +403,15 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
         case ast::AstType::DropIndex: {
             auto x = std::static_pointer_cast<ast::DropIndex>(query->parse);
             // drop index
-            plannerRoot = std::make_shared<DDLPlan>(PlanTag::T_DropIndex, x->tab_name, x->col_names, std::vector<ColDef>());
+            plannerRoot =
+                std::make_shared<DDLPlan>(PlanTag::T_DropIndex, x->tab_name, x->col_names, std::vector<ColDef>());
             break;
         }
         case ast::AstType::InsertStmt: {
             auto x = std::static_pointer_cast<ast::InsertStmt>(query->parse);
             // insert;
-            plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Insert, std::shared_ptr<Plan>(), x->tab_name, query->values,
-                                                    std::vector<Condition>(), std::vector<SetClause>());
+            plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Insert, std::shared_ptr<Plan>(), x->tab_name,
+                                                    query->values, std::vector<Condition>(), std::vector<SetClause>());
             break;
         }
         case ast::AstType::DeleteStmt: {
@@ -425,8 +426,8 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 
             if (index_exist == false) {  // 该表没有索引
                 index_col_names.clear();
-                table_scan_executors =
-                    std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name, query->conds, index_col_names);
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name,
+                                                                  query->conds, index_col_names);
             } else {  // 存在索引
                 table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, x->tab_name,
                                                                   query->conds, index_col_names);
@@ -448,11 +449,11 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 
             if (index_exist == false) {  // 该表没有索引
                 index_col_names.clear();
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name->tab_name,
-                                                                  query->conds, index_col_names);
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_,
+                                                                  x->tab_name->tab_name, query->conds, index_col_names);
             } else {  // 存在索引
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, x->tab_name->tab_name,
-                                                                  query->conds, index_col_names);
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_,
+                                                                  x->tab_name->tab_name, query->conds, index_col_names);
             }
             plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Update, table_scan_executors, x->tab_name->tab_name,
                                                     std::vector<Value>(), query->conds, query->set_clauses);

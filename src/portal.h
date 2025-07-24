@@ -71,10 +71,11 @@ class Portal {
     std::shared_ptr<PortalStmt> start(std::shared_ptr<Plan> plan, Context *context, TransactionManager *txn_mgr) {
         TRACE_FUNCTION
         // 这里可以将select进行拆分，例如：一个select，带有return的select等
-        if (plan->tag == PlanTag::T_Help || plan->tag == PlanTag::T_ShowTable || plan->tag == PlanTag::T_ShowIndex || plan->tag == PlanTag::T_DescTable ||
-            plan->tag == PlanTag::T_Transaction_begin || plan->tag == PlanTag::T_Transaction_commit ||
-            plan->tag == PlanTag::T_Transaction_abort || plan->tag == PlanTag::T_Transaction_rollback ||
-            plan->tag == PlanTag::T_LOAD || plan->tag == PlanTag::T_SetOutput || plan->tag == PlanTag::T_SetKnob ||
+        if (plan->tag == PlanTag::T_Help || plan->tag == PlanTag::T_ShowTable || plan->tag == PlanTag::T_ShowIndex ||
+            plan->tag == PlanTag::T_DescTable || plan->tag == PlanTag::T_Transaction_begin ||
+            plan->tag == PlanTag::T_Transaction_commit || plan->tag == PlanTag::T_Transaction_abort ||
+            plan->tag == PlanTag::T_Transaction_rollback || plan->tag == PlanTag::T_LOAD ||
+            plan->tag == PlanTag::T_SetOutput || plan->tag == PlanTag::T_SetKnob ||
             plan->tag == PlanTag::T_Create_StaticCheckPoint) {
             return std::make_shared<PortalStmt>(PORTAL_CMD_UTILITY, std::vector<TabCol>(),
                                                 std::unique_ptr<AbstractExecutor>(), plan);
@@ -90,7 +91,7 @@ class Portal {
                     auto p = std::static_pointer_cast<ProjectionPlan>(x->subplan_);
                     std::unique_ptr<AbstractExecutor> root = convert_plan_executor(p, context, txn_mgr);
                     return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(p->sel_cols_), std::move(root),
-                                                            plan);
+                                                        plan);
                 }
 
                 case PlanTag::T_Update: {
@@ -128,10 +129,9 @@ class Portal {
                 }
                 case PlanTag::T_explain: {
                     auto p = std::static_pointer_cast<ProjectionPlan>(x->subplan_);
-                        std::vector<TabCol> sel_cols = p->sel_cols_;
-                        std::vector<std::string> join_tables;
-                    std::unique_ptr<AbstractExecutor> root =
-                        convert_plan_explain_executor(p, context, 0, join_tables);
+                    std::vector<TabCol> sel_cols = p->sel_cols_;
+                    std::vector<std::string> join_tables;
+                    std::unique_ptr<AbstractExecutor> root = convert_plan_explain_executor(p, context, 0, join_tables);
                     return std::make_shared<PortalStmt>(PORTAL_EXPLAIN, std::move(sel_cols), std::move(root), plan);
                 }
                 default:

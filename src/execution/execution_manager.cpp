@@ -90,7 +90,6 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
             throw InternalError("QlManager Unexpected field type");
             break;
     }
-    
 }
 
 /**

@@ -13,6 +13,6 @@
 
 IxScanTemp::IxScanTemp(IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm) {
     // The buffer pool manager is not used in this implementation, but is kept for compatibility.
-    (void)bpm; 
+    (void)bpm;
     rids_ = ih->get_rids_in_range(lower, upper);
 }

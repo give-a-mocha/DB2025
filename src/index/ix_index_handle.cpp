@@ -1421,7 +1421,7 @@ std::vector<Rid> IxIndexHandle::get_rids_in_range(const Iid &lower, const Iid &u
     int curr_slot_no = iid.slot_no;
 
     while (curr_page_no != INVALID_PAGE_ID) {
-        Page* page = buffer_pool_manager_->fetch_page({fd_, curr_page_no});
+        Page *page = buffer_pool_manager_->fetch_page({fd_, curr_page_no});
         auto node = new IxNodeHandle(file_hdr_, page);
 
         while (curr_slot_no < node->get_size()) {

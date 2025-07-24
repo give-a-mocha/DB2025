@@ -49,7 +49,7 @@ void RmScan::next() {
         rid_.slot_no = page_slots_[current_slot_idx_];
         return;
     } else {
-        rid_.page_no++; // 移动到下一页
+        rid_.page_no++;  // 移动到下一页
     }
     // 缓存已用完，需要扫描下一页
     while (rid_.page_no < file_handle_->file_hdr_.num_pages) {
@@ -59,8 +59,8 @@ void RmScan::next() {
         page_slots_.clear();
         page_slots_.reserve(file_handle_->file_hdr_.num_records_per_page);
         int slot = RM_NO_PAGE;
-        while ((slot = Bitmap::next_bit(true, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page,
-                                        slot)) < file_handle_->file_hdr_.num_records_per_page) {
+        while ((slot = Bitmap::next_bit(true, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page, slot)) <
+               file_handle_->file_hdr_.num_records_per_page) {
             page_slots_.push_back(slot);
         }
 
