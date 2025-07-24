@@ -18,21 +18,19 @@ class MemoryPool {
     MemoryPool() = default;
 
     void Init() {
-        for(int i = 0; i < INITIAL_POOL_SIZE; i++) {
+        for (int i = 0; i < INITIAL_POOL_SIZE; i++) {
             free_points_.push_back(malloc(sizeof(T)));
         }
     }
 
     void Destroy() {
-        for(auto& point : free_points_) {
+        for (auto& point : free_points_) {
             free(point);
         }
     }
 
    public:
-    ~MemoryPool() {
-        Destroy();
-    }
+    ~MemoryPool() { Destroy(); }
 
     MemoryPool(const MemoryPool&) = delete;
     MemoryPool& operator=(const MemoryPool&) = delete;
@@ -44,7 +42,7 @@ class MemoryPool {
 
     T* Malloc() {
         std::lock_guard<std::mutex> lock(pool_mutex_);
-        if(free_points_.empty()) {
+        if (free_points_.empty()) {
             Init();
         }
         T* ptr = static_cast<T*>(free_points_.back());
