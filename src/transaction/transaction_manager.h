@@ -38,7 +38,7 @@ class TransactionManager {
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
-    // std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
+    std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
 
     /**
      * @brief 为 MVCC 存储单个页面内所有槽的版本信息。

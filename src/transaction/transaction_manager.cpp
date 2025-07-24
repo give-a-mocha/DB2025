@@ -90,6 +90,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
+    std::scoped_lock<std::mutex> lock(commit_mutex_);
+
     // FOCC Validation Phase 1: Collect conditions under a shared lock
     std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
     lock_manager_->lock_gap_set_shared();
