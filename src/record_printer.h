@@ -48,22 +48,44 @@ class RecordPrinter {
         }
     }
 
-    void print_record(const std::vector<std::string> &rec_str, Context *context) const {
+    template <typename StringType>
+    void print_record(const std::vector<StringType> &rec_str, Context *context) const {
         assert(rec_str.size() == num_cols);
-        for (auto &col : rec_str) {
-            std::stringstream ss;
-            if (col.size() > COL_WIDTH) {
-                ss << "| " << std::setw(COL_WIDTH) << std::string_view(col).substr(0, COL_WIDTH - 3) << "..." << " ";
-            } else {
-                ss << "| " << std::setw(COL_WIDTH) << col << " ";
+        if constexpr (std::is_same_v<StringType, std::string>) {
+            for (const auto &col : rec_str) {
+                std::stringstream ss;
+                if (col.size() > COL_WIDTH) {
+                    ss << "| " << std::setw(COL_WIDTH) << std::string_view(col).substr(0, COL_WIDTH - 3) << "..."
+                       << " ";
+                } else {
+                    ss << "| " << std::setw(COL_WIDTH) << col << " ";
+                }
+                if (context->ellipsis_ == false &&
+                    *context->offset_ + RECORD_COUNT_LENGTH + ss.str().length() < BUFFER_LENGTH) {
+                    memcpy(context->data_send_ + *(context->offset_), ss.str().c_str(), ss.str().length());
+                    *(context->offset_) = *(context->offset_) + ss.str().length();
+                } else {
+                    context->ellipsis_ = true;
+                }
             }
-            if (context->ellipsis_ == false &&
-                *context->offset_ + RECORD_COUNT_LENGTH + ss.str().length() < BUFFER_LENGTH) {
-                memcpy(context->data_send_ + *(context->offset_), ss.str().c_str(), ss.str().length());
-                *(context->offset_) = *(context->offset_) + ss.str().length();
-            } else {
-                context->ellipsis_ = true;
+        } else if constexpr (std::is_same_v<StringType, std::string_view>) {
+            for (auto col : rec_str) {
+                std::stringstream ss;
+                if (col.size() > COL_WIDTH) {
+                    ss << "| " << std::setw(COL_WIDTH) << col.substr(0, COL_WIDTH - 3) << "..." << " ";
+                } else {
+                    ss << "| " << std::setw(COL_WIDTH) << col << " ";
+                }
+                if (context->ellipsis_ == false &&
+                    *context->offset_ + RECORD_COUNT_LENGTH + ss.str().length() < BUFFER_LENGTH) {
+                    memcpy(context->data_send_ + *(context->offset_), ss.str().c_str(), ss.str().length());
+                    *(context->offset_) = *(context->offset_) + ss.str().length();
+                } else {
+                    context->ellipsis_ = true;
+                }
             }
+        } else {
+            std::cerr << "unsupported type: " << typeid(StringType).name() << std::endl;
         }
         constexpr ConstexprString str("|\n");
         if (context->ellipsis_ == false && *context->offset_ + RECORD_COUNT_LENGTH + str.length() < BUFFER_LENGTH) {

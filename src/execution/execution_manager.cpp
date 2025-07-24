@@ -200,11 +200,11 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
  */
 void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols,
                             Context *context) {
-    std::vector<std::string> captions;
+    std::vector<std::string_view> captions;
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {
-        if (!sel_col.col_alias.empty()) captions.push_back(sel_col.col_alias);
-        else captions.push_back(sel_col.col_name);
+        if (!sel_col.col_alias.empty()) captions.emplace_back(sel_col.col_alias);
+        else captions.emplace_back(sel_col.col_name);
     }
 
     // Print header into buffer

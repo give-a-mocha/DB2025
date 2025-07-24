@@ -210,11 +210,11 @@ void SmManager::show_tables(Context* context) {
     outfile << "| Tables |\n";
     RecordPrinter printer(1);
     printer.print_separator(context);
-    printer.print_record({"Tables"}, context);
+    printer.print_record(std::vector<std::string_view>{"Tables"}, context);
     printer.print_separator(context);
     for (auto& entry : db_.tabs_) {
         auto& tab = entry.second;
-        printer.print_record({tab.name}, context);
+        printer.print_record(std::vector<std::string_view>{tab.name}, context);
         outfile << "| " << tab.name << " |\n";
     }
     printer.print_separator(context);
@@ -251,7 +251,7 @@ void SmManager::show_index(const std::string& tab_name, Context* context) {
 
     RecordPrinter printer(1);
     printer.print_separator(context);
-    printer.print_record({"index"}, context);
+    printer.print_record(std::vector<std::string_view>{"index"}, context);
     printer.print_separator(context);
 
     // 遍历表的所有索引
