@@ -550,12 +550,7 @@ class AbstractExecutor {
                         break;
                     case AggregateType::AVG:
                         switch (col_metas[i].type) {
-                            case ColType::TYPE_INT: {
-                                int sum = vals[i].int_val +
-                                          *reinterpret_cast<const int *>(record->data + col_metas[i].offset);
-                                vals[i].set_int(sum);
-                                break;
-                            }
+                            case ColType::TYPE_INT:
                             case ColType::TYPE_FLOAT: {
                                 float sum = vals[i].float_val +
                                             *reinterpret_cast<const float *>(record->data + col_metas[i].offset);
@@ -616,11 +611,7 @@ class AbstractExecutor {
         // 计算 AVG 聚合的最终值
         for (size_t i = 0; i < tab_cols.size(); ++i) {
             if (agg_types[i] == AggregateType::AVG) {
-                if (col_metas[i].type == ColType::TYPE_INT) {
-                    vals[i].set_float(static_cast<float>(vals[i].int_val) / static_cast<float>(rec.size()));
-                } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
-                    vals[i].set_float(vals[i].float_val / static_cast<float>(rec.size()));
-                }
+                vals[i].set_float(vals[i].float_val / static_cast<float>(rec.size()));
             }
         }
         return vals;  // 返回计算得到的聚合值向量
