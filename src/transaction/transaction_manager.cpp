@@ -491,20 +491,21 @@ auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transactio
     if (!undo_link.IsValid()) {
         return {};
     }
-    INFO("Collecting undo log for rid: {}", rid);
-    INFO("Transaction ID: {}", txn->get_transaction_id());
-    INFO("Transaction Read TS: {}", txn->get_read_ts());
     std::vector<const UndoLog*> undo_logs;
+    const UndoLog* ans = nullptr;
     while (undo_link.IsValid()) {
         const UndoLog* undo_log = GetUndoLog(undo_link);
-        INFO("Undo log ts: {}", undo_log->ts_);
         if (undo_log->ts_ == txn->get_transaction_id() || undo_log->ts_ <= txn->get_read_ts()) {
             // 如果是当前事务的修改或者是已提交的事务
             break;
         }
-        WARN("APPEND Undo log ts: {}", undo_log->ts_);
-        undo_logs.push_back(undo_log);
+        ans = undo_log;
+        //增量存储，所以只需要最后一个即可
+        // undo_logs.push_back(undo_log);
         undo_link = undo_log->prev_version_;
+    }
+    if (ans != nullptr) {
+        undo_logs.push_back(ans);
     }
     return undo_logs;
 }

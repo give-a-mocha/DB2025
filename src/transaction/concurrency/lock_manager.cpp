@@ -172,52 +172,52 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         return true;
     } else {
         // no-wait策略
-        return false;
+        // return false;
 
         // wait-die策略
-        // request_queue.request_queue_.push_back(current_request);
-        // auto current_request_it = std::prev(request_queue.request_queue_.end());
+        request_queue.request_queue_.push_back(current_request);
+        auto current_request_it = std::prev(request_queue.request_queue_.end());
 
-        // while (true) {
-        //     // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有锁，当前事务应该死亡
-        //     bool should_die = false;
-        //     // 检查排他锁持有者
-        //     if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id())
-        //     {
-        //         should_die = true;
-        //     }
+        while (true) {
+            // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有锁，当前事务应该死亡
+            bool should_die = false;
+            // 检查排他锁持有者
+            if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id())
+            {
+                should_die = true;
+            }
 
-        //     if (should_die) {
-        //         // 移除当前请求并返回false
-        //         if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-        //             request_queue.request_queue_.erase(current_request_it);
-        //         }
-        //         return false;
-        //     }
+            if (should_die) {
+                // 移除当前请求并返回false
+                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
+                    request_queue.request_queue_.erase(current_request_it);
+                }
+                return false;
+            }
 
-        //     request_queue.cv_.wait(lock, [&] {
-        //         if (txn->get_state() == TransactionState::ABORTED) {
-        //             return true;
-        //         }
-        //         return request_queue.exclusive_holder_ == -1;
-        //     });
+            request_queue.cv_.wait(lock, [&] {
+                if (txn->get_state() == TransactionState::ABORTED) {
+                    return true;
+                }
+                return request_queue.exclusive_holder_ == -1;
+            });
 
-        //     // 检查事务是否被中止
-        //     if (txn->get_state() == TransactionState::ABORTED) {
-        //         if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-        //             request_queue.request_queue_.erase(current_request_it);
-        //         }
-        //         return false;
-        //     }
+            // 检查事务是否被中止
+            if (txn->get_state() == TransactionState::ABORTED) {
+                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
+                    request_queue.request_queue_.erase(current_request_it);
+                }
+                return false;
+            }
 
-        //     if (request_queue.exclusive_holder_ == -1) {
-        //         current_request_it->granted_ = true;
-        //         request_queue.exclusive_holder_ = txn->get_transaction_id();
-        //         request_queue.exclusive_holder_it_ = current_request_it;
-        //         txn->get_lock_set()->insert(lock_data_id);
-        //         return true;
-        //     }
-        // }
+            if (request_queue.exclusive_holder_ == -1) {
+                current_request_it->granted_ = true;
+                request_queue.exclusive_holder_ = txn->get_transaction_id();
+                request_queue.exclusive_holder_it_ = current_request_it;
+                txn->get_lock_set()->insert(lock_data_id);
+                return true;
+            }
+        }
     }
 }
 

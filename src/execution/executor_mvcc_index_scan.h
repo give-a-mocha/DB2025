@@ -28,7 +28,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     size_t len_;                    // 记录长度
     IndexMeta &index_meta_;         // 索引元数据
     Rid rid_;                       // 当前记录ID
-    std::unique_ptr<IxScan> scan_;  // 扫描迭代器
+    // std::unique_ptr<IxScan> scan_;  // 扫描迭代器
+    std::unique_ptr<IxScanFinal> scan_;
     SmManager *sm_manager_;         // 系统管理器
     TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
@@ -66,9 +67,9 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @brief 析构函数，确保正确释放扫描器资源
      */
     ~MvccIndexScanExecutor() {
-        if (scan_) {
-            scan_->unlatch();  // 无论扫描是否结束，都释放持有的锁
-        }
+        // if (scan_) {
+        //     scan_->unlatch();  // 无论扫描是否结束，都释放持有的锁
+        // }
     }
 
     void getBound() {
@@ -158,7 +159,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      */
     void beginTuple() override {
         TRACE_FUNCTION
-        scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        // scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        scan_ = std::make_unique<IxScanFinal>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
