@@ -90,7 +90,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
 
-    std::scoped_lock<std::mutex> lock(commit_mutex_);
+    // std::scoped_lock<std::mutex> lock(commit_mutex_);
 
     // FOCC Validation Phase 1: Collect conditions under a shared lock
     std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
@@ -250,9 +250,8 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
         shard.version_info_[page_id] = new_version_info;
         it = shard.version_info_.find(page_id);
     }
-    auto& version_info = it->second;
-    // auto version_info = it->second;
-    // lock.unlock();
+    auto version_info = it->second;
+    lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -269,9 +268,8 @@ void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn
     if (it == shard.version_info_.end()) {
         return;
     }
-    auto& version_info = it->second;
-    // auto version_info = it->second;
-    // lock.unlock();
+    auto version_info = it->second;
+    lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -300,9 +298,8 @@ UndoLink TransactionManager::GetUndoLink(const int& fd, Rid rid) {
     if (it == shard.version_info_.end()) {
         return UndoLink{};  // 如果没有找到对应的版本信息，则返回空的 UndoLink
     }
-    auto& version_info = it->second;
-    // auto version_info = it->second;
-    // lock.unlock();
+    auto version_info = it->second;
+    lock.unlock();
     std::shared_lock<std::shared_mutex> version_lock(version_info->mutex_);
     auto prev_version_it = version_info->prev_version_.find(rid.slot_no);
     if (prev_version_it == version_info->prev_version_.end()) {
