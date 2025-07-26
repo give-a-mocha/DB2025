@@ -551,8 +551,8 @@ class AbstractExecutor {
                     case AggregateType::AVG:
                         switch (col_metas[i].type) {
                             case ColType::TYPE_INT: {
-                                float sum = vals[i].float_val +
-                                            static_cast<float>(*reinterpret_cast<const int *>(record->data + col_metas[i].offset));
+                                float sum = vals[i].float_val + static_cast<float>(*reinterpret_cast<const int *>(
+                                                                    record->data + col_metas[i].offset));
                                 vals[i].set_float(sum);
                                 break;
                             }
