@@ -143,12 +143,12 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
-    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
+    // std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
-    auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
-    for (const LockDataId& lock : lock_set_copy) {
-        lock_manager_->unlock(txn, lock);
-    }
+    // auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
+    // for (const LockDataId& lock : lock_set_copy) {
+    //     lock_manager_->unlock(txn, lock);
+    // }
 
     auto lock_gap_set = txn->get_lock_gap_set();
     auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
@@ -212,11 +212,11 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     }
     txn->get_write_set()->clear();  // 清空写集合
 
-    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-    auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
-    for (const LockDataId& lock : lock_set_copy) {
-        lock_manager_->unlock(txn, lock);
-    }
+    // std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
+    // auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
+    // for (const LockDataId& lock : lock_set_copy) {
+    //     lock_manager_->unlock(txn, lock);
+    // }
 
     auto lock_gap_set = txn->get_lock_gap_set();
     auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改

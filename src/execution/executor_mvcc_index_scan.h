@@ -160,7 +160,11 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     void beginTuple() override {
         TRACE_FUNCTION
         // scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
-        scan_ = std::make_unique<IxScanFinal>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        if (scan_) {
+            scan_->reset();  // 如果扫描器已存在，重置游标
+        } else {
+            scan_ = std::make_unique<IxScanFinal>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        }
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();

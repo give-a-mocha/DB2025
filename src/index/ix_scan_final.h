@@ -58,4 +58,6 @@ class IxScanFinal : public RecScan {
      * @return Rid 当前记录的标识符
      */
     Rid rid() const override { return rids_[cursor_]; }
+
+    void reset() { cursor_ = 0; }
 };
