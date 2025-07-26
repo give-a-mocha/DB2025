@@ -500,8 +500,8 @@ auto TransactionManager::CollectUndoLogs(Rid rid, UndoLink undo_link, Transactio
             break;
         }
         ans = undo_log;
-        //增量存储，所以只需要最后一个即可
-        // undo_logs.push_back(undo_log);
+        // 增量存储，所以只需要最后一个即可
+        //  undo_logs.push_back(undo_log);
         undo_link = undo_log->prev_version_;
     }
     if (ans != nullptr) {

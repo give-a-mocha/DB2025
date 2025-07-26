@@ -24,7 +24,7 @@ See the Mulan PSL v2 for more details. */
  * @param {Rid&} rid 加锁的目标记录ID 记录所在的表的fd
  * @param {int} tab_fd
  */
-bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) { return true;}
+bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) { return true; }
 
 /**
  * @description: 申请行级排他锁
@@ -35,7 +35,7 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
  * @throws TransactionAbortException 如果事务状态不允许加锁
  */
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);  
+    std::unique_lock<std::mutex> lock(latch_);
 
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid);
@@ -79,8 +79,9 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         // 如果优先级更高的事务（较小txn_id）持有锁，当前事务应该死亡
         while (true) {
             request_queue.cv_.wait(lock, [&] {
-                if (request_queue.exclusive_holder_ == -1 || request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-                    return true;  
+                if (request_queue.exclusive_holder_ == -1 ||
+                    request_queue.exclusive_holder_ < txn->get_transaction_id()) {
+                    return true;
                 }
 
                 return false;

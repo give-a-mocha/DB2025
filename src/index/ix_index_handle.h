@@ -308,10 +308,10 @@ class IxNodeHandle {
  * - 根节点管理
  */
 class IxIndexHandle {
-    friend class IxScan;      // 允许 IxScan 类访问 IxIndexHandle 的私有成员
-    friend class IxScanTemp;  // 允许 IxScanTemp 类访问 IxIndexHandle 的私有成员
-    friend class IxScanFinal; // 允许 IxScanFinal 类访问 IxIndexHandle 的私有成员
-    friend class IxManager;   // 允许 IxManager 类访问 IxIndexHandle 的私有成员
+    friend class IxScan;       // 允许 IxScan 类访问 IxIndexHandle 的私有成员
+    friend class IxScanTemp;   // 允许 IxScanTemp 类访问 IxIndexHandle 的私有成员
+    friend class IxScanFinal;  // 允许 IxScanFinal 类访问 IxIndexHandle 的私有成员
+    friend class IxManager;    // 允许 IxManager 类访问 IxIndexHandle 的私有成员
 
    private:
     /**

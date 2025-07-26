@@ -13,20 +13,19 @@ See the Mulan PSL v2 for more details. */
 
 IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
     : ih_(ih), bpm_(bpm) {
-    
     if (lower == upper) return;
-    
+
     Iid iid = lower;
-    Page* page = bpm_->fetch_page({ih_->fd_, iid.page_no});
+    Page *page = bpm_->fetch_page({ih_->fd_, iid.page_no});
     page->RLatch();
     while (true) {
         auto node = new IxNodeHandle(ih_->file_hdr_, page);
-        
+
         while (iid != upper) {
             rids_.push_back(ih_->get_rid(iid));
             iid.slot_no++;
             if (iid.slot_no >= node->get_size()) {
-                break; 
+                break;
             }
         }
 
@@ -39,13 +38,13 @@ IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &u
             break;
         }
 
-        Page* next_page = bpm_->fetch_page({ih_->fd_, next_page_no});
+        Page *next_page = bpm_->fetch_page({ih_->fd_, next_page_no});
         next_page->RLatch();
-        
+
         page->RUnlatch();
         bpm_->unpin_page(page->get_page_id(), false);
         delete node;
-        
+
         page = next_page;
         iid.page_no = next_page_no;
         iid.slot_no = 0;
