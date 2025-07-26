@@ -208,8 +208,6 @@ class RmFileHandle {
 
     auto GetNewWritePageGuard() -> WritePageGuard;
 
-    auto GetFreePageGuard() -> WritePageGuard;
-
     auto GetNewRid() -> Rid;
 
     auto GetTupleWithLockAcquired(const Rid &rid,
