@@ -12,7 +12,8 @@ See the Mulan PSL v2 for more details. */
 
 LRUReplacer::LRUReplacer(size_t num_pages) {
     max_size_ = num_pages;
-    LRUhash_.reserve(num_pages);
+    LRUhash_.resize(num_pages);
+    is_pinned_.resize(num_pages, true);
 }
 
 LRUReplacer::~LRUReplacer() = default;
@@ -36,7 +37,7 @@ bool LRUReplacer::victim(frame_id_t* frame_id) {
     }
 
     *frame_id = LRUlist_.back();  // 选择最久未使用的页面(链表尾部)
-    LRUhash_.erase(*frame_id);    // 从哈希表中删除
+    is_pinned_[*frame_id] = true;  // 标记为使用
     LRUlist_.pop_back();          // 从链表中删除
 
     return true;
@@ -54,11 +55,11 @@ void LRUReplacer::pin(frame_id_t frame_id) {
     // !在数据结构中移除该frame
 
     // std::scoped_lock lock{latch_};
-    auto iter = LRUhash_.find(frame_id);
-    if (iter != LRUhash_.end()) {
-        LRUlist_.erase(iter->second);  // 从链表中删除
-        LRUhash_.erase(iter);          // 从哈希表中删除
+    if (is_pinned_[frame_id]) {
+        return;  // 如果已经被固定，则不做任何操作
     }
+    is_pinned_[frame_id] = true;  // 标记为已使用
+    LRUlist_.erase(LRUhash_[frame_id]);  // 从链表中删除
 }
 
 /**
@@ -70,16 +71,12 @@ void LRUReplacer::pin(frame_id_t frame_id) {
 void LRUReplacer::unpin(frame_id_t frame_id) {
     // 支持并发锁
     // std::scoped_lock lock{latch_};
-
-    // 满了
-    // if (LRUlist_.size() >= max_size_) {
-    //     return;
-    // }
-
-    // 选择一个frame取消固定
-    if (LRUhash_.find(frame_id) != LRUhash_.end()) return;
-    LRUlist_.push_front(frame_id);                 // 加入链表头部(最近使用)
-    LRUhash_.emplace(frame_id, LRUlist_.begin());  // 加入哈希表
+    if (is_pinned_[frame_id]) {
+        is_pinned_[frame_id] = false;  // 标记为未使用
+        LRUlist_.push_front(frame_id);                 // 加入链表头部(最近使用)
+        LRUhash_[frame_id] = LRUlist_.begin();  // 将frame_id映射到链表头部
+    }
+    return;
 }
 
 /**
