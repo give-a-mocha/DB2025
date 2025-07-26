@@ -24,94 +24,7 @@ See the Mulan PSL v2 for more details. */
  * @param {Rid&} rid 加锁的目标记录ID 记录所在的表的fd
  * @param {int} tab_fd
  */
-bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);  // 使用unique_lock以支持condition_variable
-
-    // 创建锁数据标识符( 行级锁
-    LockDataId lock_data_id(tab_fd, rid);
-
-    auto queue_it = lock_table_.find(lock_data_id);
-    if (queue_it == lock_table_.end()) {
-        // 如果锁表中没有该锁数据标识符，则创建一个新的锁请求队列
-        queue_it = lock_table_
-                       .emplace(std::piecewise_construct,
-                                std::forward_as_tuple(lock_data_id),  // 构造 key
-                                std::forward_as_tuple()               // 默认构造 value (LockRequestQueue)
-                                )
-                       .first;
-    }
-    LockRequestQueue& request_queue = queue_it->second;
-
-    // 检查是否已经获得锁
-    for (const auto& req : request_queue.request_queue_) {
-        if (req.txn_id_ == txn->get_transaction_id() && req.granted_) {
-            if (req.lock_mode_ == LockManager::LockMode::EXCLUSIVE || req.lock_mode_ == LockManager::LockMode::SHARED) {
-                return true;
-            }
-        }
-    }
-
-    // 检查是否冲突
-    bool conflict = request_queue.exclusive_holder_ == -1 ? false : true;
-
-    LockRequest current_request(txn->get_transaction_id(), LockManager::LockMode::SHARED);
-
-    if (!conflict) {
-        current_request.granted_ = true;
-        request_queue.request_queue_.push_back(current_request);
-        txn->get_lock_set()->insert(lock_data_id);
-        return true;
-    } else {
-        // no-wait策略
-        // return false;
-
-        // wait-die策略
-        request_queue.request_queue_.push_back(current_request);
-        auto current_request_it = std::prev(request_queue.request_queue_.end());
-
-        while (true) {
-            // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有排他锁，当前事务应该死亡
-            bool should_die = false;
-            if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-                // 存在更老的事务持有排他锁，当前事务应该死亡
-                should_die = true;
-            }
-
-            if (should_die) {
-                // 移除当前请求并返回false
-                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-                    request_queue.request_queue_.erase(current_request_it);
-                }
-                return false;
-            }
-
-            request_queue.cv_.wait(lock, [&] {
-                if (txn->get_state() == TransactionState::ABORTED) {
-                    return true;
-                }
-
-                // 检查是否可以授予共享锁（只有排他锁会阻塞共享锁）
-                return request_queue.exclusive_holder_ == -1;
-            });
-
-            // 检查事务是否被中止
-            if (txn->get_state() == TransactionState::ABORTED) {
-                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-                    request_queue.request_queue_.erase(current_request_it);
-                }
-                return false;
-            }
-
-            // 再次检查是否存在冲突
-
-            if (request_queue.exclusive_holder_ == -1) {
-                current_request_it->granted_ = true;
-                txn->get_lock_set()->insert(lock_data_id);
-                return true;
-            }
-        }
-    }
-}
+bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int tab_fd) { return true;}
 
 /**
  * @description: 申请行级排他锁
@@ -122,7 +35,7 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
  * @throws TransactionAbortException 如果事务状态不允许加锁
  */
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);  // 1. Acquire global latch
+    std::unique_lock<std::mutex> lock(latch_);  
 
     // 创建锁数据标识符( 行级锁
     LockDataId lock_data_id(tab_fd, rid);
@@ -144,21 +57,6 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         return true;
     }
 
-    // bool conflict = false;
-    // for (const auto& req : request_queue.request_queue_) {
-    //     if (req.granted_) {
-    //         if (req.txn_id_ != txn->get_transaction_id()) {
-    //             conflict = true;
-    //             break;
-    //         }
-
-    //         if (req.txn_id_ == txn->get_transaction_id() && req.lock_mode_ == LockMode::SHARED) {
-    //             conflict = true;
-    //             break;
-    //         }
-    //     }
-    // }
-    //! MVCC 不加读锁
     bool conflict = request_queue.exclusive_holder_ == -1 ? false : true;
 
     LockRequest current_request(txn->get_transaction_id(), LockManager::LockMode::EXCLUSIVE);
@@ -178,45 +76,31 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         request_queue.request_queue_.push_back(current_request);
         auto current_request_it = std::prev(request_queue.request_queue_.end());
 
+        // 如果优先级更高的事务（较小txn_id）持有锁，当前事务应该死亡
         while (true) {
-            // 首先检查wait-die策略：如果存在更老的事务（较小txn_id）持有锁，当前事务应该死亡
-            bool should_die = false;
-            // 检查排他锁持有者
-            if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ < txn->get_transaction_id())
-            {
-                should_die = true;
-            }
-
-            if (should_die) {
-                // 移除当前请求并返回false
-                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-                    request_queue.request_queue_.erase(current_request_it);
-                }
-                return false;
-            }
-
             request_queue.cv_.wait(lock, [&] {
-                if (txn->get_state() == TransactionState::ABORTED) {
-                    return true;
+                if (request_queue.exclusive_holder_ == -1 || request_queue.exclusive_holder_ < txn->get_transaction_id()) {
+                    return true;  
                 }
-                return request_queue.exclusive_holder_ == -1;
+
+                return false;
             });
 
-            // 检查事务是否被中止
-            if (txn->get_state() == TransactionState::ABORTED) {
+            if (request_queue.exclusive_holder_ != -1) {
                 if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
                     request_queue.request_queue_.erase(current_request_it);
                 }
                 return false;
             }
 
-            if (request_queue.exclusive_holder_ == -1) {
+            if (request_queue.exclusive_holder_ < txn->get_transaction_id()) {
                 current_request_it->granted_ = true;
                 request_queue.exclusive_holder_ = txn->get_transaction_id();
                 request_queue.exclusive_holder_it_ = current_request_it;
                 txn->get_lock_set()->insert(lock_data_id);
                 return true;
             }
+            assert(0);
         }
     }
 }
@@ -283,35 +167,13 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
     }
 
     LockRequestQueue& request_queue = lock_table_it->second;
-    txn_id_t txn_id = txn->get_transaction_id();
-    bool is_find = false;
 
-    // 如果要释放的是排他锁，直接使用保存的迭代器
-    if (request_queue.exclusive_holder_ == txn_id &&
-        request_queue.exclusive_holder_it_ != request_queue.request_queue_.end()) {
-        request_queue.request_queue_.erase(request_queue.exclusive_holder_it_);
-        request_queue.exclusive_holder_ = -1;
-        request_queue.exclusive_holder_it_ = request_queue.request_queue_.end();
-        is_find = true;
-    } else {
-        // 否则遍历查找其他类型的锁
-        for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end();) {
-            if (it->txn_id_ == txn_id) {
-                it = request_queue.request_queue_.erase(it);
-                is_find = true;
-                break;
-            } else {
-                ++it;
-            }
-        }
-    }
+    request_queue.request_queue_.erase(request_queue.exclusive_holder_it_);
+    request_queue.exclusive_holder_ = -1;
+    request_queue.exclusive_holder_it_ = request_queue.request_queue_.end();
 
     size_t is_erase = txn->get_lock_set()->erase(lock_data_id);
-
-    if (is_find) {
-        request_queue.cv_.notify_all();
-    }
-
+    request_queue.cv_.notify_all();
     if (request_queue.request_queue_.empty()) {
         lock_table_.erase(lock_table_it);
     }
