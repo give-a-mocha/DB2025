@@ -27,10 +27,10 @@ RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
     // 1. 保存要扫描的文件句柄指针
     // 2. 将rid初始化指向第一个记录页
     // 3. 调用next()移动到第一个有效记录位置
-
-    rid_.page_no = RM_FIRST_RECORD_PAGE;  // 从第一个记录页开始
-    rid_.slot_no = RM_NO_PAGE;            // 初始化为-1，next()会移动到第一个有效位置
-    next();                               // 移动到第一个有效记录
+    rid_.page_no = RM_FIRST_RECORD_PAGE - 1;
+    rid_.slot_no = RM_NO_PAGE;
+    current_slot_idx_ = -1;
+    next();
 }
 
 /**
@@ -38,31 +38,45 @@ RmScan::RmScan(const RmFileHandle *file_handle) : file_handle_(file_handle) {
  */
 void RmScan::next() {
     // 查找下一条记录的步骤：
-    // 1. 遍历文件中的所有页面
-    // 2. 在每个页面中使用位图查找已使用的槽位
-    // 3. 找到后更新rid_指向该位置
-    // 4. 如果当前页面搜索完毕则转到下一页
-    // 5. 如果所有页面都搜索完则将page_no设为无效值
-
+    // 1. 首先检查page_slots_缓存中是否还有记录
+    // 2. 如果缓存中还有记录，则直接更新current_slot_idx_并更新rid_
+    // 3. 如果缓存已用完，则扫描下一个包含有效记录的页面
+    // 4. 将新页面中所有记录的槽位号填充到page_slots_中，并重置current_slot_idx_
+    // 5. 如果所有页面都已扫描完毕，则将扫描器状态设为结束
+    current_slot_idx_++;
+    if (current_slot_idx_ < (int)page_slots_.size()) {
+        // 缓存中还有记录
+        rid_.slot_no = page_slots_[current_slot_idx_];
+        return;
+    } else {
+        rid_.page_no++;  // 移动到下一页
+    }
+    // 缓存已用完，需要扫描下一页
     while (rid_.page_no < file_handle_->file_hdr_.num_pages) {
-        // 获取当前页面句柄
         auto page_guard = file_handle_->AcquirePageReadLock(rid_);
-
         RmPageHandle page_handle = RmPageHandle(&file_handle_->file_hdr_, const_cast<char *>(page_guard.GetData()));
 
-        // 在当前页面寻找下一个非空slot
-        rid_.slot_no =
-            Bitmap::next_bit(true, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page, rid_.slot_no);
-        if (rid_.slot_no < file_handle_->file_hdr_.num_records_per_page) {
-            // 在当前页面找到了非空slot
+        page_slots_.clear();
+        page_slots_.reserve(file_handle_->file_hdr_.num_records_per_page);
+        int slot = RM_NO_PAGE;
+        while ((slot = Bitmap::next_bit(true, page_handle.bitmap, file_handle_->file_hdr_.num_records_per_page, slot)) <
+               file_handle_->file_hdr_.num_records_per_page) {
+            page_slots_.push_back(slot);
+        }
+
+        if (!page_slots_.empty()) {
+            current_slot_idx_ = 0;
+            rid_.slot_no = page_slots_[current_slot_idx_];
             return;
         }
 
-        // 当前页面搜索完毕,转到下一页
+        // 当前页面没有有效记录，转到下一页
         rid_.page_no++;
-        rid_.slot_no = RM_NO_PAGE;  // 重置slot_no为-1
     }
+
+    // 所有页面都已扫描完毕
     rid_.page_no = RM_NO_PAGE;
+    rid_.slot_no = RM_NO_PAGE;
 }
 
 /**

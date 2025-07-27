@@ -67,14 +67,12 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
     // 将当前事务添加到全局事务映射表中，便于后续通过事务ID查找
     std::unique_lock<std::shared_mutex> lock(txn_map_mutex_);
     txn_map.emplace(txn->get_transaction_id(), txn);
-    timestamp_t start_ts = get_next_timestamp();
-    txn->set_start_ts(start_ts);        // 设置事务开始时间戳
     txn->set_read_ts(last_commit_ts_);  // 设置读取时间戳该事务早的最后一次提交时间戳
     txn->set_txn_mode(false);
     txn->set_state(TransactionState::DEFAULT);
     // log_manager->add_begin_log(txn->get_transaction_id());
 
-    running_txns_.AddTxn(start_ts);  // 添加事务到水位线
+    // running_txns_.AddTxn(txn->get_read_ts());  // 添加事务到水位线
     return txn;
 }
 
@@ -91,6 +89,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 4. 把事务日志刷入磁盘中
     // 5. 更新事务状态
     // 如果需要支持MVCC请在上述过程中添加代码
+
+    std::scoped_lock<std::mutex> lock(commit_mutex_);
 
     // FOCC Validation Phase 1: Collect conditions under a shared lock
     std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
@@ -140,8 +140,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 
     txn->set_state(TransactionState::COMMITTED);
     txn->set_commit_ts(get_next_timestamp());                                       // 设置提交时间戳
-    last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
+    last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
 
@@ -162,8 +162,8 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // log_manager->add_commit_log(txn->get_transaction_id());
     // log_manager->flush_log_to_disk();
 
-    running_txns_.UpdateCommitTs(txn->get_commit_ts());  // 更新水位线的提交时间戳
-    running_txns_.RemoveTxn(txn->get_read_ts());         // 从水位线中移除事务
+    // running_txns_.UpdateCommitTs(txn->get_commit_ts());  // 更新水位线的提交时间戳
+    // running_txns_.RemoveTxn(txn->get_read_ts());         // 从水位线中移除事务
 }
 
 /**
@@ -228,7 +228,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     txn->set_state(TransactionState::ABORTED);
     // log_manager->add_abort_log(txn->get_transaction_id());
 
-    running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
+    // running_txns_.RemoveTxn(txn->get_read_ts());  // 从水位线中移除事务
 }
 
 auto TransactionManager::GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard& {
@@ -251,7 +251,8 @@ bool TransactionManager::UpdateUndoLink(const int& fd, Rid rid, UndoLink link) {
         it = shard.version_info_.find(page_id);
     }
     auto& version_info = it->second;
-    lock.unlock();
+    // auto version_info = it->second;
+    // lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -269,7 +270,8 @@ void TransactionManager::DeleteUndoLink(const int& fd, Rid rid, Transaction* txn
         return;
     }
     auto& version_info = it->second;
-    lock.unlock();
+    // auto version_info = it->second;
+    // lock.unlock();
     std::unique_lock<std::shared_mutex> version_lock(version_info->mutex_);
     // 更新版本链接
     auto& prev_version_map = version_info->prev_version_;
@@ -299,7 +301,8 @@ UndoLink TransactionManager::GetUndoLink(const int& fd, Rid rid) {
         return UndoLink{};  // 如果没有找到对应的版本信息，则返回空的 UndoLink
     }
     auto& version_info = it->second;
-    lock.unlock();
+    // auto version_info = it->second;
+    // lock.unlock();
     std::shared_lock<std::shared_mutex> version_lock(version_info->mutex_);
     auto prev_version_it = version_info->prev_version_.find(rid.slot_no);
     if (prev_version_it == version_info->prev_version_.end()) {
@@ -316,11 +319,9 @@ const UndoLog* TransactionManager::GetUndoLogOptional(UndoLink link) {
     std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
     auto it = TransactionManager::txn_map.find(link.prev_txn_);
     if (it == TransactionManager::txn_map.end()) {
-        lock.unlock();
         return nullptr;  // 如果事务不存在，则返回 nullptr
     }
     auto txn = it->second;
-    lock.unlock();
 
     // 检查撤销日志索引是否有效
     if (link.prev_log_idx_ < 0 || static_cast<size_t>(link.prev_log_idx_) >= txn->GetUndoLogNum()) {
@@ -553,8 +554,6 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
     auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
     auto meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
     if (meta != delete_base_meta) {
-        WARN("AtomicUpdate: Metadata mismatch for delete_rid: {}, expected: {}, actual: {}", delete_rid,
-             delete_base_meta, meta);
         return false;  // 如果元数据不匹配，返回 false
     }
     // 先delete
@@ -576,8 +575,6 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
         auto new_page_guard = fh_->AcquirePageWriteLock(insert_rid);
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, new_page_guard.GetData());
         if (meta != insert_base_meta) {
-            WARN("AtomicUpdate: Metadata mismatch for index insert_rid: {}, expected: {}, actual: {}", insert_rid,
-                 insert_base_meta, meta);
             return false;  // 如果新元数据不匹配，返回 false
         }
         TupleMeta insert_new_meta(txn->get_transaction_id(), false);
@@ -590,8 +587,6 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
     } else {
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
         if (meta != insert_base_meta) {
-            WARN("AtomicUpdate: Metadata mismatch for insert_rid: {}, expected: {}, actual: {}", insert_rid,
-                 insert_base_meta, meta);
             return false;  // 如果新元数据不匹配，返回 false
         }
         TupleMeta insert_new_meta(txn->get_transaction_id(), false);

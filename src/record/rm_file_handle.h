@@ -125,7 +125,8 @@ class RmFileHandle {
                                               // - num_records_per_page: 每页记录数
                                               // - first_free_page_no: 第一个可用页面号
                                               // - bitmap_size: 每页位图大小
-    std::mutex latch_;                        // 互斥锁，用于insert_record的并发访问
+
+    std::mutex latch_;                          // 互斥锁，用于获取下一个空闲页的保护
 
    public:
     /**
@@ -206,6 +207,8 @@ class RmFileHandle {
     auto AcquirePageWriteLock(const Rid &rid) -> WritePageGuard;
 
     auto GetNewWritePageGuard() -> WritePageGuard;
+
+    auto GetFreePageGuard() -> WritePageGuard;
 
     auto GetNewRid() -> Rid;
 

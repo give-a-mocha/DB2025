@@ -198,9 +198,6 @@ class IxManager {
             // Must write PAGE_SIZE here in case of future fetch_node()
             disk_manager_->write_page(fd, IX_INIT_ROOT_PAGE, page_buf, PAGE_SIZE);
         }
-
-        disk_manager_->set_fd2pageno(fd, IX_INIT_NUM_PAGES - 1);  // DEBUG
-
         // Close index file
         disk_manager_->close_file(fd);
     }

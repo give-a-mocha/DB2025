@@ -43,7 +43,7 @@ class BufferPoolManager {
         : pool_size_(pool_size), disk_manager_(disk_manager) {
         // 为buffer pool分配一块连续的内存空间
         for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            buffer_pool_instances_[i] = new BufferPoolInstance(pool_size / BUFFER_POOL_INSTANCE_SIZE, disk_manager);
+            buffer_pool_instances_[i] = new BufferPoolInstance(pool_size, disk_manager);
         }
     }
 

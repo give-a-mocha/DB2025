@@ -28,6 +28,7 @@
 #pragma once
 
 #include "rm_defs.h"
+#include <vector>
 
 class RmFileHandle;
 
@@ -43,6 +44,8 @@ class RmScan : public RecScan {
     const RmFileHandle *file_handle_;  // 被扫描的文件句柄，提供对表数据的访问
     Rid rid_;                          // 当前记录的RID，包含页面号和槽位号
                                        // 用于追踪扫描位置，支持断点续扫
+    std::vector<int> page_slots_;      // 缓存当前页面中所有记录的slot
+    int current_slot_idx_;             // page_slots_的当前索引
 
    public:
     /**

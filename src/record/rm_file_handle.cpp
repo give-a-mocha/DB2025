@@ -78,13 +78,17 @@ auto RmFileHandle::GetNewWritePageGuard() -> WritePageGuard {
     return basic_guard.UpgradeWrite();
 }
 
-auto RmFileHandle::GetNewRid() -> Rid {
-    WritePageGuard page_guard;
+auto RmFileHandle::GetFreePageGuard() -> WritePageGuard {
+    std::scoped_lock lock(latch_);  // 确保获取下一个空闲页的操作是线程安全的
     if (file_hdr_.first_free_page_no == RM_NO_PAGE) {
-        page_guard = GetNewWritePageGuard();
+        return GetNewWritePageGuard();
     } else {
-        page_guard = buffer_pool_manager_->fetch_write_page({fd_, file_hdr_.first_free_page_no});
+        return buffer_pool_manager_->fetch_write_page({fd_, file_hdr_.first_free_page_no});
     }
+}
+
+auto RmFileHandle::GetNewRid() -> Rid {
+    WritePageGuard page_guard = GetFreePageGuard();
 
     RmPageHandle page_handle(&file_hdr_, page_guard.GetDataMut());
     int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);
@@ -104,12 +108,7 @@ auto RmFileHandle::GetNewRid() -> Rid {
 }
 
 Rid RmFileHandle::insert_record(TupleMeta& new_meta, char* buf) {
-    WritePageGuard page_guard;
-    if (file_hdr_.first_free_page_no == RM_NO_PAGE) {
-        page_guard = GetNewWritePageGuard();
-    } else {
-        page_guard = buffer_pool_manager_->fetch_write_page({fd_, file_hdr_.first_free_page_no});
-    }
+    WritePageGuard page_guard = GetFreePageGuard();
 
     RmPageHandle page_handle(&file_hdr_, page_guard.GetDataMut());
     int slot_no = Bitmap::first_bit(false, page_handle.bitmap, file_hdr_.num_records_per_page);

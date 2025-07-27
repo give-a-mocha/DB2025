@@ -55,46 +55,44 @@ class Optimizer {
      */
     std::shared_ptr<Plan> plan_query(std::shared_ptr<Query> query, Context *context) {
         TRACE_FUNCTION
-        try {
-            // 1. 系统命令处理
-            if (auto x = std::dynamic_pointer_cast<ast::Help>(query->parse)) {
+        // 1. 系统命令处理
+        switch (query->parse->getType()) {
+            case ast::AstType::Help:
                 return std::make_shared<OtherPlan>(PlanTag::T_Help, std::string());
-            } else if (auto x = std::dynamic_pointer_cast<ast::ShowTables>(query->parse)) {
+            case ast::AstType::ShowTables:
                 return std::make_shared<OtherPlan>(PlanTag::T_ShowTable, std::string());
-            } else if (auto x = std::dynamic_pointer_cast<ast::ShowIndex>(query->parse)) {
+            case ast::AstType::ShowIndex: {
+                auto x = std::static_pointer_cast<ast::ShowIndex>(query->parse);
                 return std::make_shared<OtherPlan>(PlanTag::T_ShowIndex, x->tab_name);
-            } else if (auto x = std::dynamic_pointer_cast<ast::DescTable>(query->parse)) {
+            }
+            case ast::AstType::DescTable: {
+                auto x = std::static_pointer_cast<ast::DescTable>(query->parse);
                 return std::make_shared<OtherPlan>(PlanTag::T_DescTable, x->tab_name);
-            } else if (auto x = std::dynamic_pointer_cast<ast::LoadStmt>(query->parse)) {
-                // LoadStmt load file_name into table_name;
+            }
+            case ast::AstType::LoadStmt: {
+                auto x = std::static_pointer_cast<ast::LoadStmt>(query->parse);
                 return std::make_shared<LoadPlan>(PlanTag::T_LOAD, x->table_name, x->file_name);
-            } else if (auto x = std::dynamic_pointer_cast<ast::SetOutputStmt>(query->parse)) {
+            }
+            case ast::AstType::SetOutputStmt: {
+                auto x = std::static_pointer_cast<ast::SetOutputStmt>(query->parse);
                 return std::make_shared<SetOutputPlan>(PlanTag::T_SetOutput, x->enable);
             }
-            // 2. 事务控制语句处理
-            else if (auto x = std::dynamic_pointer_cast<ast::TxnBegin>(query->parse)) {
+            case ast::AstType::TxnBegin:
                 return std::make_shared<OtherPlan>(PlanTag::T_Transaction_begin, std::string());
-            } else if (auto x = std::dynamic_pointer_cast<ast::TxnAbort>(query->parse)) {
+            case ast::AstType::TxnAbort:
                 return std::make_shared<OtherPlan>(PlanTag::T_Transaction_abort, std::string());
-            } else if (auto x = std::dynamic_pointer_cast<ast::TxnCommit>(query->parse)) {
+            case ast::AstType::TxnCommit:
                 return std::make_shared<OtherPlan>(PlanTag::T_Transaction_commit, std::string());
-            } else if (auto x = std::dynamic_pointer_cast<ast::TxnRollback>(query->parse)) {
+            case ast::AstType::TxnRollback:
                 return std::make_shared<OtherPlan>(PlanTag::T_Transaction_rollback, std::string());
-            } else if (auto x = std::dynamic_pointer_cast<ast::CreateStaticCheckpoint>(query->parse)) {
-                // CreateStaticCheckpoint
+            case ast::AstType::CreateStaticCheckpoint:
                 return std::make_shared<OtherPlan>(PlanTag::T_Create_StaticCheckPoint, std::string());
-            }
-
-            // 3. 系统设置处理
-            else if (auto x = std::dynamic_pointer_cast<ast::SetStmt>(query->parse)) {
+            case ast::AstType::SetStmt: {
+                auto x = std::static_pointer_cast<ast::SetStmt>(query->parse);
                 return std::make_shared<SetKnobPlan>(x->set_knob_type_, x->bool_val_);
             }
-            // 4. 常规SQL语句处理
-            else {
+            default:
                 return planner_->do_planner(query, context);
-            }
-        } catch (const std::exception &e) {
-            throw InternalError("Failed to generate plan: " + std::string(e.what()));
         }
     }
 };

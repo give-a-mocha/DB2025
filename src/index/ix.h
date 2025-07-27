@@ -16,3 +16,4 @@ See the Mulan PSL v2 for more details. */
 
 #include "ix_manager.h"
 #include "ix_scan.h"
+#include "ix_scan_temp.h"

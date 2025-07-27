@@ -114,6 +114,7 @@ class MvccInsertExecutor : public AbstractExecutor {
             TupleMeta base_meta(0, true);
             if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
                                                   context_->txn_)) {
+                fh_->delete_record(rid_);
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             sm_manager_->insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);

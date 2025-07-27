@@ -28,8 +28,9 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     size_t len_;                    // 记录长度
     IndexMeta &index_meta_;         // 索引元数据
     Rid rid_;                       // 当前记录ID
-    std::unique_ptr<IxScan> scan_;  // 扫描迭代器
-    SmManager *sm_manager_;         // 系统管理器
+    // std::unique_ptr<IxScan> scan_;  // 扫描迭代器
+    std::unique_ptr<IxScanTemp> scan_;
+    SmManager *sm_manager_;  // 系统管理器
     TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
     TupleMeta tuple_meta_;           // 元组元数据
@@ -66,9 +67,9 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      * @brief 析构函数，确保正确释放扫描器资源
      */
     ~MvccIndexScanExecutor() {
-        if (scan_) {
-            scan_->unlatch();  // 无论扫描是否结束，都释放持有的锁
-        }
+        // if (scan_) {
+        //     scan_->unlatch();  // 无论扫描是否结束，都释放持有的锁
+        // }
     }
 
     void getBound() {
@@ -147,8 +148,10 @@ class MvccIndexScanExecutor : public AbstractExecutor {
             memcpy(upper_record.data + offset, max_val.raw->data, col.len);
             offset += col.len;
         }
-        lower_iid = ih_->lower_bound(lower_record.data);
-        upper_iid = ih_->upper_bound(upper_record.data);
+        // lower_iid = ih_->lower_bound(lower_record.data);
+        // upper_iid = ih_->upper_bound(upper_record.data);
+        lower_iid = ih_->lower_bound_with_root_lock(lower_record.data);
+        upper_iid = ih_->upper_bound_with_root_lock(upper_record.data);
     }
 
     /**
@@ -158,7 +161,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      */
     void beginTuple() override {
         TRACE_FUNCTION
-        scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        // scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        scan_ = std::make_unique<IxScanTemp>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();

@@ -538,11 +538,12 @@ void SmManager::insert_index_with_tab_meta(const TabMeta& tab_, const std::uniqu
         auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
         auto key = make_index_key(index, ih, rec);
         // 插入索引项
-        if (txn == nullptr) {
-            ih->insert_entry_without_lock(key.get(), rid);
-        } else {
-            ih->insert_entry(key.get(), rid, txn);
-        }
+        // if (txn == nullptr) {
+        //     ih->insert_entry_without_lock(key.get(), rid);
+        // } else {
+        //     ih->insert_entry(key.get(), rid, txn);
+        // }
+        ih->insert_entry_with_root_lock(key.get(), rid);
     }
     return;
 }
@@ -575,7 +576,10 @@ std::vector<Rid> SmManager::exist_in_index(const TabMeta& tab_, const std::uniqu
         auto&& ih = ihs_.at(get_ix_manager()->get_index_name(tab_.name, index.cols));
         auto key = make_index_key(index, ih, rec);
         Rid rid;
-        if (ih->get_value(key.get(), rid, txn)) {
+        // if (ih->get_value(key.get(), rid, txn)) {
+        //     rids.push_back(rid);
+        // }
+        if (ih->get_value_with_root_lock(key.get(), rid)) {
             rids.push_back(rid);
         }
     }
