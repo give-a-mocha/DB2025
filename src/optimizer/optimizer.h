@@ -24,27 +24,16 @@
 #include "system/sm.h"
 #include "transaction/transaction_manager.h"
 
+extern SmManager sm_manager;
+extern Planner planner;
+
+
 /**
  * @brief 查询优化器类
  */
 class Optimizer {
-   private:
-    SmManager *sm_manager_;  // 系统管理器指针
-    Planner *planner_;       // 计划生成器指针
-
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     * @param planner 计划生成器指针
-     * @throw InternalError 如果任一指针为空
-     */
-    Optimizer(SmManager *sm_manager, Planner *planner) : sm_manager_(sm_manager), planner_(planner) {
-        TRACE_FUNCTION
-        if (!sm_manager || !planner) {
-            throw InternalError("Null pointer in Optimizer constructor");
-        }
-    }
+    Optimizer() = default;
 
     /**
      * @brief 为查询生成执行计划
@@ -92,7 +81,7 @@ class Optimizer {
                 return std::make_shared<SetKnobPlan>(x->set_knob_type_, x->bool_val_);
             }
             default:
-                return planner_->do_planner(query, context);
+                return planner.do_planner(query, context);
         }
     }
 };

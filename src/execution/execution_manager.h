@@ -50,39 +50,19 @@
 #include "system/sm.h"
 #include "transaction/transaction_manager.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+extern RecoveryManager recovery_manager;
+
 class Planner;
 
 /**
  * @brief 查询执行管理器类
  */
 class QlManager {
-   private:
-    /**
-     * @brief 系统管理器
-     */
-    SmManager *sm_manager_;
-
-    /**
-     * @brief 事务管理器
-     */
-    TransactionManager *txn_mgr_;
-
-    /**
-     * @brief 查询计划器
-     */
-    Planner *planner_;
-
-    RecoveryManager *recovery_manager_;
 
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     * @param txn_mgr 事务管理器指针
-     * @param planner 查询计划器指针
-     */
-    QlManager(SmManager *sm_manager, TransactionManager *txn_mgr, Planner *planner, RecoveryManager *recovery_manager)
-        : sm_manager_(sm_manager), txn_mgr_(txn_mgr), planner_(planner), recovery_manager_(recovery_manager) {}
+    QlManager() = default;
 
     /**
      * @brief 执行多语句查询

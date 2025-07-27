@@ -11,6 +11,11 @@ See the Mulan PSL v2 for more details. */
 #include "log_recovery.h"
 #include "common/print.hpp"
 
+extern DiskManager disk_manager;
+extern BufferPoolManager buffer_pool_manager;
+extern SmManager sm_manager;
+extern LogManager log_manager;
+
 void RecoveryManager::recovery() {
     // size_t log_start_offset = sm_manager_->db_.get_log_offset();
     // auto log_records_ = log_mgr_->read_logs_from_disk(log_start_offset);

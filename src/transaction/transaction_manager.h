@@ -24,6 +24,9 @@ See the Mulan PSL v2 for more details. */
 #include "transaction.h"
 #include "watermark.h"
 
+extern SmManager sm_manager;
+extern LockManager lock_manager;
+
 /* 系统采用的并发控制算法，当前题目中要求两阶段封锁并发控制算法 */
 enum class ConcurrencyMode {
     TWO_PHASE_LOCKING = 0,  // 两阶段封锁协议
@@ -77,10 +80,6 @@ class TransactionManager {
     // 用于分发事务时间戳
     std::atomic<timestamp_t> next_timestamp_{0};
 
-    SmManager *sm_manager_;
-
-    LockManager *lock_manager_;
-
     // 最后提交的时间戳,仅用于MVCC
     std::atomic<timestamp_t> last_commit_ts_{0};
 
@@ -88,8 +87,7 @@ class TransactionManager {
     Watermark running_txns_{0};
 
    public:
-    explicit TransactionManager(LockManager *lock_manager, SmManager *sm_manager,
-                                ConcurrencyMode concurrency_mode = ConcurrencyMode::TWO_PHASE_LOCKING);
+    explicit TransactionManager(ConcurrencyMode concurrency_mode = ConcurrencyMode::TWO_PHASE_LOCKING);
 
     ~TransactionManager() = default;
 
@@ -103,7 +101,7 @@ class TransactionManager {
 
     void set_concurrency_mode(ConcurrencyMode concurrency_mode) { concurrency_mode_ = concurrency_mode; }
 
-    LockManager *get_lock_manager() { return lock_manager_; }
+    LockManager *get_lock_manager() { return &lock_manager; }
 
     timestamp_t get_next_txn_id() { return next_txn_id_.fetch_add(1); }
 

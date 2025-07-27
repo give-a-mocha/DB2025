@@ -11,6 +11,8 @@ See the Mulan PSL v2 for more details. */
 #include "buffer_pool_manager.h"
 #include "common/TraceStack.hpp"
 
+extern DiskManager disk_manager;
+
 size_t BufferPoolManager::get_instance_no(const PageId& page_id) const {
     return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE;
 }
@@ -66,7 +68,7 @@ bool BufferPoolManager::flush_page(PageId page_id) {
  */
 Page* BufferPoolManager::new_page(PageId* page_id) {
     TRACE_FUNCTION
-    page_id->page_no = disk_manager_->allocate_page(page_id->fd);
+    page_id->page_no = disk_manager.allocate_page(page_id->fd);
     return buffer_pool_instances_[get_instance_no(*page_id)]->new_page(page_id);
 }
 
@@ -113,7 +115,7 @@ void BufferPoolManager::delete_all_pages(int fd) {
 
 auto BufferPoolManager::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     TRACE_FUNCTION
-    page_id->page_no = disk_manager_->allocate_page(page_id->fd);
+    page_id->page_no = disk_manager.allocate_page(page_id->fd);
     return buffer_pool_instances_[get_instance_no(*page_id)]->new_page_guarded(page_id);
 }
 

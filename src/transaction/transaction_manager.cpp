@@ -28,6 +28,9 @@
 #include "system/sm_manager.h"
 #include "execution/executor_abstract.h"
 
+extern SmManager sm_manager;
+extern LockManager lock_manager;
+
 std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
 
 /**
@@ -37,11 +40,7 @@ std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
  * @param sm_manager 系统管理器指针，用于访问数据库资源
  * @param concurrency_mode 并发控制模式，默认为两阶段封锁
  */
-TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_manager,
-                                       ConcurrencyMode concurrency_mode) {
-    // 初始化成员变量
-    lock_manager_ = lock_manager;
-    sm_manager_ = sm_manager;
+TransactionManager::TransactionManager(ConcurrencyMode concurrency_mode) {
     concurrency_mode_ = concurrency_mode;
 }
 
@@ -94,27 +93,27 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 
     // FOCC Validation Phase 1: Collect conditions under a shared lock
     std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
-    lock_manager_->lock_gap_set_shared();
+    lock_manager.lock_gap_set_shared();
 
     std::unordered_set<int> processed_fds;
     for (const auto& write_record : *txn->get_write_set()) {
         const auto& table_name = write_record->GetTableName();
-        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager.fhs_.at(table_name);
         int fd = fh_->GetFd();
         if (processed_fds.find(fd) == processed_fds.end()) {
-            conditions_by_fd[fd] = lock_manager_->get_gap_condition(fd, txn);
+            conditions_by_fd[fd] = lock_manager.get_gap_condition(fd, txn);
             processed_fds.insert(fd);
         }
     }
-    lock_manager_->unlock_gap_set_shared();
+    lock_manager.unlock_gap_set_shared();
 
     // FOCC Validation Phase 2: Fetch records and evaluate lock-free
     for (size_t i = 0; i < txn->get_write_set()->size(); ++i) {
         const auto& write_record = (*txn->get_write_set())[i];
         const auto& table_name = write_record->GetTableName();
         const auto& rid = write_record->GetRid();
-        TabMeta& tab_ = sm_manager_->db_.get_table(table_name);
-        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
+        TabMeta& tab_ = sm_manager.db_.get_table(table_name);
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager.fhs_.at(table_name);
         int fd = fh_->GetFd();
 
         if (conditions_by_fd.find(fd) == conditions_by_fd.end() || conditions_by_fd.at(fd).empty()) {
@@ -147,13 +146,13 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 
     auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
     for (const LockDataId& lock : lock_set_copy) {
-        lock_manager_->unlock(txn, lock);
+        lock_manager.unlock(txn, lock);
     }
 
     auto lock_gap_set = txn->get_lock_gap_set();
     auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
     for (const int& tab_fd : lock_gap_set_copy) {
-        lock_manager_->unlock_gap(txn, tab_fd);
+        lock_manager.unlock_gap(txn, tab_fd);
     }
 
     // 清空事务相关的集合
@@ -187,7 +186,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         const auto table_name = (*write_set)[i]->GetTableName();
         const auto rid = (*write_set)[i]->GetRid();
         const UndoLog* undolog = txn->GetUndoLog(i);
-        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager.fhs_.at(table_name);
 
         DeleteUndoLink(fh_->GetFd(), rid, context->txn_);
         if (undolog->is_deleted_) {
@@ -215,13 +214,13 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
     auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
     for (const LockDataId& lock : lock_set_copy) {
-        lock_manager_->unlock(txn, lock);
+        lock_manager.unlock(txn, lock);
     }
 
     auto lock_gap_set = txn->get_lock_gap_set();
     auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
     for (const int& tab_fd : lock_gap_set_copy) {
-        lock_manager_->unlock_gap(txn, tab_fd);
+        lock_manager.unlock_gap(txn, tab_fd);
     }
 
     txn->clear_lock_set();
@@ -440,7 +439,7 @@ void TransactionManager::GarbageCollection() {
 
     // 第四阶段：刷新到磁盘
     if (!expired_txns.empty()) {
-        sm_manager_->flush_to_disk();
+        sm_manager.flush_to_disk();
     }
 }
 

@@ -13,6 +13,8 @@ See the Mulan PSL v2 for more details. */
 #include "common/TraceStack.hpp"
 #include "common/print.hpp"
 
+extern SmManager sm_manager;
+
 namespace {
 /**
  * @brief 辅助函数：检查列是否在cols中
@@ -91,7 +93,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             for (const auto &sv_tab : x->tabs) {
                 std::string tab_name = sv_tab->tab_name;
                 tab_refs.push_back(TabRef(tab_name, sv_tab->alias));  // 添加表引用
-                if (!sm_manager_->db_.is_table(tab_name)) {           // 检查表是否存在
+                if (!sm_manager.db_.is_table(tab_name)) {           // 检查表是否存在
                     throw TableNotFoundError(tab_name);
                 }
                 query->tables.push_back(tab_name);  // 添加到查询的表列表
@@ -102,7 +104,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 for (const auto &join_expr : x->jointree) {
                     // 检查JOIN右侧的表是否存在
                     std::string right_tab_name = join_expr->right->tab_name;
-                    if (!sm_manager_->db_.is_table(right_tab_name)) {
+                    if (!sm_manager.db_.is_table(right_tab_name)) {
                         throw TableNotFoundError(right_tab_name);
                     }
                     TabRef right_table(right_tab_name, join_expr->right->alias);
@@ -269,7 +271,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         case ast::AstType::UpdateStmt: {
             auto x = std::static_pointer_cast<ast::UpdateStmt>(parse);  // 处理UPDATE查询
             // 添加被更新的表
-            if (!sm_manager_->db_.is_table(x->tab_name->tab_name)) {  // 检查表是否存在
+            if (!sm_manager.db_.is_table(x->tab_name->tab_name)) {  // 检查表是否存在
                 throw TableNotFoundError(x->tab_name->tab_name);
             }
             query->tables.push_back(x->tab_name->tab_name);
@@ -311,7 +313,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
 
                 if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
-                    TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
+                    TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
                     auto col = tab.get_col(set_clause.lhs.col_name);
                     // 允许数值类型之间的转换(INT与FLOAT)
                     bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
@@ -325,9 +327,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     // 检查右侧列是否存在
                     set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
                     // 类型兼容校验：允许 INT↔FLOAT，其他必须完全一致
-                    TabMeta &lhs_tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
+                    TabMeta &lhs_tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
                     auto l_col = lhs_tab.get_col(set_clause.lhs.col_name);
-                    TabMeta &rhs_tab = sm_manager_->db_.get_table(set_clause.rhs_col.tab_name);
+                    TabMeta &rhs_tab = sm_manager.db_.get_table(set_clause.rhs_col.tab_name);
                     auto r_col = rhs_tab.get_col(set_clause.rhs_col.col_name);
 
                     bool is_numeric = (l_col->type == ColType::TYPE_INT || l_col->type == ColType::TYPE_FLOAT) &&
@@ -341,7 +343,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     get_all_cols({set_clause.lhs.tab_name}, ltable_cols);  // 获取左侧表的所有列
                     CheckArithExprType(temp, ltable_cols);
                     set_clause.rhs_expr = std::move(temp->expr);
-                    TabMeta &tab = sm_manager_->db_.get_table(set_clause.lhs.tab_name);
+                    TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
                     auto col = tab.get_col(set_clause.lhs.col_name);
                     if (col->type == ColType::TYPE_STRING) {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(ColType::TYPE_FLOAT));
@@ -544,7 +546,7 @@ void Analyze::get_all_cols(const std::vector<std::string> &tab_names, std::vecto
     TRACE_FUNCTION
     for (auto &sel_tab_name : tab_names) {
         // 这里db_不能写成get_db(), 注意要传指针
-        const auto &sel_tab_cols = sm_manager_->db_.get_table(sel_tab_name).cols;
+        const auto &sel_tab_cols = sm_manager.db_.get_table(sel_tab_name).cols;
         all_cols.insert(all_cols.end(), sel_tab_cols.begin(), sel_tab_cols.end());  // 将表的所有列添加到结果集中
     }
 }
@@ -679,7 +681,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         size_t lhs_col_len = 0;
         // 获取左侧列的类型信息
         if (cond.lhs_col.agg_type != AggregateType::COUNT) {
-            TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
+            TabMeta &lhs_tab = sm_manager.db_.get_table(cond.lhs_col.tab_name);
             lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
             lhs_type = lhs_col->type;  // 获取左侧列的类型
             if (cond.lhs_col.agg_type != AggregateType::NONE && lhs_type == ColType::TYPE_STRING) {
@@ -701,7 +703,7 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         } else if (cond.rhs_type == ConditionRhsType::RHS_COLUMN) {
             if (cond.rhs_col.agg_type != AggregateType::COUNT) {
                 // 如果右侧是列引用，获取其类型
-                TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
+                TabMeta &rhs_tab = sm_manager.db_.get_table(cond.rhs_col.tab_name);
                 auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
                 rhs_type = rhs_col->type;
                 if (cond.rhs_col.agg_type != AggregateType::NONE && rhs_type == ColType::TYPE_STRING) {

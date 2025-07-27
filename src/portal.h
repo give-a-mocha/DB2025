@@ -38,6 +38,8 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_mvcc_seq_scan.h"
 #include "execution/executor_mvcc_index_scan.h"
 
+extern SmManager sm_manager;
+
 typedef enum portalTag {
     PORTAL_Invalid_Query = 0,
     PORTAL_ONE_SELECT,
@@ -61,11 +63,10 @@ struct PortalStmt {
 
 class Portal {
    private:
-    SmManager *sm_manager_;
 
    public:
-    Portal(SmManager *sm_manager) : sm_manager_(sm_manager) {}
-    ~Portal() {}
+    Portal() = default;
+    ~Portal() = default;
 
     // 将查询执行计划转换成对应的算子树
     std::shared_ptr<PortalStmt> start(std::shared_ptr<Plan> plan, Context *context, TransactionManager *txn_mgr) {
@@ -101,7 +102,7 @@ class Portal {
                         old_recs.emplace_back(scan->tuple_meta(), scan->Next(), scan->rid());
                     }
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
-                        sm_manager_, x->tab_name_, x->set_clauses_, x->conds_, std::move(old_recs), context, txn_mgr);
+                        &sm_manager, x->tab_name_, x->set_clauses_, x->conds_, std::move(old_recs), context, txn_mgr);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -114,7 +115,7 @@ class Portal {
                     }
 
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(
-                        sm_manager_, x->tab_name_, x->conds_, std::move(old_recs), context, txn_mgr);
+                        &sm_manager, x->tab_name_, x->conds_, std::move(old_recs), context, txn_mgr);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -122,7 +123,7 @@ class Portal {
 
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root =
-                        std::make_unique<MvccInsertExecutor>(sm_manager_, x->tab_name_, x->values_, context, txn_mgr);
+                        std::make_unique<MvccInsertExecutor>(&sm_manager, x->tab_name_, x->values_, context, txn_mgr);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -189,9 +190,9 @@ class Portal {
         } else if (plan->tag == PlanTag::T_SeqScan || plan->tag == PlanTag::T_IndexScan) {
             auto x = std::static_pointer_cast<ScanPlan>(plan);
             if (x->tag == PlanTag::T_SeqScan) {
-                return std::make_unique<MvccSeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context, txn_mgr);
+                return std::make_unique<MvccSeqScanExecutor>(&sm_manager, x->tab_name_, x->conds_, context, txn_mgr);
             } else {
-                return std::make_unique<MvccIndexScanExecutor>(sm_manager_, x->tab_name_, x->conds_,
+                return std::make_unique<MvccIndexScanExecutor>(&sm_manager, x->tab_name_, x->conds_,
                                                                x->index_col_names_, context, txn_mgr);
             }
         } else if (plan->tag == PlanTag::T_NestLoop || plan->tag == PlanTag::T_SortMerge) {
