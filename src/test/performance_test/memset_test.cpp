@@ -2,13 +2,9 @@
 
 #include "../include/Timer.h"
 
-void DoNotOptimize(void* p) {
-    asm volatile("" : : "r,m"(p) : "memory");
-}
+void DoNotOptimize(void *p) { asm volatile("" : : "r,m"(p) : "memory"); }
 
-void MemoryBarrier() {
-    asm volatile("" : : : "memory");
-}
+void MemoryBarrier() { asm volatile("" : : : "memory"); }
 
 int main() {
     constexpr size_t test_size = 1000 * 1024 * 1024;
