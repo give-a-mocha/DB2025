@@ -102,7 +102,7 @@ class Portal {
                         old_recs.emplace_back(scan->tuple_meta(), scan->Next(), scan->rid());
                     }
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
-                        &sm_manager, x->tab_name_, x->set_clauses_, x->conds_, std::move(old_recs), context, txn_mgr);
+                        x->tab_name_, x->set_clauses_, x->conds_, std::move(old_recs), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -115,7 +115,7 @@ class Portal {
                     }
 
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(
-                        &sm_manager, x->tab_name_, x->conds_, std::move(old_recs), context, txn_mgr);
+                        x->tab_name_, x->conds_, std::move(old_recs), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -123,7 +123,7 @@ class Portal {
 
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root =
-                        std::make_unique<MvccInsertExecutor>(&sm_manager, x->tab_name_, x->values_, context, txn_mgr);
+                        std::make_unique<MvccInsertExecutor>(x->tab_name_, x->values_, context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -190,10 +190,10 @@ class Portal {
         } else if (plan->tag == PlanTag::T_SeqScan || plan->tag == PlanTag::T_IndexScan) {
             auto x = std::static_pointer_cast<ScanPlan>(plan);
             if (x->tag == PlanTag::T_SeqScan) {
-                return std::make_unique<MvccSeqScanExecutor>(&sm_manager, x->tab_name_, x->conds_, context, txn_mgr);
+                return std::make_unique<MvccSeqScanExecutor>(x->tab_name_, x->conds_, context);
             } else {
-                return std::make_unique<MvccIndexScanExecutor>(&sm_manager, x->tab_name_, x->conds_,
-                                                               x->index_col_names_, context, txn_mgr);
+                return std::make_unique<MvccIndexScanExecutor>(x->tab_name_, x->conds_,
+                                                               x->index_col_names_, context);
             }
         } else if (plan->tag == PlanTag::T_NestLoop || plan->tag == PlanTag::T_SortMerge) {
             auto x = std::static_pointer_cast<JoinPlan>(plan);

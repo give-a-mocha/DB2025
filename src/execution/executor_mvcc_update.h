@@ -20,6 +20,9 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+
 /**
  * @brief 更新执行器，负责实现UPDATE语句的功能
  */
@@ -31,23 +34,17 @@ class MvccUpdateExecutor : public AbstractExecutor {
     std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表
     std::string tab_name_;                                                         // 表名
     std::vector<SetClause> set_clauses_;                                           // SET子句列表(新值)
-    SmManager *sm_manager_;                                                        // 系统管理器指针
-    TransactionManager *txn_mgr_;                                                  // 事务管理器指针
 
    public:
-    MvccUpdateExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<SetClause> set_clauses,
-                       std::vector<Condition> conds,
-                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context,
-                       TransactionManager *txn_mgr)
-        : tab_(sm_manager->db_.get_table(tab_name)) {
-        sm_manager_ = sm_manager;
+    MvccUpdateExecutor(const std::string &tab_name, std::vector<SetClause> set_clauses, std::vector<Condition> conds,
+                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
+        : tab_(sm_manager.db_.get_table(tab_name)) {
         tab_name_ = tab_name;
         set_clauses_ = std::move(set_clauses);
-        fh_ = sm_manager_->fhs_.at(tab_name).get();
+        fh_ = sm_manager.fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         old_recs_ = std::move(old_recs);
         context_ = context;
-        txn_mgr_ = txn_mgr;
     }
 
     /**
@@ -58,15 +55,15 @@ class MvccUpdateExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         // 加锁间隙
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
+        txn_manager.get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
             auto &rid_ = std::get<2>(rec_tuple);
             WARN("Updating rid: {}", rid_);
-            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid_);
+            auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid_);
 
-            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+            if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
 
@@ -127,29 +124,29 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 memcpy(new_rec->data + col->offset, value.raw->data, col->len);
             }
 
-            std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, new_rec, context_->txn_);
+            std::vector<Rid> rids = sm_manager.exist_in_index(tab_, new_rec, context_->txn_);
             Rid insert_rid;
             // 唯一性检查
             TupleMeta base_meta_(0, true);
             for (const auto &rid : rids) {
                 INFO("Checking unique constraint for rid: {}", rid);
-                auto [tuple_meta, tuple_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid);
+                auto [tuple_meta, tuple_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
                 base_meta_ = tuple_meta;
-                if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+                if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
                 // 主键冲突
                 if (rid != rid_ && tuple_meta.is_deleted_ == false) {
-                    txn_mgr_->abort(context_, context_->log_mgr_);
+                    txn_manager.abort(context_, context_->log_mgr_);
                     throw InternalError("Primary key conflict, duplicate insert");
                 }
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
             if (!rids.empty()) {
                 insert_rid = rids.back();
-                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, base_meta_, nullptr,
-                                            new_rec, context_->txn_)) {
+                if (!txn_manager.AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, base_meta_, nullptr,
+                                              new_rec, context_->txn_)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
@@ -157,13 +154,13 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
                 TupleMeta delete_meta(0, true);
                 insert_rid = fh_->GetNewRid();
-                if (!txn_mgr_->AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, delete_meta, nullptr,
-                                            new_rec, context_->txn_)) {
+                if (!txn_manager.AtomicUpdate(tab_name_, fh_, rid_, base_meta, old_rec, insert_rid, delete_meta,
+                                              nullptr, new_rec, context_->txn_)) {
                     fh_->delete_record(insert_rid);
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
-                sm_manager_->insert_index_with_tab_meta(tab_, new_rec, insert_rid, context_->txn_);
+                sm_manager.insert_index_with_tab_meta(tab_, new_rec, insert_rid, context_->txn_);
             }
             // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(new_rec), insert_rid,
             // tab_.name);

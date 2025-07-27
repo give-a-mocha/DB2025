@@ -16,6 +16,9 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+
 /**
  * @brief 索引扫描执行器，负责实现基于索引的高效记录访问
  */
@@ -30,26 +33,22 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     Rid rid_;                       // 当前记录ID
     // std::unique_ptr<IxScan> scan_;  // 扫描迭代器
     std::unique_ptr<IxScanTemp> scan_;
-    SmManager *sm_manager_;  // 系统管理器
-    TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
     TupleMeta tuple_meta_;           // 元组元数据
     Iid lower_iid;                   // 索引下界
     Iid upper_iid;                   // 索引上界
 
    public:
-    MvccIndexScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds,
-                          std::vector<std::string> index_col_names, Context *context, TransactionManager *txn_mgr)
-        : tab_(sm_manager->db_.get_table(tab_name)),
+    MvccIndexScanExecutor(std::string tab_name, std::vector<Condition> conds, std::vector<std::string> index_col_names,
+                          Context *context)
+        : tab_(sm_manager.db_.get_table(tab_name)),
           conds_(std::move(conds)),
-          fh_(sm_manager->fhs_.at(tab_name).get()),
-          ih_(sm_manager->ihs_.at(sm_manager->get_index_name(tab_name, index_col_names)).get()),
+          fh_(sm_manager.fhs_.at(tab_name).get()),
+          ih_(sm_manager.ihs_.at(sm_manager.get_index_name(tab_name, index_col_names)).get()),
           len_(tab_.cols.back().offset + tab_.cols.back().len),
           index_meta_(*tab_.get_index_meta(index_col_names)),
           rid_(),
           scan_(nullptr),
-          sm_manager_(sm_manager),
-          txn_mgr_(txn_mgr),
           rec_(nullptr) {
         TRACE_FUNCTION
         context_ = context;  // Initialize context_ in the constructor body
@@ -161,13 +160,13 @@ class MvccIndexScanExecutor : public AbstractExecutor {
      */
     void beginTuple() override {
         TRACE_FUNCTION
-        // scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
-        scan_ = std::make_unique<IxScanTemp>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+        // scan_ = std::make_unique<IxScan>(ih_, lower_iid, upper_iid, sm_manager.get_bpm());
+        scan_ = std::make_unique<IxScanTemp>(ih_, lower_iid, upper_iid, sm_manager.get_bpm());
         // 移动到第一个满足条件的记录
         while (!is_end()) {
             rid_ = scan_->rid();
-            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
-            auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
+            auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
+            auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
@@ -189,8 +188,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         // 移动到下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
-            auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
+            auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
+            auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
