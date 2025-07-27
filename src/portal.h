@@ -113,8 +113,8 @@ class Portal {
                         old_recs.emplace_back(scan->tuple_meta(), scan->Next(), scan->rid());
                     }
 
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(
-                        x->tab_name_, x->conds_, std::move(old_recs), context);
+                    std::unique_ptr<AbstractExecutor> root =
+                        std::make_unique<MvccDeleteExecutor>(x->tab_name_, x->conds_, std::move(old_recs), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -191,8 +191,7 @@ class Portal {
             if (x->tag == PlanTag::T_SeqScan) {
                 return std::make_unique<MvccSeqScanExecutor>(x->tab_name_, x->conds_, context);
             } else {
-                return std::make_unique<MvccIndexScanExecutor>(x->tab_name_, x->conds_,
-                                                               x->index_col_names_, context);
+                return std::make_unique<MvccIndexScanExecutor>(x->tab_name_, x->conds_, x->index_col_names_, context);
             }
         } else if (plan->tag == PlanTag::T_NestLoop || plan->tag == PlanTag::T_SortMerge) {
             auto x = std::static_pointer_cast<JoinPlan>(plan);
