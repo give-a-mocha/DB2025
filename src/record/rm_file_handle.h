@@ -126,7 +126,7 @@ class RmFileHandle {
                                               // - first_free_page_no: 第一个可用页面号
                                               // - bitmap_size: 每页位图大小
 
-    std::mutex latch_;                          // 互斥锁，用于获取下一个空闲页的保护
+    std::mutex latch_;  // 互斥锁，用于获取下一个空闲页的保护
 
    public:
     /**
