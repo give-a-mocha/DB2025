@@ -13,8 +13,8 @@ template <typename T>
 class MemoryPool {
    private:
     std::mutex pool_mutex_;
-    std::deque<void*> free_points_;
-    constexpr static size_t INITIAL_POOL_SIZE = 100;
+    constexpr static size_t INITIAL_POOL_SIZE = 128;
+    constexpr static size_t MAX_POOL_SIZE = 1024;
     MemoryPool() = default;
 
     void Init() {
@@ -23,25 +23,31 @@ class MemoryPool {
         }
     }
 
-    void Destroy() {
+    void DestroyAll() {
         for (auto& point : free_points_) {
             free(point);
         }
     }
 
+    void Destroy() {
+        for (auto it = free_points_.begin() + INITIAL_POOL_SIZE; it != free_points_.end(); ++it) {
+            free(*it);
+        }
+        free_points_.resize(INITIAL_POOL_SIZE);
+    }
+
    public:
-    ~MemoryPool() { Destroy(); }
+    ~MemoryPool() { DestroyAll(); }
 
     MemoryPool(const MemoryPool&) = delete;
     MemoryPool& operator=(const MemoryPool&) = delete;
 
     static MemoryPool& getInstance() {
-        static MemoryPool instance;
+        static thread_local MemoryPool instance;
         return instance;
     }
 
     T* Malloc() {
-        std::lock_guard<std::mutex> lock(pool_mutex_);
         if (free_points_.empty()) {
             Init();
         }
@@ -50,9 +56,9 @@ class MemoryPool {
         return ptr;
     }
 
-    void Free(void* ptr) {
-        std::lock_guard<std::mutex> lock(pool_mutex_);
-        free_points_.push_back(ptr);
+    void Free(void* ptr) { 
+        free_points_.push_back(ptr); 
+        if(free_points_.size() > MAX_POOL_SIZE) Destroy();
     }
 };
 
