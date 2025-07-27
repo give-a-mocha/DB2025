@@ -63,7 +63,6 @@ struct PortalStmt {
 
 class Portal {
    private:
-
    public:
     Portal() = default;
     ~Portal() = default;

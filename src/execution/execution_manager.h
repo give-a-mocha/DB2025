@@ -60,7 +60,6 @@ class Planner;
  * @brief 查询执行管理器类
  */
 class QlManager {
-
    public:
     QlManager() = default;
 

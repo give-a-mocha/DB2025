@@ -27,7 +27,6 @@
 extern SmManager sm_manager;
 extern Planner planner;
 
-
 /**
  * @brief 查询优化器类
  */

@@ -32,7 +32,7 @@ class RedoLogsInPage {
 
 class RecoveryManager {
    private:
-    LogBuffer buffer_;                        // 读入日志
+    LogBuffer buffer_;  // 读入日志
 
     std::shared_mutex latch_;
 

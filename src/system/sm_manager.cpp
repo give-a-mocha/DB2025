@@ -38,7 +38,6 @@
 #include "record_printer.h"
 #include "record/rm_file_handle.h"
 
-
 extern DiskManager disk_manager;
 extern BufferPoolManager buffer_pool_manager;
 extern RmManager rm_manager;
@@ -426,7 +425,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     }
 
     // 4. 创建和打开索引文件
-    auto fh_ = fhs_[tab_name].get();                                 // 获取表的文件句柄
+    auto fh_ = fhs_[tab_name].get();                               // 获取表的文件句柄
     ix_manager.create_index(tab_name, cols);                       // 创建索引文件
     auto ih_ = ix_manager.open_index_with_index_name(index_name);  // 打开索引文件
 

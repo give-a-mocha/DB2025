@@ -41,7 +41,6 @@ extern BufferPoolManager buffer_pool_manager;
  */
 class RmManager {
    public:
-
     RmManager() = default;
 
     /**
@@ -104,7 +103,7 @@ class RmManager {
      */
     void close_file(const RmFileHandle *file_handle) {
         disk_manager.write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
-                                  sizeof(file_handle->file_hdr_));
+                                sizeof(file_handle->file_hdr_));
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
         buffer_pool_manager.flush_all_pages(file_handle->fd_);
         disk_manager.close_file(file_handle->fd_);
@@ -117,7 +116,7 @@ class RmManager {
      */
     void close_file_and_clear_buffer(const RmFileHandle *file_handle) {
         disk_manager.write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
-                                  sizeof(file_handle->file_hdr_));
+                                sizeof(file_handle->file_hdr_));
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
         buffer_pool_manager.flush_all_pages(file_handle->fd_);
         // 删除缓冲池中该文件的所有页面
