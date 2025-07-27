@@ -40,9 +40,7 @@ std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
  * @param sm_manager 系统管理器指针，用于访问数据库资源
  * @param concurrency_mode 并发控制模式，默认为两阶段封锁
  */
-TransactionManager::TransactionManager(ConcurrencyMode concurrency_mode) {
-    concurrency_mode_ = concurrency_mode;
-}
+TransactionManager::TransactionManager(ConcurrencyMode concurrency_mode) { concurrency_mode_ = concurrency_mode; }
 
 /**
  * @description: 事务的开始方法

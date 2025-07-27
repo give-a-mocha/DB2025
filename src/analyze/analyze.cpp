@@ -93,7 +93,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             for (const auto &sv_tab : x->tabs) {
                 std::string tab_name = sv_tab->tab_name;
                 tab_refs.push_back(TabRef(tab_name, sv_tab->alias));  // 添加表引用
-                if (!sm_manager.db_.is_table(tab_name)) {           // 检查表是否存在
+                if (!sm_manager.db_.is_table(tab_name)) {             // 检查表是否存在
                     throw TableNotFoundError(tab_name);
                 }
                 query->tables.push_back(tab_name);  // 添加到查询的表列表

@@ -51,7 +51,6 @@ extern SmManager sm_manager;
  */
 class Planner {
    private:
-
     bool enable_nestedloop_join = true;  // 是否启用嵌套循环连接
     bool enable_sortmerge_join = false;  // 是否启用排序合并连接
 

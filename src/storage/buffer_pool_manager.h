@@ -23,7 +23,6 @@ See the Mulan PSL v2 for more details. */
 #include "buffer_pool_instance.h"
 #include "page_guard.h"
 
-
 extern DiskManager disk_manager;
 
 /**
@@ -33,11 +32,10 @@ class BufferPoolManager {
    private:
     size_t pool_size_;                                                      // 缓冲池大小（帧数）
     BufferPoolInstance* buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
-    std::hash<PageId> hasher_;  // 用于计算PageId的哈希值
+    std::hash<PageId> hasher_;                                              // 用于计算PageId的哈希值
 
    public:
-    BufferPoolManager(size_t pool_size)
-        : pool_size_(pool_size) {
+    BufferPoolManager(size_t pool_size) : pool_size_(pool_size) {
         // 为buffer pool分配一块连续的内存空间
         for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
             buffer_pool_instances_[i] = new BufferPoolInstance(pool_size / BUFFER_POOL_INSTANCE_SIZE);

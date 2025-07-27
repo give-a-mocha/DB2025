@@ -87,7 +87,6 @@ class Query {
  */
 class Analyze {
    public:
-
     Analyze() = default;
     ~Analyze() = default;
 
