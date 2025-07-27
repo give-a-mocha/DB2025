@@ -56,9 +56,9 @@ class MemoryPool {
         return ptr;
     }
 
-    void Free(void* ptr) { 
-        free_points_.push_back(ptr); 
-        if(free_points_.size() > MAX_POOL_SIZE) Destroy();
+    void Free(void* ptr) {
+        free_points_.push_back(ptr);
+        if (free_points_.size() > MAX_POOL_SIZE) Destroy();
     }
 };
 
