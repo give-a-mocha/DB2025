@@ -48,8 +48,6 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @return nullptr，因为DELETE不产生结果集
      */
     std::unique_ptr<RmRecord> Next() override {
-        // 收集谓词
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), std::move(conds_));
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);

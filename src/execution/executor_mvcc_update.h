@@ -57,8 +57,6 @@ class MvccUpdateExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
-        // 加锁间隙
-        txn_mgr_->get_lock_manager()->lock_gap(context_->txn_, fh_->GetFd(), conds_);
         for (auto &rec_tuple : old_recs_) {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);

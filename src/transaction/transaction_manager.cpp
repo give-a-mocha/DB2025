@@ -92,52 +92,6 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
 
     // std::scoped_lock<std::mutex> lock(commit_mutex_);
 
-    // FOCC Validation Phase 1: Collect conditions under a shared lock
-    std::unordered_map<int, std::vector<Condition>> conditions_by_fd;
-    lock_manager_->lock_gap_set_shared();
-
-    std::unordered_set<int> processed_fds;
-    for (const auto& write_record : *txn->get_write_set()) {
-        const auto& table_name = write_record->GetTableName();
-        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
-        int fd = fh_->GetFd();
-        if (processed_fds.find(fd) == processed_fds.end()) {
-            conditions_by_fd[fd] = lock_manager_->get_gap_condition(fd, txn);
-            processed_fds.insert(fd);
-        }
-    }
-    lock_manager_->unlock_gap_set_shared();
-
-    // FOCC Validation Phase 2: Fetch records and evaluate lock-free
-    for (size_t i = 0; i < txn->get_write_set()->size(); ++i) {
-        const auto& write_record = (*txn->get_write_set())[i];
-        const auto& table_name = write_record->GetTableName();
-        const auto& rid = write_record->GetRid();
-        TabMeta& tab_ = sm_manager_->db_.get_table(table_name);
-        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
-        int fd = fh_->GetFd();
-
-        if (conditions_by_fd.find(fd) == conditions_by_fd.end() || conditions_by_fd.at(fd).empty()) {
-            continue;
-        }
-        const auto& conds = conditions_by_fd.at(fd);
-
-        auto [base_meta, rec] = fh_->get_record(rid);
-        auto pre_link = txn->GetUndoLog(i)->prev_version_;
-        bool is_deleted = base_meta.is_deleted_;
-
-        if (is_deleted && pre_link.IsValid() && !GetUndoLog(pre_link)->is_deleted_) {
-            is_deleted = false;
-        }
-        if (is_deleted) {
-            continue;
-        }
-
-        if (AbstractExecutor::eval_conds(tab_.cols, conds, rec)) {
-            throw TransactionAbortException(txn->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-        }
-    }
-
     txn->set_state(TransactionState::COMMITTED);
     txn->set_commit_ts(get_next_timestamp());                                       // 设置提交时间戳
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
@@ -150,11 +104,11 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     //     lock_manager_->unlock(txn, lock);
     // }
 
-    auto lock_gap_set = txn->get_lock_gap_set();
-    auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
-    for (const int& tab_fd : lock_gap_set_copy) {
-        lock_manager_->unlock_gap(txn, tab_fd);
-    }
+    // auto lock_gap_set = txn->get_lock_gap_set();
+    // auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
+    // for (const int& tab_fd : lock_gap_set_copy) {
+    //     lock_manager_->unlock_gap(txn, tab_fd);
+    // }
 
     // 清空事务相关的集合
     txn->clear_lock_set();
