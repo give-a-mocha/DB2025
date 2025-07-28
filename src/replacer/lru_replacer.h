@@ -58,7 +58,7 @@ class LRUReplacer : public Replacer {
      * 3. 避免在链表中的线性查找
      */
     std::vector<std::list<frame_id_t>::iterator> LRUhash_;  // 哈希表，存储frame_id到链表节点的映射
-    std::vector<bool> is_pinned_;  // 哈希表的使用标记，避免重复插入
-    
+    std::vector<bool> is_pinned_;                           // 哈希表的使用标记，避免重复插入
+
     size_t max_size_;  // 最大容量，与缓冲池容量相同
 };
