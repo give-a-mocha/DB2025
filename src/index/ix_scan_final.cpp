@@ -11,8 +11,7 @@ See the Mulan PSL v2 for more details. */
 #include "ix_scan_final.h"
 #include "ix_index_handle.h"
 
-IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper)
-    : ih_(ih) {
+IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper) : ih_(ih) {
     if (lower == upper) return;
 
     Iid iid = lower;

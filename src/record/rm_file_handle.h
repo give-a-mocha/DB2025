@@ -119,13 +119,13 @@ class RmFileHandle {
     friend class SmManager;  // 允许系统管理器访问内部成员
 
    private:
-    int fd_;                                  // 文件描述符，唯一标识打开的文件
-    RmFileHdr file_hdr_;                      // 文件头结构，包含：
-                                              // - record_size: 记录大小
-                                              // - num_pages: 总页面数
-                                              // - num_records_per_page: 每页记录数
-                                              // - first_free_page_no: 第一个可用页面号
-                                              // - bitmap_size: 每页位图大小
+    int fd_;              // 文件描述符，唯一标识打开的文件
+    RmFileHdr file_hdr_;  // 文件头结构，包含：
+                          // - record_size: 记录大小
+                          // - num_pages: 总页面数
+                          // - num_records_per_page: 每页记录数
+                          // - first_free_page_no: 第一个可用页面号
+                          // - bitmap_size: 每页位图大小
 
     std::mutex latch_;  // 互斥锁，用于获取下一个空闲页的保护
 
@@ -138,8 +138,7 @@ class RmFileHandle {
      * @warning 确保文件头页面(page_no=0)已经正确初始化，
      * 否则可能导致文件结构损坏
      */
-    RmFileHandle(int fd)
-        :fd_(fd) {
+    RmFileHandle(int fd) : fd_(fd) {
         // 1. 从磁盘读取文件头信息到内存中
         disk_manager.read_page(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr_, sizeof(file_hdr_));
 

@@ -97,8 +97,7 @@ class ScanPlan : public Plan {
      * 构造函数初始化表的元数据信息，设置过滤条件，并计算记录长度。
      * 对于索引扫描，还需指定用于扫描的索引列名。
      */
-    ScanPlan(PlanTag tag, std::string tab_name, std::vector<Condition> conds,
-             std::vector<std::string> index_col_names)
+    ScanPlan(PlanTag tag, std::string tab_name, std::vector<Condition> conds, std::vector<std::string> index_col_names)
         : Plan(tag),
           tab_name_(std::move(tab_name)),
           cols_(sm_manager.db_.get_table(tab_name_).cols),

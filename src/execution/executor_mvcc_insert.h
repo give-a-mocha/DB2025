@@ -91,7 +91,7 @@ class MvccInsertExecutor : public AbstractExecutor {
         for (const auto &rid : rids) {
             auto [base_meta, old_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
             base_meta_ = base_meta;
-            if (IsWriteWriteConflict(context_->txn_,  link)) {
+            if (IsWriteWriteConflict(context_->txn_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             // 主键冲突

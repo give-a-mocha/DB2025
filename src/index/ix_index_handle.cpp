@@ -233,8 +233,7 @@ int IxNodeHandle::remove(const char *key) {
     return page_hdr->num_key;
 }
 
-IxIndexHandle::IxIndexHandle(int fd)
-    : fd_(fd) {
+IxIndexHandle::IxIndexHandle(int fd) : fd_(fd) {
     // init file_hdr_
     char *buf = new char[PAGE_SIZE];
     memset(buf, 0, PAGE_SIZE);
@@ -899,7 +898,7 @@ Rid IxIndexHandle::get_rid(const Iid &iid) const {
     }
     Rid result = *node->get_rid(iid.slot_no);
     buffer_pool_manager.unpin_page(node->get_page_id(), false);  // unpin it!
-    delete node;                                                   // 释放内存
+    delete node;                                                 // 释放内存
     return result;
 }
 
@@ -1036,7 +1035,7 @@ Iid IxIndexHandle::leaf_end() const {
     IxNodeHandle *node = fetch_node(file_hdr_->last_leaf_);
     Iid iid = {.page_no = file_hdr_->last_leaf_, .slot_no = node->get_size()};
     buffer_pool_manager.unpin_page(node->get_page_id(), false);  // unpin it!
-    delete node;                                                   // 释放内存
+    delete node;                                                 // 释放内存
     return iid;
 }
 

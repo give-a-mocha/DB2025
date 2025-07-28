@@ -184,8 +184,7 @@ class Portal {
         TRACE_FUNCTION
         if (plan->tag == PlanTag::T_Projection) {
             auto x = std::static_pointer_cast<ProjectionPlan>(plan);
-            return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context),
-                                                        x->sel_cols_);
+            return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_);
         } else if (plan->tag == PlanTag::T_SeqScan || plan->tag == PlanTag::T_IndexScan) {
             auto x = std::static_pointer_cast<ScanPlan>(plan);
             if (x->tag == PlanTag::T_SeqScan) {
@@ -210,16 +209,15 @@ class Portal {
                                                   x->is_desc_);
         } else if (plan->tag == PlanTag::T_Aggregate) {
             auto x = std::static_pointer_cast<AggregatePlan>(plan);
-            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context),
-                                                       x->sel_cols_, x->agg_types_);
+            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
+                                                       x->agg_types_);
         } else if (plan->tag == PlanTag::T_Group) {
             auto x = std::static_pointer_cast<GroupPlan>(plan);
             return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
                                                    x->group_cols_, x->having_conds_);
         } else if (plan->tag == PlanTag::T_Limit) {
             auto x = std::static_pointer_cast<LimitPlan>(plan);
-            return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context), x->offset_,
-                                                   x->count_);
+            return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context), x->offset_, x->count_);
         }
         return nullptr;
     }

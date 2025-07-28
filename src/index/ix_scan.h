@@ -93,9 +93,9 @@ class IxScan : public RecScan {
 
     void unlatch() {
         if (now != nullptr) {
-            now->RUnlatch();                              // 释放读锁
+            now->RUnlatch();                                            // 释放读锁
             buffer_pool_manager.unpin_page(now->get_page_id(), false);  // 解除页面固定状态
-            now = nullptr;                                // 清空当前页面指针
+            now = nullptr;                                              // 清空当前页面指针
         }
     }
 };
