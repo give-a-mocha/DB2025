@@ -29,6 +29,11 @@
 #include "sm_defs.h"
 #include "sm_meta.h"
 
+extern DiskManager disk_manager;
+extern BufferPoolManager buffer_pool_manager;
+extern RmManager rm_manager;
+extern IxManager ix_manager;
+
 class Context;
 
 /**
@@ -66,51 +71,26 @@ class SmManager {
     // 用途：管理当前数据库中每个索引的文件访问
     bool is_output_file_ = true;  // 是否启用输出文件
 
-   private:
-    DiskManager* disk_manager_;               // 磁盘管理器，负责文件系统操作
-    BufferPoolManager* buffer_pool_manager_;  // 缓冲池管理器，提供页面缓存功能
-    RmManager* rm_manager_;                   // 记录管理器，处理记录级别的操作
-    IxManager* ix_manager_;                   // 索引管理器，处理索引的创建和维护
-
-   public:
-    /**
-     * @brief 系统管理器构造函数
-     * @param disk_manager 磁盘管理器
-     * @param buffer_pool_manager 缓冲池管理器
-     * @param rm_manager 记录管理器
-     * @param ix_manager 索引管理器
-     * @note 初始化系统管理器，建立与其他管理器的关联
-     */
-    SmManager(DiskManager* disk_manager, BufferPoolManager* buffer_pool_manager, RmManager* rm_manager,
-              IxManager* ix_manager)
-        : disk_manager_(disk_manager),
-          buffer_pool_manager_(buffer_pool_manager),
-          rm_manager_(rm_manager),
-          ix_manager_(ix_manager) {}
-
-    /**
-     * @brief 系统管理器析构函数
-     * @note 确保数据库正确关闭，资源被适当释放
-     */
-    ~SmManager() {}
+    SmManager() = default;
+    ~SmManager() = default;
 
     /**
      * @brief 获取缓冲池管理器指针
      * @return BufferPoolManager* 缓冲池管理器指针
      */
-    BufferPoolManager* get_bpm() { return buffer_pool_manager_; }
+    BufferPoolManager* get_bpm() { return &buffer_pool_manager; }
 
     /**
      * @brief 获取记录管理器指针
      * @return RmManager* 记录管理器指针
      */
-    RmManager* get_rm_manager() { return rm_manager_; }
+    RmManager* get_rm_manager() { return &rm_manager; }
 
     /**
      * @brief 获取索引管理器指针
      * @return IxManager* 索引管理器指针
      */
-    IxManager* get_ix_manager() { return ix_manager_; }
+    IxManager* get_ix_manager() { return &ix_manager; }
 
     /**
      * @brief 检查指定名称的数据库是否存在
@@ -230,8 +210,8 @@ class SmManager {
     void flush_to_disk() {
         for (const auto& [tab_name_, fh_] : fhs_) {
             auto&& file_hdr_ = fh_->get_file_hdr();
-            disk_manager_->write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char*)(&file_hdr_), sizeof(file_hdr_));
-            buffer_pool_manager_->flush_all_pages(fh_->GetFd());
+            disk_manager.write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char*)(&file_hdr_), sizeof(file_hdr_));
+            buffer_pool_manager.flush_all_pages(fh_->GetFd());
         }
     }
 
@@ -245,6 +225,6 @@ class SmManager {
     void draw_bplustree_graph();
 
     std::string get_index_name(const std::string& filename, const std::vector<std::string>& index_cols) {
-        return ix_manager_->get_index_name(filename, index_cols);
+        return ix_manager.get_index_name(filename, index_cols);
     }
 };

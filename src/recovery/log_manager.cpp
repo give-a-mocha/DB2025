@@ -13,6 +13,8 @@ See the Mulan PSL v2 for more details. */
 #include <cstring>
 #include <memory>
 
+extern DiskManager disk_manager;
+
 /**
  * @description: 添加日志记录到日志缓冲区中
  *
@@ -60,7 +62,7 @@ void LogManager::flush_log_to_disk_without_lock() {
     if (log_buffer_.offset_ == 0) return;  // 优化：避免不必要的磁盘写入
 
     // 将缓冲区内容写入磁盘
-    disk_manager_->write_log(log_buffer_.buffer_, static_cast<int>(log_buffer_.offset_));
+    disk_manager.write_log(log_buffer_.buffer_, static_cast<int>(log_buffer_.offset_));
     log_buffer_.reset();
 }
 
@@ -99,14 +101,14 @@ void LogManager::add_abort_log(txn_id_t txn_id) {
 
 std::vector<std::unique_ptr<LogRecord>> LogManager::read_logs_from_disk(size_t offset) {
     std::vector<std::unique_ptr<LogRecord>> log_records_;
-    const auto file_size_ = static_cast<size_t>(disk_manager_->get_file_size(LOG_FILE_NAME));
+    const auto file_size_ = static_cast<size_t>(disk_manager.get_file_size(LOG_FILE_NAME));
     if (file_size_ <= offset) return log_records_;  // 优化：早期返回
 
     // 优化：预估容器大小，减少重新分配
     log_records_.reserve((file_size_ - offset) / LOG_HEADER_SIZE);
 
     auto buffer = std::make_unique<char[]>(file_size_);
-    disk_manager_->read_log(buffer.get(), file_size_, static_cast<int>(offset));
+    disk_manager.read_log(buffer.get(), file_size_, static_cast<int>(offset));
 
     auto start_offset = offset;
     while (offset < file_size_) {

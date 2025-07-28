@@ -33,32 +33,12 @@
 #include "ix_index_handle.h"
 #include "system/sm_meta.h"
 
-/**
- * @brief 索引管理器类
- *
- * 提供了索引的创建、打开、关闭等操作：
- * 1. 文件管理
- *    - 创建索引文件
- *    - 删除索引文件
- *    - 打开/关闭索引文件
- *
- * 2. 文件组织
- *    - 维护文件头信息
- *    - 管理页面分配
- *    - 处理文件格式
- *
- * 3. 缓冲管理
- *    - 协调内存与磁盘交互
- *    - 处理页面固定和解固定
- */
-class IxManager {
-   private:
-    DiskManager *disk_manager_;               // 磁盘管理器
-    BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器
+extern DiskManager disk_manager;
+extern BufferPoolManager buffer_pool_manager;
 
+class IxManager {
    public:
-    IxManager(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager)
-        : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager) {}
+    IxManager() = default;
 
     /**
      * @brief 生成索引文件名
@@ -99,7 +79,7 @@ class IxManager {
         return exists_with_index_name(ix_name);
     }
 
-    bool exists_with_index_name(const std::string &ix_name) { return disk_manager_->is_file(ix_name); }
+    bool exists_with_index_name(const std::string &ix_name) { return disk_manager.is_file(ix_name); }
     /**
      * @brief 创建索引文件
      * @param filename 表名
@@ -128,9 +108,9 @@ class IxManager {
     void create_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
         std::string ix_name = get_index_name(filename, index_cols);
         // 创建索引文件
-        disk_manager_->create_file(ix_name);
+        disk_manager.create_file(ix_name);
         // 打开索引文件
-        int fd = disk_manager_->open_file(ix_name);
+        int fd = disk_manager.open_file(ix_name);
 
         // 创建文件头并写入文件
         // 理论上我们有：|页面头部大小| + (|属性总长度| + |记录ID大小|) * n <= 页面大小
@@ -163,7 +143,7 @@ class IxManager {
         char *data = new char[fhdr->tot_len_];
         fhdr->serialize(data);
 
-        disk_manager_->write_page(fd, IX_FILE_HDR_PAGE, data, fhdr->tot_len_);
+        disk_manager.write_page(fd, IX_FILE_HDR_PAGE, data, fhdr->tot_len_);
 
         char page_buf[PAGE_SIZE];  // 在内存中初始化page_buf中的内容，然后将其写入磁盘
         memset(page_buf, 0, PAGE_SIZE);
@@ -180,7 +160,7 @@ class IxManager {
                 .prev_leaf = IX_INIT_ROOT_PAGE,
                 .next_leaf = IX_INIT_ROOT_PAGE,
             };
-            disk_manager_->write_page(fd, IX_LEAF_HEADER_PAGE, page_buf, PAGE_SIZE);
+            disk_manager.write_page(fd, IX_LEAF_HEADER_PAGE, page_buf, PAGE_SIZE);
         }
         // 注意root node页号为2，也标记为叶子结点，其前一个/后一个叶子均指向leaf header
         // Create root node and write to file
@@ -196,10 +176,13 @@ class IxManager {
                 .next_leaf = IX_LEAF_HEADER_PAGE,
             };
             // Must write PAGE_SIZE here in case of future fetch_node()
-            disk_manager_->write_page(fd, IX_INIT_ROOT_PAGE, page_buf, PAGE_SIZE);
+            disk_manager.write_page(fd, IX_INIT_ROOT_PAGE, page_buf, PAGE_SIZE);
         }
+
+        disk_manager.set_fd2pageno(fd, IX_INIT_NUM_PAGES - 1);  // DEBUG
+
         // Close index file
-        disk_manager_->close_file(fd);
+        disk_manager.close_file(fd);
     }
 
     void destroy_index(const std::string &filename, const std::vector<ColMeta> &index_cols) {
@@ -212,7 +195,7 @@ class IxManager {
         destroy_index_with_index_name(ix_name);
     }
 
-    void destroy_index_with_index_name(const std::string &ix_name) { disk_manager_->destroy_file(ix_name); }
+    void destroy_index_with_index_name(const std::string &ix_name) { disk_manager.destroy_file(ix_name); }
 
     /**
      * @brief 打开索引文件并创建索引句柄
@@ -232,8 +215,8 @@ class IxManager {
     }
 
     std::unique_ptr<IxIndexHandle> open_index_with_index_name(const std::string &ix_name) {
-        int fd = disk_manager_->open_file(ix_name);
-        return std::make_unique<IxIndexHandle>(disk_manager_, buffer_pool_manager_, fd);
+        int fd = disk_manager.open_file(ix_name);
+        return std::make_unique<IxIndexHandle>(&disk_manager, &buffer_pool_manager, fd);
     }
 
     /**
@@ -244,10 +227,10 @@ class IxManager {
     void close_index(const IxIndexHandle *ih) {
         char *data = new char[ih->file_hdr_->tot_len_];
         ih->file_hdr_->serialize(data);
-        disk_manager_->write_page(ih->fd_, IX_FILE_HDR_PAGE, data, ih->file_hdr_->tot_len_);
+        disk_manager.write_page(ih->fd_, IX_FILE_HDR_PAGE, data, ih->file_hdr_->tot_len_);
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
-        buffer_pool_manager_->flush_all_pages(ih->fd_);
-        disk_manager_->close_file(ih->fd_);
+        buffer_pool_manager.flush_all_pages(ih->fd_);
+        disk_manager.close_file(ih->fd_);
         delete[] data;
     }
 
@@ -257,7 +240,7 @@ class IxManager {
      * @warning 关闭后不能再使用该索引句柄
      */
     void close_index_without_flush(const IxIndexHandle *ih) {
-        buffer_pool_manager_->delete_all_pages(ih->fd_);
-        disk_manager_->close_file(ih->fd_);
+        buffer_pool_manager.delete_all_pages(ih->fd_);
+        disk_manager.close_file(ih->fd_);
     }
 };

@@ -16,6 +16,9 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+
 /**
  * @brief 删除执行器，负责实现DELETE语句的功能
  */
@@ -26,21 +29,16 @@ class MvccDeleteExecutor : public AbstractExecutor {
     RmFileHandle *fh_;                                                             // 表的数据文件句柄
     std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表
     std::string tab_name_;                                                         // 表名
-    SmManager *sm_manager_;                                                        // 系统管理器指针
-    TransactionManager *txn_mgr_;                                                  // 事务管理器指针
 
    public:
-    MvccDeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
-                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context,
-                       TransactionManager *txn_mgr)
-        : tab_(sm_manager->db_.get_table(tab_name)) {
-        sm_manager_ = sm_manager;
+    MvccDeleteExecutor(const std::string &tab_name, std::vector<Condition> conds,
+                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
+        : tab_(sm_manager.db_.get_table(tab_name)) {
         tab_name_ = tab_name;
-        fh_ = sm_manager_->fhs_.at(tab_name).get();
+        fh_ = sm_manager.fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         old_recs_ = std::move(old_recs);
         context_ = context;
-        txn_mgr_ = txn_mgr;
     }
 
     /**
@@ -52,14 +50,14 @@ class MvccDeleteExecutor : public AbstractExecutor {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
             auto &rid = std::get<2>(rec_tuple);
-            auto link = txn_mgr_->GetUndoLink(fh_->GetFd(), rid);
+            auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid);
 
-            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+            if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), true);
-            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid, base_meta, new_meta, old_rec, nullptr,
-                                                  context_->txn_)) {
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_name_, fh_, rid, base_meta, new_meta, old_rec, nullptr,
+                                                    context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             // context_->log_mgr_->add_delete_log(context_->txn_->get_transaction_id(), std::move(old_rec), rid,

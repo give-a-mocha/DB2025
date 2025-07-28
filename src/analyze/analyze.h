@@ -42,6 +42,9 @@
 #include "common/common.h"
 #include "parser/parser.h"
 #include "system/sm.h"
+
+extern SmManager sm_manager;
+
 /**
  * @brief 查询对象类，表示经过语义分析的SQL语句
  */
@@ -83,20 +86,8 @@ class Query {
  * 数据库的元数据信息，如表结构、列类型等
  */
 class Analyze {
-   private:
-    SmManager *sm_manager_;  // 系统管理器，提供元数据访问
-
    public:
-    /**
-     * @brief 构造函数
-     * @param sm_manager 系统管理器指针
-     */
-    Analyze(SmManager *sm_manager) : sm_manager_(sm_manager) {}
-
-    /**
-     * @brief 析构函数
-     * @note 析构时不会释放sm_manager_，因为它是外部传入的
-     */
+    Analyze() = default;
     ~Analyze() = default;
 
     /**

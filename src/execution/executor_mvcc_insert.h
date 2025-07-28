@@ -19,18 +19,19 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+
 /**
  * @brief 插入执行器，负责实现INSERT语句的功能
  */
 class MvccInsertExecutor : public AbstractExecutor {
    private:
-    TabMeta &tab_;                 // 表的元数据
-    std::vector<Value> values_;    // 待插入的值列表
-    RmFileHandle *fh_;             // 表的数据文件句柄
-    std::string tab_name_;         // 表名
-    Rid rid_;                      // 插入记录的位置(插入成功后赋值)
-    SmManager *sm_manager_;        // 系统管理器指针
-    TransactionManager *txn_mgr_;  // 事务管理器指针
+    TabMeta &tab_;               // 表的元数据
+    std::vector<Value> values_;  // 待插入的值列表
+    RmFileHandle *fh_;           // 表的数据文件句柄
+    std::string tab_name_;       // 表名
+    Rid rid_;                    // 插入记录的位置(插入成功后赋值)
 
    public:
     /**
@@ -41,19 +42,16 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @param context 执行上下文
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
      */
-    MvccInsertExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Value> values, Context *context,
-                       TransactionManager *txn_mgr)
-        : tab_(sm_manager->db_.get_table(tab_name)) {
-        sm_manager_ = sm_manager;
+    MvccInsertExecutor(const std::string &tab_name, std::vector<Value> values, Context *context)
+        : tab_(sm_manager.db_.get_table(tab_name)) {
         values_ = values;
         tab_name_ = tab_name;
         // 检查插入值的数量是否与表的列数匹配
         if (values.size() != tab_.cols.size()) {
             throw InvalidValueCountError();
         }
-        fh_ = sm_manager_->fhs_.at(tab_name).get();
+        fh_ = sm_manager.fhs_.at(tab_name).get();
         context_ = context;
-        txn_mgr_ = txn_mgr;
     };
 
     /**
@@ -86,38 +84,38 @@ class MvccInsertExecutor : public AbstractExecutor {
             values_[i].init_raw(col.len);
             memcpy(rec->data + col.offset, values_[i].raw->data, col.len);
         }
-        std::vector<Rid> rids = sm_manager_->exist_in_index(tab_, rec, context_->txn_);
+        std::vector<Rid> rids = sm_manager.exist_in_index(tab_, rec, context_->txn_);
 
         // 唯一性检查
         TupleMeta base_meta_(0, true);
         for (const auto &rid : rids) {
-            auto [base_meta, old_rec, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid);
+            auto [base_meta, old_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
             base_meta_ = base_meta;
-            if (IsWriteWriteConflict(context_->txn_, txn_mgr_, link)) {
+            if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             // 主键冲突
             if (base_meta.is_deleted_ == false) {
-                txn_mgr_->abort(context_, context_->log_mgr_);
+                txn_manager.abort(context_, context_->log_mgr_);
                 throw InternalError("Primary key conflict, duplicate insert");
             }
         }
         TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         if (!rids.empty()) {
             rid_ = rids.back();
-            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta_, new_meta, nullptr, rec,
-                                                  context_->txn_)) {
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta_, new_meta, nullptr, rec,
+                                                    context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
         } else {
             rid_ = fh_->GetNewRid();
             TupleMeta base_meta(0, true);
-            if (!txn_mgr_->UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
-                                                  context_->txn_)) {
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
+                                                    context_->txn_)) {
                 fh_->delete_record(rid_);
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
-            sm_manager_->insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);
+            sm_manager.insert_index_with_tab_meta(tab_, rec, rid_, context_->txn_);
         }
         // context_->log_mgr_->add_insert_log(context_->txn_->get_transaction_id(), std::move(rec), rid_, tab_.name);
         return nullptr;

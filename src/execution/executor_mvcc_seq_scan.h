@@ -17,6 +17,9 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+
 /**
  * @brief 顺序扫描执行器，负责实现表的全表顺序扫描功能
  */
@@ -29,8 +32,6 @@ class MvccSeqScanExecutor : public AbstractExecutor {
     size_t len_;                     // 记录总长度(字节)
     Rid rid_;                        // 当前记录的RID
     std::unique_ptr<RecScan> scan_;  // 表扫描迭代器
-    SmManager *sm_manager_;          // 系统管理器指针
-    TransactionManager *txn_mgr_;    // 事务管理器指针
     std::unique_ptr<RmRecord> rec_;  // 当前记录的智能指针
     TupleMeta tuple_meta_;           // 元组元数据，用于存储列信息
 
@@ -42,22 +43,19 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @param conds 过滤条件列表
      * @param context 执行上下文
      */
-    MvccSeqScanExecutor(SmManager *sm_manager, std::string tab_name, std::vector<Condition> conds, Context *context,
-                        TransactionManager *txn_mgr) {
-        sm_manager_ = sm_manager;
+    MvccSeqScanExecutor(std::string tab_name, std::vector<Condition> conds, Context *context) {
         tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
 
         // 获取表信息
-        TabMeta &tab = sm_manager_->db_.get_table(tab_name_);
-        fh_ = sm_manager_->fhs_.at(tab_name_).get();
+        TabMeta &tab = sm_manager.db_.get_table(tab_name_);
+        fh_ = sm_manager.fhs_.at(tab_name_).get();
         cols_ = tab.cols;
 
         // 计算记录长度
         len_ = cols_.back().offset + cols_.back().len;
 
         context_ = context;
-        txn_mgr_ = txn_mgr;
     }
 
     /**
@@ -72,8 +70,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找第一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
-            auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
+            auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
+            auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
@@ -105,8 +103,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
         // 查找下一个满足条件的记录
         while (!scan_->is_end()) {
             rid_ = scan_->rid();
-            auto [base_meta, base_tuple, link] = txn_mgr_->GetTupleAndUndoLink(fh_, rid_);
-            auto undologs = txn_mgr_->CollectUndoLogs(rid_, link, context_->txn_);
+            auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
+            auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
             INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {

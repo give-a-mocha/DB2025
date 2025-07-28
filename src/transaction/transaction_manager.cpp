@@ -28,6 +28,9 @@
 #include "system/sm_manager.h"
 #include "execution/executor_abstract.h"
 
+extern SmManager sm_manager;
+extern LockManager lock_manager;
+
 std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
 
 /**
@@ -37,13 +40,7 @@ std::unordered_map<txn_id_t, Transaction*> TransactionManager::txn_map = {};
  * @param sm_manager 系统管理器指针，用于访问数据库资源
  * @param concurrency_mode 并发控制模式，默认为两阶段封锁
  */
-TransactionManager::TransactionManager(LockManager* lock_manager, SmManager* sm_manager,
-                                       ConcurrencyMode concurrency_mode) {
-    // 初始化成员变量
-    lock_manager_ = lock_manager;
-    sm_manager_ = sm_manager;
-    concurrency_mode_ = concurrency_mode;
-}
+TransactionManager::TransactionManager(ConcurrencyMode concurrency_mode) { concurrency_mode_ = concurrency_mode; }
 
 /**
  * @description: 事务的开始方法
@@ -141,7 +138,7 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
         const auto table_name = (*write_set)[i]->GetTableName();
         const auto rid = (*write_set)[i]->GetRid();
         const UndoLog* undolog = txn->GetUndoLog(i);
-        std::unique_ptr<RmFileHandle>& fh_ = sm_manager_->fhs_.at(table_name);
+        std::unique_ptr<RmFileHandle>& fh_ = sm_manager.fhs_.at(table_name);
 
         DeleteUndoLink(fh_->GetFd(), rid, context->txn_);
         if (undolog->is_deleted_) {
@@ -172,11 +169,11 @@ void TransactionManager::abort(Context* context, LogManager* log_manager) {
     //     lock_manager_->unlock(txn, lock);
     // }
 
-    auto lock_gap_set = txn->get_lock_gap_set();
-    auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
-    for (const int& tab_fd : lock_gap_set_copy) {
-        lock_manager_->unlock_gap(txn, tab_fd);
-    }
+    // auto lock_gap_set = txn->get_lock_gap_set();
+    // auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
+    // for (const int& tab_fd : lock_gap_set_copy) {
+    //     lock_manager.unlock_gap(txn, tab_fd);
+    // }
 
     txn->clear_lock_set();
     txn->set_state(TransactionState::ABORTED);
@@ -391,7 +388,7 @@ void TransactionManager::GarbageCollection() {
 
     // 第四阶段：刷新到磁盘
     if (!expired_txns.empty()) {
-        sm_manager_->flush_to_disk();
+        sm_manager.flush_to_disk();
     }
 }
 

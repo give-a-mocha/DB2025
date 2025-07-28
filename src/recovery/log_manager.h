@@ -23,6 +23,8 @@ See the Mulan PSL v2 for more details. */
 #include "log_defs.h"
 #include "record/rm_defs.h"
 
+extern DiskManager disk_manager;
+
 /* 日志记录对应操作的类型 */
 enum LogType : int { UPDATE = 0, INSERT, DELETE, BEGIN, COMMIT, ABORT };
 
@@ -344,10 +346,9 @@ class LogManager {
    private:
     mutable std::mutex latch_;  // 用于对log_buffer_的互斥访问
     LogBuffer log_buffer_;      // 日志缓冲区
-    DiskManager* disk_manager_;
 
    public:
-    LogManager(DiskManager* disk_manager) : disk_manager_(disk_manager) {}
+    LogManager() = default;
 
     void add_log_to_buffer(LogRecord* log_record);
 

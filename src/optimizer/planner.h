@@ -44,13 +44,13 @@
 #include "record/rm.h"
 #include "system/sm.h"
 
+extern SmManager sm_manager;
+
 /**
  * @brief 查询计划生成器类
  */
 class Planner {
    private:
-    SmManager *sm_manager_;  // 系统管理器指针
-
     bool enable_nestedloop_join = true;  // 是否启用嵌套循环连接
     bool enable_sortmerge_join = false;  // 是否启用排序合并连接
 
@@ -59,7 +59,7 @@ class Planner {
      * @brief Planner 类的构造函数。
      * @param sm_manager 系统管理器对象的指针。
      */
-    Planner(SmManager *sm_manager) : sm_manager_(sm_manager) {}
+    Planner() = default;
 
     /**
      * @brief 为给定的查询生成执行计划。

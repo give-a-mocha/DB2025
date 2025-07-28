@@ -85,10 +85,10 @@ class AggregateExecutor : public AbstractExecutor {
      * @brief 开始元组遍历，执行聚合操作
      */
     void beginTuple() override {
-        prev_->beginTuple();
-
         // 检查前一个执行器是否为分组执行器
-        if (auto group_executor = dynamic_cast<GroupExecutor*>(prev_.get())) {
+        if (prev_->getType() == "GroupExecutor") {
+            auto group_executor = static_cast<GroupExecutor*>(prev_.get());
+            group_executor->beginTuple();
             // 对每个分组执行聚合操作
             for (const auto& group : group_executor->grouped_records) {
                 auto record = aggregateGroup(group.second);
@@ -99,9 +99,8 @@ class AggregateExecutor : public AbstractExecutor {
         } else {
             // 没有分组，对所有记录执行聚合操作
             std::vector<std::unique_ptr<RmRecord>> records;
-            while (!prev_->is_end()) {
-                records.push_back(prev_->Next());
-                prev_->nextTuple();
+            for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
+                records.push_back(std::move(prev_->Next()));
             }
             auto record = aggregateGroup(records);
             if (record) {

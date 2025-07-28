@@ -24,6 +24,10 @@
 #include "index/ix.h"
 #include "record_printer.h"
 
+extern SmManager sm_manager;
+extern TransactionManager txn_manager;
+extern RecoveryManager recovery_manager;
+
 /**
  * @brief SQL命令帮助信息
  * 包含所有支持的SQL语法说明，包括：
@@ -71,19 +75,19 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     auto x = std::static_pointer_cast<DDLPlan>(plan);
     switch (x->tag) {
         case PlanTag::T_CreateTable: {
-            sm_manager_->create_table(x->tab_name_, x->cols_, context);
+            sm_manager.create_table(x->tab_name_, x->cols_, context);
             break;
         }
         case PlanTag::T_DropTable: {
-            sm_manager_->drop_table(x->tab_name_, context);
+            sm_manager.drop_table(x->tab_name_, context);
             break;
         }
         case PlanTag::T_CreateIndex: {
-            sm_manager_->create_index(x->tab_name_, x->tab_col_names_, context);
+            sm_manager.create_index(x->tab_name_, x->tab_col_names_, context);
             break;
         }
         case PlanTag::T_DropIndex: {
-            sm_manager_->drop_index(x->tab_name_, x->tab_col_names_, context);
+            sm_manager.drop_index(x->tab_name_, x->tab_col_names_, context);
             break;
         }
         default:
@@ -108,17 +112,17 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
             break;
         }
         case PlanTag::T_ShowTable: {
-            sm_manager_->show_tables(context);
+            sm_manager.show_tables(context);
             break;
         }
         case PlanTag::T_ShowIndex: {
             auto x = std::static_pointer_cast<OtherPlan>(plan);
-            sm_manager_->show_index(x->tab_name_, context);
+            sm_manager.show_index(x->tab_name_, context);
             break;
         }
         case PlanTag::T_DescTable: {
             auto x = std::static_pointer_cast<OtherPlan>(plan);
-            sm_manager_->desc_table(x->tab_name_, context);
+            sm_manager.desc_table(x->tab_name_, context);
             break;
         }
         case PlanTag::T_Transaction_begin: {
@@ -127,29 +131,29 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
             break;
         }
         case PlanTag::T_Transaction_commit: {
-            context->txn_ = txn_mgr_->get_transaction(*txn_id);
-            txn_mgr_->commit(context->txn_, context->log_mgr_);
-            // if (txn_mgr_->should_perform_gc()) {
+            context->txn_ = txn_manager.get_transaction(*txn_id);
+            txn_manager.commit(context->txn_, context->log_mgr_);
+            // if (txn_manager.should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
-            //     txn_mgr_->GarbageCollection();
+            //     txn_manager.GarbageCollection();
             // }
             break;
         }
         case PlanTag::T_Transaction_rollback: {
-            context->txn_ = txn_mgr_->get_transaction(*txn_id);
-            txn_mgr_->abort(context, context->log_mgr_);
-            // if (txn_mgr_->should_perform_gc()) {
+            context->txn_ = txn_manager.get_transaction(*txn_id);
+            txn_manager.abort(context, context->log_mgr_);
+            // if (txn_manager.should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
-            //     txn_mgr_->GarbageCollection();
+            //     txn_manager.GarbageCollection();
             // }
             break;
         }
         case PlanTag::T_Transaction_abort: {
-            context->txn_ = txn_mgr_->get_transaction(*txn_id);
-            txn_mgr_->abort(context, context->log_mgr_);
-            // if (txn_mgr_->should_perform_gc()) {
+            context->txn_ = txn_manager.get_transaction(*txn_id);
+            txn_manager.abort(context, context->log_mgr_);
+            // if (txn_manager.should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
-            //     txn_mgr_->GarbageCollection();
+            //     txn_manager.GarbageCollection();
             // }
             break;
         }
@@ -157,34 +161,16 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
             // recovery_manager_->create_static_check_point();
             break;
         }
-        case PlanTag::T_SetKnob: {
-            auto x = std::static_pointer_cast<SetKnobPlan>(plan);
-            switch (x->set_knob_type_) {
-                case ast::SetKnobType::EnableNestLoop: {
-                    planner_->set_enable_nestedloop_join(x->bool_value_);
-                    break;
-                }
-                case ast::SetKnobType::EnableSortMerge: {
-                    planner_->set_enable_sortmerge_join(x->bool_value_);
-                    break;
-                }
-                default: {
-                    throw RMDBError("Not implemented!\n");
-                    break;
-                }
-            }
-            break;
-        }
         case PlanTag::T_LOAD: {
             auto x = std::static_pointer_cast<LoadPlan>(plan);
             // Load数据到表中
-            sm_manager_->load_csv_data_auto(x->table_name_, x->file_path_, context->txn_);
+            sm_manager.load_csv_data_auto(x->table_name_, x->file_path_, context->txn_);
             break;
         }
         case PlanTag::T_SetOutput: {
             auto x = std::static_pointer_cast<SetOutputPlan>(plan);
             // 设置输出文件
-            sm_manager_->set_output_file(x->enable_);
+            sm_manager.set_output_file(x->enable_);
             break;
         }
         default:
@@ -220,7 +206,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     rec_printer.print_separator(context);
     // print header into file
     std::fstream outfile;
-    if (sm_manager_->is_output_file_) {
+    if (sm_manager.is_output_file_) {
         outfile.open("output.txt", std::ios::out | std::ios::app);
         outfile << "|";
         for (std::size_t i = 0; i < captions.size(); ++i) {
@@ -258,7 +244,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         // print record into buffer
         rec_printer.print_record(columns, context);
         // print record into file
-        if (sm_manager_->is_output_file_) {
+        if (sm_manager.is_output_file_) {
             outfile << "|";
             for (const std::string &column : columns) {
                 outfile << " " << column << " |";
@@ -267,7 +253,7 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
         }
         num_rec++;
     }
-    if (sm_manager_->is_output_file_) {
+    if (sm_manager.is_output_file_) {
         outfile.close();
     }
     // Print footer into buffer

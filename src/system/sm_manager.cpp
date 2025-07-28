@@ -38,6 +38,11 @@
 #include "record_printer.h"
 #include "record/rm_file_handle.h"
 
+extern DiskManager disk_manager;
+extern BufferPoolManager buffer_pool_manager;
+extern RmManager rm_manager;
+extern IxManager ix_manager;
+
 /**
  * @brief 判断指定路径是否为一个文件夹
  *
@@ -82,7 +87,7 @@ void SmManager::create_db(const std::string& db_name) {
     delete new_db;
 
     // 创建日志文件
-    disk_manager_->create_file(LOG_FILE_NAME);
+    disk_manager.create_file(LOG_FILE_NAME);
 
     // 回到根目录
     if (chdir("..") < 0) {
@@ -138,10 +143,10 @@ void SmManager::open_db(const std::string& db_name) {
 
     // 打开所有表的文件句柄
     for (auto& [table_name, table_info] : db_.tabs_) {
-        fhs_.emplace(table_name, rm_manager_->open_file(table_name));
+        fhs_.emplace(table_name, rm_manager.open_file(table_name));
         for (auto& index : table_info.indexes) {
-            auto&& index_name = ix_manager_->get_index_name(table_name, index.cols);
-            ihs_.emplace(index_name, ix_manager_->open_index_with_index_name(index_name));
+            auto&& index_name = ix_manager.get_index_name(table_name, index.cols);
+            ihs_.emplace(index_name, ix_manager.open_index_with_index_name(index_name));
         }
     }
 }
@@ -178,12 +183,12 @@ void SmManager::close_db() {
     // 1. 先关闭所有表文件并确保数据写入磁盘
     for (const auto& [table_name, file_handle] : fhs_) {
         // 使用close_file_and_clear_buffer确保数据完全写入并清理缓冲区
-        rm_manager_->close_file_and_clear_buffer(file_handle.get());
+        rm_manager.close_file_and_clear_buffer(file_handle.get());
     }
 
     // 2. 关闭所有索引文件
     for (const auto& [index_name, index_handle] : ihs_) {
-        ix_manager_->close_index(index_handle.get());
+        ix_manager.close_index(index_handle.get());
     }
 
     // 3. 最后刷新并保存元数据
@@ -335,13 +340,13 @@ void SmManager::create_table(const std::string& tab_name, const std::vector<ColD
     // 4. 创建表的物理文件
     // record_size表示每条记录的大小，等于所有字段长度之和
     int record_size = curr_offset;
-    rm_manager_->create_file(tab_name, record_size);
+    rm_manager.create_file(tab_name, record_size);
 
     // 5. 更新数据库元数据
     db_.tabs_[tab_name] = tab;
 
     // 6. 打开表文件，创建文件句柄
-    fhs_.emplace(tab_name, rm_manager_->open_file(tab_name));
+    fhs_.emplace(tab_name, rm_manager.open_file(tab_name));
 
     // 7. 持久化元数据变更
     flush_meta();
@@ -376,13 +381,13 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
     // 5. 关闭表文件并清理资源
     if (fhs_.count(tab_name)) {
         // 关闭文件并清理缓冲池中的相关页面
-        rm_manager_->close_file_and_clear_buffer(fhs_[tab_name].get());
+        rm_manager.close_file_and_clear_buffer(fhs_[tab_name].get());
         // 从文件句柄映射中移除
         fhs_.erase(tab_name);
     }
 
     // 6. 删除表的物理文件
-    rm_manager_->destroy_file(tab_name);
+    rm_manager.destroy_file(tab_name);
 
     // 7. 更新数据库元数据
     db_.tabs_.erase(tab_name);
@@ -403,10 +408,10 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     // 1. 获取表的元数据并验证
     TabMeta& tab = db_.get_table(tab_name);
 
-    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
+    auto&& index_name = ix_manager.get_index_name(tab_name, col_names);
 
     // 2. 检查索引是否已存在
-    if (ix_manager_->exists_with_index_name(index_name)) {
+    if (ix_manager.exists_with_index_name(index_name)) {
         throw IndexExistsError(tab_name, col_names);
     }
 
@@ -420,9 +425,9 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
     }
 
     // 4. 创建和打开索引文件
-    auto fh_ = fhs_[tab_name].get();                                 // 获取表的文件句柄
-    ix_manager_->create_index(tab_name, cols);                       // 创建索引文件
-    auto ih_ = ix_manager_->open_index_with_index_name(index_name);  // 打开索引文件
+    auto fh_ = fhs_[tab_name].get();                               // 获取表的文件句柄
+    ix_manager.create_index(tab_name, cols);                       // 创建索引文件
+    auto ih_ = ix_manager.open_index_with_index_name(index_name);  // 打开索引文件
 
     // 5. 为索引键分配缓冲区
     std::vector<char> key_buffer(tot_col_len);  // 存储组合索引键的缓冲区
@@ -476,19 +481,19 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
  */
 void SmManager::drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
     //! DO
-    auto&& index_name = ix_manager_->get_index_name(tab_name, col_names);
-    if (!ix_manager_->exists_with_index_name(index_name)) {
+    auto&& index_name = ix_manager.get_index_name(tab_name, col_names);
+    if (!ix_manager.exists_with_index_name(index_name)) {
         throw IndexNotFoundError(tab_name, col_names);
     }
     // 关闭并删除索引文件
     auto it = ihs_.find(index_name);
     if (it != ihs_.end()) {
         // 如果已经打开从缓冲池中删掉，并关闭文件
-        ix_manager_->close_index_without_flush(it->second.get());
+        ix_manager.close_index_without_flush(it->second.get());
         ihs_.erase(it);
     }
     // 删除索引文件
-    ix_manager_->destroy_index_with_index_name(index_name);
+    ix_manager.destroy_index_with_index_name(index_name);
     // 从表的元数据中删除索引
     TabMeta& tab = db_.get_table(tab_name);
     auto index = tab.get_index_meta(col_names);

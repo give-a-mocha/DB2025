@@ -27,6 +27,8 @@
 #include "index/ix.h"
 #include "record_printer.h"
 
+extern SmManager sm_manager;
+
 // 实现最左匹配原则的索引匹配规则
 /**
  * @brief 根据查询条件选择最优索引
@@ -43,12 +45,12 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
     //     if(cond.is_rhs_val && cond.op == OP_EQ && cond.lhs_col.tab_name.compare(tab_name) == 0)
     //         index_col_names.push_back(cond.lhs_col.col_name);
     // }
-    // TabMeta& tab = sm_manager_->db_.get_table(tab_name);
+    // TabMeta& tab = sm_manager.db_.get_table(tab_name);
     // if(tab.is_index(index_col_names)) return true;
     // return false;
     TRACE_FUNCTION
     index_col_names.clear();
-    TabMeta &tab = sm_manager_->db_.get_table(tab_name);
+    TabMeta &tab = sm_manager.db_.get_table(tab_name);
     if (tab.indexes.empty()) {
         return false;
     }
@@ -426,10 +428,10 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 
             if (index_exist == false) {  // 该表没有索引
                 index_col_names.clear();
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, x->tab_name,
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, &sm_manager, x->tab_name,
                                                                   query->conds, index_col_names);
             } else {  // 存在索引
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, x->tab_name,
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, &sm_manager, x->tab_name,
                                                                   query->conds, index_col_names);
             }
 
@@ -449,10 +451,10 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 
             if (index_exist == false) {  // 该表没有索引
                 index_col_names.clear();
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_,
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, &sm_manager,
                                                                   x->tab_name->tab_name, query->conds, index_col_names);
             } else {  // 存在索引
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_,
+                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, &sm_manager,
                                                                   x->tab_name->tab_name, query->conds, index_col_names);
             }
             plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Update, table_scan_executors, x->tab_name->tab_name,
@@ -489,9 +491,9 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
 size_t Planner::get_table_cardinality(const std::string &tab_name) {
     TRACE_FUNCTION
     // 通过文件句柄获取表的记录数量
-    auto it = sm_manager_->fhs_.find(tab_name);
+    auto it = sm_manager.fhs_.find(tab_name);
     size_t res = 0;
-    if (it != sm_manager_->fhs_.end()) {
+    if (it != sm_manager.fhs_.end()) {
         res = it->second->get_file_hdr().record_num;
     }
     return res;
@@ -509,7 +511,7 @@ size_t Planner::get_table_cardinality(const std::string &tab_name) {
 int Planner::get_table_col_num(const std::string &tab_name) {
     TRACE_FUNCTION
     // 获取表的列数
-    auto it = sm_manager_->db_.get_table(tab_name);
+    auto it = sm_manager.db_.get_table(tab_name);
     if (it.cols.empty()) {
         return 0;  // 如果表不存在或没有列，返回0
     }
@@ -555,10 +557,10 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
         if (index_exist == false) {  // 该表没有索引
             index_col_names.clear();
             scan_plan =
-                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, tables[i], curr_conds, index_col_names);
+                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, &sm_manager, tables[i], curr_conds, index_col_names);
         } else {  // 存在索引
             scan_plan =
-                std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, tables[i], curr_conds, index_col_names);
+                std::make_shared<ScanPlan>(PlanTag::T_IndexScan, &sm_manager, tables[i], curr_conds, index_col_names);
         }
         table_plans_with_cardinality[i] = {std::move(scan_plan), cardinality};
     }
@@ -572,9 +574,9 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
         if (index_exist == false) {  // 该表没有索引
             index_col_names.clear();
             scan_plan =
-                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, sm_manager_, node.tab_name, curr_conds, index_col_names);
+                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, &sm_manager, node.tab_name, curr_conds, index_col_names);
         } else {  // 存在索引
-            scan_plan = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, sm_manager_, node.tab_name, curr_conds,
+            scan_plan = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, &sm_manager, node.tab_name, curr_conds,
                                                    index_col_names);
         }
         semi_join_plans.emplace_back(std::move(scan_plan));
