@@ -91,12 +91,12 @@ class MvccInsertExecutor : public AbstractExecutor {
         for (const auto &rid : rids) {
             auto [base_meta, old_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
             base_meta_ = base_meta;
-            if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
+            if (IsWriteWriteConflict(context_->txn_,  link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             // 主键冲突
             if (base_meta.is_deleted_ == false) {
-                txn_manager.abort(context_, context_->log_mgr_);
+                txn_manager.abort(context_);
                 throw InternalError("Primary key conflict, duplicate insert");
             }
         }

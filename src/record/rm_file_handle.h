@@ -32,6 +32,9 @@
 #include "rm_defs.h"
 #include "storage/page_guard.h"
 
+extern DiskManager disk_manager;
+extern BufferPoolManager buffer_pool_manager;
+
 class RmManager;
 
 /**
@@ -116,8 +119,6 @@ class RmFileHandle {
     friend class SmManager;  // 允许系统管理器访问内部成员
 
    private:
-    DiskManager *disk_manager_;               // 磁盘管理器，负责文件的创建、删除和读写
-    BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，负责页面的缓存和淘汰
     int fd_;                                  // 文件描述符，唯一标识打开的文件
     RmFileHdr file_hdr_;                      // 文件头结构，包含：
                                               // - record_size: 记录大小
@@ -137,13 +138,13 @@ class RmFileHandle {
      * @warning 确保文件头页面(page_no=0)已经正确初始化，
      * 否则可能导致文件结构损坏
      */
-    RmFileHandle(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager, int fd)
-        : disk_manager_(disk_manager), buffer_pool_manager_(buffer_pool_manager), fd_(fd) {
+    RmFileHandle(int fd)
+        :fd_(fd) {
         // 1. 从磁盘读取文件头信息到内存中
-        disk_manager_->read_page(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr_, sizeof(file_hdr_));
+        disk_manager.read_page(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr_, sizeof(file_hdr_));
 
         // 2. 设置页面分配的起始编号，确保不会重复分配已使用的页面号
-        disk_manager_->set_fd2pageno(fd, file_hdr_.num_pages);
+        disk_manager.set_fd2pageno(fd, file_hdr_.num_pages);
     }
 
     const RmFileHdr &get_file_hdr() const { return file_hdr_; }

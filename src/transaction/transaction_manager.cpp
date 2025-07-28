@@ -48,7 +48,7 @@ TransactionManager::TransactionManager(ConcurrencyMode concurrency_mode) { concu
  * @param {Transaction*} txn 事务指针，空指针代表需要创建新事务，否则开始已有事务
  * @param {LogManager*} log_manager 日志管理器指针
  */
-Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager) {
+Transaction* TransactionManager::begin(Transaction* txn) {
     // Todo:
     // 1. 判断传入事务参数是否为空指针
     // 2. 如果为空指针，创建新事务
@@ -78,7 +78,7 @@ Transaction* TransactionManager::begin(Transaction* txn, LogManager* log_manager
  * @param {Transaction*} txn 需要提交的事务
  * @param {LogManager*} log_manager 日志管理器指针
  */
-void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
+void TransactionManager::commit(Transaction* txn) {
     // Todo:
     // 1. 如果存在未提交的写操作，提交所有的写操作
     // 2. 释放所有锁
@@ -122,7 +122,7 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
  * @param {Transaction *} txn 需要回滚的事务
  * @param {LogManager} *log_manager 日志管理器指针
  */
-void TransactionManager::abort(Context* context, LogManager* log_manager) {
+void TransactionManager::abort(Context* context) {
     // Todo:
     // 1. 回滚所有写操作
     // 2. 释放所有锁

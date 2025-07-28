@@ -105,7 +105,7 @@ void SetTransaction(txn_id_t *txn_id, Context *context) {
     // 如果事务对象为空 或者已提交 或者已中止， 则创建新事务
     if (context->txn_ == nullptr || context->txn_->get_state() == TransactionState::COMMITTED ||
         context->txn_->get_state() == TransactionState::ABORTED) {
-        context->txn_ = txn_manager.begin(nullptr, context->log_mgr_);
+        context->txn_ = txn_manager.begin(nullptr);
         *txn_id = context->txn_->get_transaction_id();
     }
 }
@@ -194,7 +194,7 @@ void *client_handler(void *sock_fd) {
         offset = 0;
 
         // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
-        auto context = std::make_unique<Context>(&lock_manager, &log_manager, nullptr, data_send, &offset);
+        auto context = std::make_unique<Context>(nullptr, data_send, &offset);
         SetTransaction(&txn_id, context.get());
 
         // 用于判断是否已经调用了yy_delete_buffer来删除buf
@@ -212,8 +212,8 @@ void *client_handler(void *sock_fd) {
                     // 优化器
                     std::shared_ptr<Plan> plan = optimizer.plan_query(query, context.get());
                     // portal
-                    std::shared_ptr<PortalStmt> portalStmt = portal.start(plan, context.get(), &txn_manager);
-                    portal.run(portalStmt, &ql_manager, &txn_id, context.get());
+                    std::shared_ptr<PortalStmt> portalStmt = portal.start(plan, context.get());
+                    portal.run(portalStmt, &txn_id, context.get());
                     portal.drop();
                 } catch (TransactionAbortException &e) {
                     // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
@@ -223,7 +223,7 @@ void *client_handler(void *sock_fd) {
                     offset = str.length();
 
                     // 回滚事务
-                    txn_manager.abort(context.get(), &log_manager);
+                    txn_manager.abort(context.get());
                     // if (txn_manager->should_perform_gc()) {
                     //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
                     //     txn_manager->GarbageCollection();
@@ -286,7 +286,7 @@ void *client_handler(void *sock_fd) {
         }
         // 如果是单挑语句，需要按照一个完整的事务来执行，所以执行完当前语句后，自动提交事务
         if (context->txn_ != nullptr && context->txn_->get_txn_mode() == false) {
-            txn_manager.commit(context->txn_, context->log_mgr_);
+            txn_manager.commit(context->txn_);
             // if (txn_manager->should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
             //     txn_manager->GarbageCollection();

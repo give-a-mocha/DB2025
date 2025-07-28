@@ -35,6 +35,9 @@
 #include "ix_defs.h"
 #include "transaction/transaction.h"
 
+extern DiskManager disk_manager;
+extern BufferPoolManager buffer_pool_manager;
+
 /**
  * @brief 索引操作的类型枚举
  */
@@ -323,8 +326,6 @@ class IxIndexHandle {
      * - 页面2：根节点页面(初始化时)
      * - 页面3+：数据节点页面
      */
-    DiskManager *disk_manager_;               // 磁盘管理器，处理页面的物理读写
-    BufferPoolManager *buffer_pool_manager_;  // 缓冲池管理器，提供页面缓存
     int fd_;                                  // 索引文件描述符
     IxFileHdr *file_hdr_;                     // 索引文件头指针，包含：
                                               // - 根页面号
@@ -342,7 +343,7 @@ class IxIndexHandle {
      * @param buffer_pool_manager 缓冲池管理器
      * @param fd 索引文件描述符
      */
-    IxIndexHandle(DiskManager *disk_manager, BufferPoolManager *buffer_pool_manager, int fd);
+    IxIndexHandle(int fd);
 
     /**
      * @brief 根据键值查找对应的记录ID

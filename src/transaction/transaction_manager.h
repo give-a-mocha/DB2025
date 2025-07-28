@@ -26,6 +26,7 @@ See the Mulan PSL v2 for more details. */
 
 extern SmManager sm_manager;
 extern LockManager lock_manager;
+extern LogManager log_manager;
 
 /* 系统采用的并发控制算法，当前题目中要求两阶段封锁并发控制算法 */
 enum class ConcurrencyMode {
@@ -91,11 +92,11 @@ class TransactionManager {
 
     ~TransactionManager() = default;
 
-    Transaction *begin(Transaction *txn, LogManager *log_manager);
+    Transaction *begin(Transaction *txn);
 
-    void commit(Transaction *txn, LogManager *log_manager);
+    void commit(Transaction *txn);
 
-    void abort(Context *context, LogManager *log_manager);
+    void abort(Context *context);
 
     ConcurrencyMode get_concurrency_mode() { return concurrency_mode_; }
 

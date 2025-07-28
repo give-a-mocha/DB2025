@@ -52,7 +52,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
             auto &rid = std::get<2>(rec_tuple);
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid);
 
-            if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
+            if (IsWriteWriteConflict(context_->txn_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), true);

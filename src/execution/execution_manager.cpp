@@ -132,7 +132,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
         }
         case PlanTag::T_Transaction_commit: {
             context->txn_ = txn_manager.get_transaction(*txn_id);
-            txn_manager.commit(context->txn_, context->log_mgr_);
+            txn_manager.commit(context->txn_);
             // if (txn_manager.should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
             //     txn_manager.GarbageCollection();
@@ -141,7 +141,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
         }
         case PlanTag::T_Transaction_rollback: {
             context->txn_ = txn_manager.get_transaction(*txn_id);
-            txn_manager.abort(context, context->log_mgr_);
+            txn_manager.abort(context);
             // if (txn_manager.should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
             //     txn_manager.GarbageCollection();
@@ -150,7 +150,7 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
         }
         case PlanTag::T_Transaction_abort: {
             context->txn_ = txn_manager.get_transaction(*txn_id);
-            txn_manager.abort(context, context->log_mgr_);
+            txn_manager.abort(context);
             // if (txn_manager.should_perform_gc()) {
             //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
             //     txn_manager.GarbageCollection();
