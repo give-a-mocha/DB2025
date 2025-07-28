@@ -33,8 +33,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     Rid rid_;                       // 当前记录ID
     // std::unique_ptr<IxScan> scan_;  // 扫描迭代器
     std::unique_ptr<IxScanFinal> scan_;
-    SmManager *sm_manager_;  // 系统管理器
-    TransactionManager *txn_mgr_;
+    // SmManager *sm_manager_;  // 系统管理器
+    // TransactionManager *txn_mgr_;
     std::unique_ptr<RmRecord> rec_;  // 当前记录
     TupleMeta tuple_meta_;           // 元组元数据
     Iid lower_iid;                   // 索引下界
@@ -164,7 +164,7 @@ class MvccIndexScanExecutor : public AbstractExecutor {
         if (scan_) {
             scan_->reset();  // 如果扫描器已存在，重置游标
         } else {
-            scan_ = std::make_unique<IxScanFinal>(ih_, lower_iid, upper_iid, sm_manager_->get_bpm());
+            scan_ = std::make_unique<IxScanFinal>(ih_, lower_iid, upper_iid);
         }
         // 移动到第一个满足条件的记录
         while (!is_end()) {

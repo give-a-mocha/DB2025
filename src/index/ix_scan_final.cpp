@@ -11,12 +11,11 @@ See the Mulan PSL v2 for more details. */
 #include "ix_scan_final.h"
 #include "ix_index_handle.h"
 
-IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm)
-    : ih_(ih), bpm_(bpm) {
+IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper) : ih_(ih) {
     if (lower == upper) return;
 
     Iid iid = lower;
-    Page *page = bpm_->fetch_page({ih_->fd_, iid.page_no});
+    Page *page = buffer_pool_manager.fetch_page({ih_->fd_, iid.page_no});
     page->RLatch();
     while (true) {
         auto node = IxNodeHandle(ih_->file_hdr_, page);
@@ -33,15 +32,15 @@ IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &u
 
         if (iid == upper) {
             page->RUnlatch();
-            bpm_->unpin_page(page->get_page_id(), false);
+            buffer_pool_manager.unpin_page(page->get_page_id(), false);
             break;
         }
 
-        Page *next_page = bpm_->fetch_page({ih_->fd_, next_page_no});
+        Page *next_page = buffer_pool_manager.fetch_page({ih_->fd_, next_page_no});
         next_page->RLatch();
 
         page->RUnlatch();
-        bpm_->unpin_page(page->get_page_id(), false);
+        buffer_pool_manager.unpin_page(page->get_page_id(), false);
 
         page = next_page;
         iid.page_no = next_page_no;

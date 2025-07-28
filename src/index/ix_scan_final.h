@@ -15,13 +15,14 @@
 #include "ix_index_handle.h"
 #include "ix.h"
 
+extern BufferPoolManager buffer_pool_manager;
+
 /**
  * @brief B+树索引扫描器类 (优化的版本)
  * @details 构造时预加载所有匹配的RID到内存中，提高扫描性能
  */
 class IxScanFinal : public RecScan {
     const IxIndexHandle *ih_;  // 索引句柄指针
-    BufferPoolManager *bpm_;   // 缓冲池管理器
 
    private:
     std::vector<Rid> rids_;  // 用于缓存扫描结果的RID
@@ -35,7 +36,7 @@ class IxScanFinal : public RecScan {
      * @param upper 扫描终止位置
      * @param bpm 缓冲池管理器
      */
-    IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm);
+    IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &upper);
 
     /**
      * @brief 析构函数，确保正确释放页面资源

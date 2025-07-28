@@ -23,7 +23,7 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
 auto ReconstructTuple(std::unique_ptr<RmRecord> base_tuple, const TupleMeta &base_meta,
                       const std::vector<const UndoLog *> &undo_logs) -> std::unique_ptr<RmRecord>;
 
-auto IsWriteWriteConflict(Transaction *txn, TransactionManager *txn_mgr, UndoLink undolink) -> bool;
+auto IsWriteWriteConflict(Transaction *txn, UndoLink undolink) -> bool;
 
 /**
  * @brief 递归地计算算术表达式的值

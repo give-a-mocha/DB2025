@@ -61,7 +61,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             WARN("Updating rid: {}", rid_);
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid_);
 
-            if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
+            if (IsWriteWriteConflict(context_->txn_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
 
@@ -130,13 +130,13 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 INFO("Checking unique constraint for rid: {}", rid);
                 auto [tuple_meta, tuple_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
                 base_meta_ = tuple_meta;
-                if (IsWriteWriteConflict(context_->txn_, &txn_manager, link)) {
+                if (IsWriteWriteConflict(context_->txn_, link)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
                 // 主键冲突
                 if (rid != rid_ && tuple_meta.is_deleted_ == false) {
-                    txn_manager.abort(context_, context_->log_mgr_);
+                    txn_manager.abort(context_);
                     throw InternalError("Primary key conflict, duplicate insert");
                 }
             }

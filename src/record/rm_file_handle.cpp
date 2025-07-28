@@ -12,16 +12,16 @@ See the Mulan PSL v2 for more details. */
 
 auto RmFileHandle::AcquirePageReadLock(const Rid& rid) const -> ReadPageGuard {
     if (rid.page_no >= file_hdr_.num_pages) {
-        throw PageNotExistError(disk_manager_->get_file_name(fd_), rid.page_no);
+        throw PageNotExistError(disk_manager.get_file_name(fd_), rid.page_no);
     }
-    return buffer_pool_manager_->fetch_read_page(PageId{fd_, rid.page_no});
+    return buffer_pool_manager.fetch_read_page(PageId{fd_, rid.page_no});
 }
 
 auto RmFileHandle::AcquirePageWriteLock(const Rid& rid) -> WritePageGuard {
     if (rid.page_no >= file_hdr_.num_pages) {
-        throw PageNotExistError(disk_manager_->get_file_name(fd_), rid.page_no);
+        throw PageNotExistError(disk_manager.get_file_name(fd_), rid.page_no);
     }
-    return buffer_pool_manager_->fetch_write_page(PageId{fd_, rid.page_no});
+    return buffer_pool_manager.fetch_write_page(PageId{fd_, rid.page_no});
 }
 
 auto RmFileHandle::GetTupleWithLockAcquired(const Rid& rid,
@@ -68,7 +68,7 @@ std::pair<TupleMeta, std::unique_ptr<RmRecord>> RmFileHandle::get_record(const R
 
 auto RmFileHandle::GetNewWritePageGuard() -> WritePageGuard {
     PageId new_page_id = {fd_, INVALID_PAGE_ID};
-    auto basic_guard = buffer_pool_manager_->new_page_guarded(&new_page_id);
+    auto basic_guard = buffer_pool_manager.new_page_guarded(&new_page_id);
     RmPageHandle page_handle(&file_hdr_, basic_guard.GetDataMut());
     page_handle.page_hdr->next_free_page_no = file_hdr_.first_free_page_no;
     page_handle.page_hdr->num_records = 0;
@@ -84,7 +84,7 @@ auto RmFileHandle::GetNewRid() -> Rid {
     if (file_hdr_.first_free_page_no == RM_NO_PAGE) {
         page_guard = GetNewWritePageGuard();
     } else {
-        page_guard = buffer_pool_manager_->fetch_write_page({fd_, file_hdr_.first_free_page_no});
+        page_guard = buffer_pool_manager.fetch_write_page({fd_, file_hdr_.first_free_page_no});
     }
 
     RmPageHandle page_handle(&file_hdr_, page_guard.GetDataMut());
@@ -111,7 +111,7 @@ Rid RmFileHandle::insert_record(TupleMeta& new_meta, char* buf) {
     if (file_hdr_.first_free_page_no == RM_NO_PAGE) {
         page_guard = GetNewWritePageGuard();
     } else {
-        page_guard = buffer_pool_manager_->fetch_write_page({fd_, file_hdr_.first_free_page_no});
+        page_guard = buffer_pool_manager.fetch_write_page({fd_, file_hdr_.first_free_page_no});
     }
 
     RmPageHandle page_handle(&file_hdr_, page_guard.GetDataMut());

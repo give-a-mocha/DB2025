@@ -15,6 +15,8 @@
 #include "record/rm_scan.h"
 #include <vector>
 
+extern BufferPoolManager buffer_pool_manager;
+
 /**
  * @brief B+树索引扫描器类 (预取版本)
  * @details 在构造时预取所有符合条件的Rid，以提高扫描性能。
@@ -36,7 +38,7 @@ class IxScanTemp : public RecScan {
      * @param upper 扫描终止位置
      * @param bpm 缓冲池管理器
      */
-    IxScanTemp(IxIndexHandle *ih, const Iid &lower, const Iid &upper, BufferPoolManager *bpm);
+    IxScanTemp(IxIndexHandle *ih, const Iid &lower, const Iid &upper);
 
     /**
      * @brief 析构函数

@@ -36,9 +36,9 @@ bool LRUReplacer::victim(frame_id_t* frame_id) {
         return false;
     }
 
-    *frame_id = LRUlist_.back();  // 选择最久未使用的页面(链表尾部)
+    *frame_id = LRUlist_.back();   // 选择最久未使用的页面(链表尾部)
     is_pinned_[*frame_id] = true;  // 标记为使用
-    LRUlist_.pop_back();          // 从链表中删除
+    LRUlist_.pop_back();           // 从链表中删除
 
     return true;
 }
@@ -58,7 +58,7 @@ void LRUReplacer::pin(frame_id_t frame_id) {
     if (is_pinned_[frame_id]) {
         return;  // 如果已经被固定，则不做任何操作
     }
-    is_pinned_[frame_id] = true;  // 标记为已使用
+    is_pinned_[frame_id] = true;         // 标记为已使用
     LRUlist_.erase(LRUhash_[frame_id]);  // 从链表中删除
 }
 
@@ -72,8 +72,8 @@ void LRUReplacer::unpin(frame_id_t frame_id) {
     // 支持并发锁
     // std::scoped_lock lock{latch_};
     if (is_pinned_[frame_id]) {
-        is_pinned_[frame_id] = false;  // 标记为未使用
-        LRUlist_.push_front(frame_id);                 // 加入链表头部(最近使用)
+        is_pinned_[frame_id] = false;           // 标记为未使用
+        LRUlist_.push_front(frame_id);          // 加入链表头部(最近使用)
         LRUhash_[frame_id] = LRUlist_.begin();  // 将frame_id映射到链表头部
     }
     return;

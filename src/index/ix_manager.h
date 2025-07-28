@@ -216,7 +216,7 @@ class IxManager {
 
     std::unique_ptr<IxIndexHandle> open_index_with_index_name(const std::string &ix_name) {
         int fd = disk_manager.open_file(ix_name);
-        return std::make_unique<IxIndexHandle>(&disk_manager, &buffer_pool_manager, fd);
+        return std::make_unique<IxIndexHandle>(fd);
     }
 
     /**
