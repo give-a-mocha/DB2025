@@ -22,8 +22,6 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/config.h"
 #include "errors.h"
-#include "disk_scheduler.h"
-
 /**
  * @brief 磁盘管理器类
  */
@@ -107,8 +105,6 @@ class DiskManager {
     page_id_t get_fd2pageno(int fd) { return fd2pageno_[fd]; }
 
     static constexpr int MAX_FD = 8192;
-
-	DiskScheduler disk_scheduler_;
 
    private:
     // 文件打开列表，用于记录文件是否被打开

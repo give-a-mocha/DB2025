@@ -237,7 +237,10 @@ IxIndexHandle::IxIndexHandle(int fd) : fd_(fd) {
     // init file_hdr_
     char *buf = new char[PAGE_SIZE];
     memset(buf, 0, PAGE_SIZE);
-    disk_manager.read_page(fd, IX_FILE_HDR_PAGE, buf, PAGE_SIZE);
+    std::promise<bool> promise = disk_scheduler.CreatePromise();
+    auto future = promise.get_future();
+    disk_scheduler.MakeReadRequest(fd, 0, buf, PAGE_SIZE, std::move(promise));
+    assert(future.get());
     file_hdr_ = new IxFileHdr();
     file_hdr_->deserialize(buf);
     // disk_manager管理的fd对应的文件中，设置从file_hdr_->num_pages开始分配page_no

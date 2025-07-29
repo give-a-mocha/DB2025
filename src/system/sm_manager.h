@@ -30,6 +30,7 @@
 #include "sm_meta.h"
 
 extern DiskManager disk_manager;
+extern DiskScheduler disk_scheduler;
 extern BufferPoolManager buffer_pool_manager;
 extern RmManager rm_manager;
 extern IxManager ix_manager;
@@ -210,7 +211,7 @@ class SmManager {
     void flush_to_disk() {
         for (const auto& [tab_name_, fh_] : fhs_) {
             auto&& file_hdr_ = fh_->get_file_hdr();
-            disk_manager.write_page(fh_->GetFd(), RM_FILE_HDR_PAGE, (char*)(&file_hdr_), sizeof(file_hdr_));
+            disk_scheduler.MakeWriteRequestWithWait(fh_->GetFd(), RM_FILE_HDR_PAGE, (char*)(&file_hdr_), sizeof(file_hdr_));
             buffer_pool_manager.flush_all_pages(fh_->GetFd());
         }
     }

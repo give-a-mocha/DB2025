@@ -34,6 +34,7 @@
 #include "rm_file_handle.h"
 
 extern DiskManager disk_manager;
+extern DiskScheduler disk_scheduler;
 extern BufferPoolManager buffer_pool_manager;
 
 /**
@@ -73,7 +74,8 @@ class RmManager {
 
         // 将file header写入磁盘文件（名为file name，文件描述符为fd）中的第0页
         // head page直接写入磁盘，没有经过缓冲区的NewPage，那么也就不需要FlushPage
-        disk_manager.write_page(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr, sizeof(file_hdr));
+        
+        disk_scheduler.MakeWriteRequestWithWait(fd, RM_FILE_HDR_PAGE, (char *)&file_hdr, sizeof(file_hdr));
         disk_manager.close_file(fd);
     }
 
@@ -102,8 +104,8 @@ class RmManager {
      * @param file_handle 要关闭文件的句柄
      */
     void close_file(const RmFileHandle *file_handle) {
-        disk_manager.write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
-                                sizeof(file_handle->file_hdr_));
+        disk_scheduler.MakeWriteRequestWithWait(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
+                                    sizeof(file_handle->file_hdr_));
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
         buffer_pool_manager.flush_all_pages(file_handle->fd_);
         disk_manager.close_file(file_handle->fd_);
@@ -115,8 +117,8 @@ class RmManager {
      * @param file_handle 要关闭文件的句柄
      */
     void close_file_and_clear_buffer(const RmFileHandle *file_handle) {
-        disk_manager.write_page(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
-                                sizeof(file_handle->file_hdr_));
+        disk_scheduler.MakeWriteRequestWithWait(file_handle->fd_, RM_FILE_HDR_PAGE, (char *)&file_handle->file_hdr_,
+                                    sizeof(file_handle->file_hdr_));
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
         buffer_pool_manager.flush_all_pages(file_handle->fd_);
         // 删除缓冲池中该文件的所有页面

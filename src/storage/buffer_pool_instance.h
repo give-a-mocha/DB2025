@@ -24,8 +24,10 @@ See the Mulan PSL v2 for more details. */
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
 #include "page_guard.h"
+#include "disk_scheduler.h"
 
 extern DiskManager disk_manager;
+extern DiskScheduler disk_scheduler;
 
 /**
  * @brief 缓冲池管理器类
