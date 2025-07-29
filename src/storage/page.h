@@ -58,9 +58,7 @@ class Page {
     friend class RmFileHandle;
 
    public:
-    Page() {
-        data_ = static_cast<char *>(calloc(PAGE_SIZE, sizeof(char)));
-    }
+    Page() { data_ = static_cast<char *>(calloc(PAGE_SIZE, sizeof(char))); }
 
     ~Page() { delete[] data_; }
 
