@@ -45,9 +45,9 @@ void DiskScheduler::StartWorkerThread() {
 	}
 }
 
-void DiskScheduler::WritePage(int fd, page_id_t page_no, const char *offset, int num_bytes) {
+void WritePage(int fd, page_id_t page_no, const char *offset, int num_bytes) {
 	if (fd < 0) {
-		throw InternalError("Invalid file descriptor in WritePage");
+		throw InternalError("Invalid file descriptor in write_page");
 	}
 
 	off_t write_offset = static_cast<off_t>(page_no) * PAGE_SIZE;
@@ -56,14 +56,14 @@ void DiskScheduler::WritePage(int fd, page_id_t page_no, const char *offset, int
 
 	if (bytes_written != num_bytes) {
 		if (errno == ENOSPC || errno == EDQUOT) {
-			throw InternalError("Failed to WritePage due to no space");
+			throw InternalError("Failed to write page due to no space");
 		}
-		throw InternalError("Failed to WritePage");
+		throw InternalError("Failed to write page");
 	}
 }
-void DiskScheduler::ReadPage(int fd, page_id_t page_no, char *offset, int num_bytes) {
+void ReadPage(int fd, page_id_t page_no, char *offset, int num_bytes) {
 	if (fd < 0) {
-		throw InternalError("Invalid file descriptor in ReadPage");
+		throw InternalError("Invalid file descriptor in read_page");
 	}
 
 	off_t offset_in_file = static_cast<off_t>(page_no) * PAGE_SIZE;
@@ -72,7 +72,6 @@ void DiskScheduler::ReadPage(int fd, page_id_t page_no, char *offset, int num_by
 	ssize_t bytes_read = pread(fd, offset, num_bytes, offset_in_file);
 
 	if (bytes_read != num_bytes) {
-		std::cerr << "Failed to read page: " << bytes_read << std::endl;
-		throw InternalError("DiskScheduler::ReadPage Error");
+		throw InternalError("DiskManager::read_page Error");
 	}
 }

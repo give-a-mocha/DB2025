@@ -71,9 +71,7 @@ void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t 
 
     // 如果是脏页,写回磁盘
     if (page->is_dirty_) {
-        disk_scheduler.MakeWriteRequestWithWait(
-            page->id_.fd, page->id_.page_no, page->data_, PAGE_SIZE);
-        page->is_dirty_ = false;  // 重置脏页标志
+        disk_manager.write_page(page->id_.fd, page->id_.page_no, page->data_, PAGE_SIZE);
     }
 
     // 从页表中删除旧映射
@@ -85,6 +83,7 @@ void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t 
 
     // 重置页面数据
     page->pin_count_ = 0;     // 重置pin_count
+    page->is_dirty_ = false;  // 重置脏页标志
     page->reset_memory();
 }
 
@@ -138,11 +137,7 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
     // 获取victim frame对应的页面
     Page* page = &pages_[frame_id];
     update_page(page, page_id, frame_id);
-    std::promise<bool> promise = disk_scheduler.CreatePromise();
-    auto future = promise.get_future();
-    disk_scheduler.MakeReadRequest(
-        page_id.fd, page_id.page_no, page->data_, PAGE_SIZE, std::move(promise));
-    future.wait();  // 等待读取完成
+    disk_manager.read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
@@ -236,8 +231,7 @@ bool BufferPoolInstance::flush_page(PageId page_id) {
     Page* page = &pages_[frame_id];
 
     // 写回磁盘
-    disk_scheduler.MakeWriteRequestWithWait(
-        page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
+    disk_manager.write_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
 
     // 更新dirty标记
     page->is_dirty_ = false;
@@ -313,14 +307,13 @@ bool BufferPoolInstance::delete_page(PageId page_id) {
 
     // 如果是脏页写回磁盘
     if (page->is_dirty_) {
-        disk_scheduler.MakeWriteRequestWithWait(
-            page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
-        page->is_dirty_ = false;  // 重置脏页标志
+        disk_manager.write_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     }
 
     // 重置页面元数据
     page->id_.page_no = INVALID_PAGE_ID;
     page->pin_count_ = 0;
+    page->is_dirty_ = false;
     page->reset_memory();
 
     // 从页表中删除
@@ -355,8 +348,7 @@ void BufferPoolInstance::flush_all_pages(int fd) {
 
         // 获取页面并写回磁盘
         Page* page = &pages_[frame_id];
-        disk_scheduler.MakeWriteRequestWithWait(
-            page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
+        disk_manager.write_page(fd, page_id.page_no, page->data_, PAGE_SIZE);
         page->is_dirty_ = false;
     }
 }
@@ -378,14 +370,13 @@ void BufferPoolInstance::delete_all_pages(int fd) {
 
             // 如果是脏页写回磁盘
             if (page->is_dirty_) {
-                disk_scheduler.MakeWriteRequestWithWait(
-                    fd, page->id_.page_no, page->data_, PAGE_SIZE);
-                page->is_dirty_ = false;  // 重置脏页标志
+                disk_manager.write_page(fd, page->id_.page_no, page->data_, PAGE_SIZE);
             }
 
             // 重置页面元数据
             page->id_.page_no = INVALID_PAGE_ID;
             page->pin_count_ = 0;
+            page->is_dirty_ = false;
             page->reset_memory();
 
             // 从页表中删除
@@ -445,11 +436,7 @@ auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
     // 获取victim frame对应的页面
     Page* page = &pages_[frame_id];
     update_page(page, page_id, frame_id);
-    std::promise<bool> promise = disk_scheduler.CreatePromise();
-    auto future = promise.get_future();
-    disk_scheduler.MakeReadRequest(
-        page_id.fd, page_id.page_no, page->data_, PAGE_SIZE, std::move(promise));
-    future.wait();  // 等待读取完成
+    disk_manager.read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
     replacer_->pin(frame_id);
 

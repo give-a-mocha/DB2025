@@ -57,43 +57,6 @@ public:
      */
     void Schedule(DiskRequest r);
 
-    void MakeWriteRequest(int fd, page_id_t page_no, std::unique_ptr<char[]> data, int num_bytes) {
-        DiskRequest request;
-        request.is_write_ = true;
-        request.owned_data_ = std::move(data);
-        request.data_ = request.owned_data_.get();
-        request.num_bytes_ = num_bytes;
-        request.fd_ = fd;
-        request.page_no_ = page_no;
-        request.callback_ = CreatePromise();
-        Schedule(std::move(request));
-    }
-
-    void MakeWriteRequestWithWait(int fd, page_id_t page_no, char* data, int num_bytes) {
-        DiskRequest request;
-        request.is_write_ = true;
-        request.data_ = data;
-        request.num_bytes_ = num_bytes;
-        request.fd_ = fd;
-        request.page_no_ = page_no;
-        std::promise<bool> promise = CreatePromise();
-        auto future = promise.get_future();
-        request.callback_ = std::move(promise);
-        Schedule(std::move(request));
-        future.get();  // 等待请求完成
-    }
-
-    void MakeReadRequest(int fd, page_id_t page_no, char *data, int num_bytes, std::promise<bool> promise) {
-        DiskRequest request;
-        request.is_write_ = false;
-        request.data_ = data;
-        request.num_bytes_ = num_bytes;
-        request.fd_ = fd;
-        request.page_no_ = page_no;
-        request.callback_ = std::move(promise);
-        Schedule(std::move(request));
-    }
-
     void StartWorkerThread();
 
     /** 用于磁盘调度器的 Promise 类型别名 */
@@ -106,8 +69,8 @@ public:
     auto CreatePromise() -> DiskSchedulerPromise { return {}; };
 
 private:
-    void WritePage(int fd, page_id_t page_no, const char *offset, int num_bytes);
-	void ReadPage(int fd, page_id_t page_no, char *offset, int num_bytes);
+    void WritePage(int fd, page_id_t page_no, const char *offset, int num_bytes) {}
+	void ReadPage(int fd, page_id_t page_no, char *offset, int num_bytes) {}
     /**
      * @brief 一个用于并发调度和处理请求的共享队列。
      * 当 DiskScheduler 的析构函数被调用时，一个 `std::nullopt` 会被放入队列中，

@@ -34,7 +34,6 @@
 #include "optimizer/planner.h"
 #include "portal.h"
 #include "recovery/log_recovery.h"
-#include "storage/disk_scheduler.h"
 
 #define SOCK_PORT 8765
 #define MAX_CONN_LIMIT 8
@@ -48,7 +47,6 @@ static bool should_exit = false;
 
 // 构建全局所需的管理器对象
 DiskManager disk_manager;
-DiskScheduler disk_scheduler;
 BufferPoolManager buffer_pool_manager(BUFFER_POOL_SIZE);
 RmManager rm_manager;
 IxManager ix_manager;

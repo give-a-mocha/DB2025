@@ -36,7 +36,6 @@
 #include "transaction/transaction.h"
 
 extern DiskManager disk_manager;
-extern DiskScheduler disk_scheduler;
 extern BufferPoolManager buffer_pool_manager;
 
 /**

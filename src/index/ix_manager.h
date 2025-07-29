@@ -34,7 +34,6 @@
 #include "system/sm_meta.h"
 
 extern DiskManager disk_manager;
-extern DiskScheduler disk_scheduler;
 extern BufferPoolManager buffer_pool_manager;
 
 class IxManager {
@@ -141,16 +140,18 @@ class IxManager {
             fhdr->col_lens_[i] = (index_cols[i].len);
         }
 
-        std::unique_ptr<char[]> fhdr_data(new char[fhdr->tot_len_]);
-        fhdr->serialize(fhdr_data.get());
-        disk_scheduler.MakeWriteRequestWithWait(fd, IX_FILE_HDR_PAGE, fhdr_data.get(), fhdr->tot_len_);
-        
-        std::unique_ptr<char[]> page_buf(new char[PAGE_SIZE]);
+        char *data = new char[fhdr->tot_len_];
+        fhdr->serialize(data);
+
+        disk_manager.write_page(fd, IX_FILE_HDR_PAGE, data, fhdr->tot_len_);
+
+        char page_buf[PAGE_SIZE];  // 在内存中初始化page_buf中的内容，然后将其写入磁盘
+        memset(page_buf, 0, PAGE_SIZE);
         // 注意leaf header页号为1，也标记为叶子结点，其前一个/后一个叶子均指向root node
         // Create leaf list header page and write to file
         {
-            memset(page_buf.get(), 0, PAGE_SIZE);
-            auto phdr = reinterpret_cast<IxPageHdr *>(page_buf.get());
+            memset(page_buf, 0, PAGE_SIZE);
+            auto phdr = reinterpret_cast<IxPageHdr *>(page_buf);
             *phdr = {
                 .next_free_page_no = IX_NO_PAGE,
                 .parent = IX_NO_PAGE,
@@ -159,13 +160,13 @@ class IxManager {
                 .prev_leaf = IX_INIT_ROOT_PAGE,
                 .next_leaf = IX_INIT_ROOT_PAGE,
             };
-            disk_scheduler.MakeWriteRequestWithWait(fd, IX_LEAF_HEADER_PAGE, page_buf.get(), PAGE_SIZE);
+            disk_manager.write_page(fd, IX_LEAF_HEADER_PAGE, page_buf, PAGE_SIZE);
         }
         // 注意root node页号为2，也标记为叶子结点，其前一个/后一个叶子均指向leaf header
         // Create root node and write to file
         {
-            memset(page_buf.get(), 0, PAGE_SIZE);
-            auto phdr = reinterpret_cast<IxPageHdr *>(page_buf.get());
+            memset(page_buf, 0, PAGE_SIZE);
+            auto phdr = reinterpret_cast<IxPageHdr *>(page_buf);
             *phdr = {
                 .next_free_page_no = IX_NO_PAGE,
                 .parent = IX_NO_PAGE,
@@ -175,8 +176,11 @@ class IxManager {
                 .next_leaf = IX_LEAF_HEADER_PAGE,
             };
             // Must write PAGE_SIZE here in case of future fetch_node()
-            disk_scheduler.MakeWriteRequestWithWait(fd, IX_INIT_ROOT_PAGE, page_buf.get(), PAGE_SIZE);
+            disk_manager.write_page(fd, IX_INIT_ROOT_PAGE, page_buf, PAGE_SIZE);
         }
+
+        disk_manager.set_fd2pageno(fd, IX_INIT_NUM_PAGES - 1);  // DEBUG
+
         // Close index file
         disk_manager.close_file(fd);
     }
@@ -221,12 +225,13 @@ class IxManager {
      * @warning 关闭后不能再使用该索引句柄
      */
     void close_index(const IxIndexHandle *ih) {
-        std::unique_ptr<char[]> data(new char[ih->file_hdr_->tot_len_]);
-        ih->file_hdr_->serialize(data.get());
-        disk_scheduler.MakeWriteRequestWithWait(ih->fd_, IX_FILE_HDR_PAGE, data.get(), ih->file_hdr_->tot_len_);
+        char *data = new char[ih->file_hdr_->tot_len_];
+        ih->file_hdr_->serialize(data);
+        disk_manager.write_page(ih->fd_, IX_FILE_HDR_PAGE, data, ih->file_hdr_->tot_len_);
         // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
         buffer_pool_manager.flush_all_pages(ih->fd_);
         disk_manager.close_file(ih->fd_);
+        delete[] data;
     }
 
     /**
