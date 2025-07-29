@@ -69,7 +69,6 @@ pthread_mutex_t *sockfd_mutex;
 pthread_mutex_t *sql_mutex;
 #endif
 
-
 template <bool Flush = false, typename... Args>
 void Print(std::string_view fmt_str, Args &&...args) {
     if constexpr (ENABLE_COUT) {
@@ -180,7 +179,6 @@ void *client_handler(void *sock_fd) {
         }
 
         Print<true>("Read from client {}: {}\n", fd, data_recv);
-
 
 #ifdef ENABLE_SERIALIZE
         pthread_mutex_lock(sql_mutex);
@@ -404,17 +402,18 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, sigint_handler);
     try {
-        Print("\n"
-                     "  _____  __  __ _____  ____  \n"
-                     " |  __ \\|  \\/  |  __ \\|  _ \\ \n"
-                     " | |__) | \\  / | |  | | |_) |\n"
-                     " |  _  /| |\\/| | |  | |  _ < \n"
-                     " | | \\ \\| |  | | |__| | |_) |\n"
-                     " |_|  \\_\\_|  |_|_____/|____/ \n"
-                     "\n"
-                     "Welcome to RMDB!\n"
-                     "Type 'help;' for help.\n"
-                     "\n");
+        Print(
+            "\n"
+            "  _____  __  __ _____  ____  \n"
+            " |  __ \\|  \\/  |  __ \\|  _ \\ \n"
+            " | |__) | \\  / | |  | | |_) |\n"
+            " |  _  /| |\\/| | |  | |  _ < \n"
+            " | | \\ \\| |  | | |__| | |_) |\n"
+            " |_|  \\_\\_|  |_|_____/|____/ \n"
+            "\n"
+            "Welcome to RMDB!\n"
+            "Type 'help;' for help.\n"
+            "\n");
 
         // Database name is passed by args
         std::string db_name = argv[1];
