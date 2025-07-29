@@ -72,7 +72,6 @@ void DiskScheduler::ReadPage(int fd, page_id_t page_no, char *offset, int num_by
 	ssize_t bytes_read = pread(fd, offset, num_bytes, offset_in_file);
 
 	if (bytes_read != num_bytes) {
-		std::cerr << "Failed to read page: " << bytes_read << std::endl;
 		throw InternalError("DiskScheduler::ReadPage Error");
 	}
 }
