@@ -317,8 +317,10 @@ bool BufferPoolInstance::delete_page(PageId page_id) {
 
     // 如果是脏页写回磁盘
     if (page->is_dirty_) {
-        disk_scheduler.MakeWriteRequestWithWait(
-            page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
+        std::unique_ptr<char[]> data(new char[PAGE_SIZE]);
+        memcpy(data.get(), page->data_, PAGE_SIZE);
+        disk_scheduler.MakeWriteRequest(
+            page_id.fd, page_id.page_no, std::move(data), PAGE_SIZE);
         page->is_dirty_ = false;  // 重置脏页标志
     }
 
@@ -359,8 +361,10 @@ void BufferPoolInstance::flush_all_pages(int fd) {
 
         // 获取页面并写回磁盘
         Page* page = &pages_[frame_id];
-        disk_scheduler.MakeWriteRequestWithWait(
-            page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
+        std::unique_ptr<char[]> data(new char[PAGE_SIZE]);
+        memcpy(data.get(), page->data_, PAGE_SIZE);
+        disk_scheduler.MakeWriteRequest(
+            page_id.fd, page_id.page_no, std::move(data), PAGE_SIZE);
         page->is_dirty_ = false;
     }
 }
@@ -382,8 +386,10 @@ void BufferPoolInstance::delete_all_pages(int fd) {
 
             // 如果是脏页写回磁盘
             if (page->is_dirty_) {
-                disk_scheduler.MakeWriteRequestWithWait(
-                    fd, page->id_.page_no, page->data_, PAGE_SIZE);
+                std::unique_ptr<char[]> data(new char[PAGE_SIZE]);
+                memcpy(data.get(), page->data_, PAGE_SIZE);
+                disk_scheduler.MakeWriteRequest(
+                    fd, page->id_.page_no, std::move(data), PAGE_SIZE);
                 page->is_dirty_ = false;  // 重置脏页标志
             }
 
