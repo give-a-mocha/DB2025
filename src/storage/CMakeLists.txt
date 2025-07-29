@@ -1,6 +1,5 @@
 set(SOURCES 
-        disk_manager.cpp
-        disk_scheduler.cpp 
+        disk_manager.cpp 
         buffer_pool_manager.cpp
         buffer_pool_instance.cpp
         page_guard.cpp

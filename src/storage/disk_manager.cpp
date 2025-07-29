@@ -133,6 +133,24 @@ void DiskManager::create_dir(const std::string &path) {
     if (system(cmd.c_str()) < 0) {  // 创建一个名为path的目录
         throw UnixError();
     }
+
+    // 递归创建父目录
+    // size_t pos = 0;
+    // while ((pos = path.find('/', pos + 1)) != std::string::npos) {
+    //     std::string parent = path.substr(0, pos);
+    //     if (!parent.empty() && !is_dir(parent)) {
+    //         if (mkdir(parent.c_str(), 0755) != 0 && errno != EEXIST) {
+    //             throw UnixError();
+    //         }
+    //     }
+    // }
+
+    // // 创建目标目录
+    // if (!path.empty() && !is_dir(path)) {
+    //     if (mkdir(path.c_str(), 0755) != 0 && errno != EEXIST) {
+    //         throw UnixError();
+    //     }
+    // }
 }
 
 void DiskManager::destroy_dir(const std::string &path) {
@@ -140,6 +158,47 @@ void DiskManager::destroy_dir(const std::string &path) {
     if (system(cmd.c_str()) < 0) {
         throw UnixError();
     }
+
+    // if (!is_dir(path)) {
+    //     throw UnixError();
+    // }
+
+    // // 获取目录下的所有文件和子目录
+    // DIR *dir = opendir(path.c_str());
+    // if (dir == nullptr) {
+    //     throw UnixError();
+    // }
+
+    // struct dirent *entry;
+    // while ((entry = readdir(dir)) != nullptr) {
+    //     if (strcmp(entry->d_name, ".") == 0 ||
+    //         strcmp(entry->d_name, "..") == 0) {
+    //         continue;
+    //     }
+
+    //     std::string full_path = path + "/" + entry->d_name;
+    //     struct stat st;
+    //     if (lstat(full_path.c_str(), &st) == -1) {
+    //         closedir(dir);
+    //         throw UnixError();
+    //     }
+
+    //     if (S_ISDIR(st.st_mode)) {
+    //         destroy_dir(full_path);  // 递归删除子目录
+    //     } else {
+    //         if (unlink(full_path.c_str()) == -1) {
+    //             closedir(dir);
+    //             throw UnixError();
+    //         }
+    //     }
+    // }
+
+    // closedir(dir);
+
+    // // 删除空目录
+    // if (rmdir(path.c_str()) == -1) {
+    //     throw UnixError();
+    // }
 }
 
 /**
@@ -285,6 +344,11 @@ int DiskManager::get_file_size(const std::string &file_name) {
  * @param {int} fd 文件句柄
  */
 std::string DiskManager::get_file_name(int fd) {
+    // if (!fd2path_.count(fd)) {
+    //     throw FileNotOpenError(fd);
+    // }
+    // return fd2path_[fd];
+
     auto it = fd2path_.find(fd);
     if (it == fd2path_.end()) {
         throw FileNotOpenError(fd);
@@ -298,6 +362,11 @@ std::string DiskManager::get_file_name(int fd) {
  * @param {string} &file_name 文件名
  */
 int DiskManager::get_file_fd(const std::string &file_name) {
+    // if (!path2fd_.count(file_name)) {
+    //     return open_file(file_name);
+    // }
+    // return path2fd_[file_name];
+
     auto it = path2fd_.find(file_name);
     if (it == path2fd_.end()) {
         return open_file(file_name);
