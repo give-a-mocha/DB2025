@@ -43,7 +43,6 @@ class AggregateExecutor : public AbstractExecutor {
         output_cols_.front().offset = 0;
         // 如果第一个聚合类型是COUNT，设置其类型为整数
         if (sel_cols.front().agg_type == AggregateType::COUNT) {
-            cols_.front().agg_type = AggregateType::COUNT;  // 同步到输入列元数据
             output_cols_.front().agg_type = AggregateType::COUNT;
             output_cols_.front().type = ColType::TYPE_INT;
             output_cols_.front().len = sizeof(int);
@@ -75,7 +74,6 @@ class AggregateExecutor : public AbstractExecutor {
                     throw InternalError("Unknown aggregate type");
             }
             output_cols_[i].agg_type = sel_cols[i].agg_type;  // 设置聚合类型
-            cols_[i].agg_type = sel_cols[i].agg_type;         // 同步到输入列元数据
             // 计算列的偏移量（基于前一列的偏移量和长度）
             if (i != 0) output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;
         }
@@ -159,10 +157,10 @@ class AggregateExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
-        std::vector<TabCol> tab_cols(cols_.size());
-        for (size_t i = 0; i < cols_.size(); i++) {
-            tab_cols[i] = TabCol(cols_[i].tab_name, cols_[i].name);
-            tab_cols[i].agg_type = cols_[i].agg_type;
+        std::vector<TabCol> tab_cols(output_cols_.size());
+        for (size_t i = 0; i < output_cols_.size(); i++) {
+            tab_cols[i] = TabCol(output_cols_[i].tab_name, output_cols_[i].name);
+            tab_cols[i].agg_type = output_cols_[i].agg_type;
         }
         std::vector<Value> values = get_aggr_values(cols_, records, tab_cols);
         for (size_t i = 0; i < values.size(); ++i) {
