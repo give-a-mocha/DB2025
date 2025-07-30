@@ -261,16 +261,13 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
             query_cols.emplace_back(group_col);
         }
     }
-    std::vector<AggregateType> agg_types;
-    agg_types.reserve(query_cols.size());
-    for (const auto &col : query_cols) {
-        agg_types.push_back(col.agg_type);
-    }
-    if (all_of(agg_types.begin(), agg_types.end(), [](AggregateType type) { return type == AggregateType::NONE; })) {
+    if (all_of(query_cols.begin(), query_cols.end(), [](const TabCol &col) {
+            return col.agg_type == AggregateType::NONE;
+        })) {
         // 如果没有聚合函数，则不需要生成聚合计划
         return plan;
     }
-    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query_cols, agg_types);
+    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query_cols);
 }
 
 // GROUP

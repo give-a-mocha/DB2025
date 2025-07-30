@@ -249,14 +249,13 @@ class AbstractExecutor {
      * @return 计算得到的聚合值
      */
     [[maybe_unused]] Value get_aggr_value(const std::vector<ColMeta> &rec_cols,
-                                          const std::vector<std::unique_ptr<RmRecord>> &rec, const TabCol &tab_col,
-                                          AggregateType agg_type) {
+                                          const std::vector<std::unique_ptr<RmRecord>> &rec, const TabCol &tab_col) {
         TRACE_FUNCTION
         Value val;         // 存储最终的聚合结果
         ColMeta col_meta;  // 目标列的元数据信息
 
         // 特殊处理 COUNT(*) 情况
-        if (agg_type == AggregateType::COUNT && tab_col.col_name == "*") {
+        if (tab_col.agg_type == AggregateType::COUNT && tab_col.col_name == "*") {
             // 为 COUNT(*) 创建虚拟的列元数据，类型为整数
             col_meta = ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0};
         } else {
@@ -265,7 +264,7 @@ class AbstractExecutor {
         }
 
         // 根据聚合类型赋值默认值
-        switch (agg_type) {
+        switch (tab_col.agg_type) {
             case AggregateType::NONE:
                 // 非聚合函数，赋值第一行的值
                 if (!rec.empty()) {
@@ -314,7 +313,7 @@ class AbstractExecutor {
         }
 
         // 根据聚合函数类型进行不同的计算
-        switch (agg_type) {
+        switch (tab_col.agg_type) {
             case AggregateType::NONE:
                 break;
 
@@ -443,14 +442,8 @@ class AbstractExecutor {
      */
     std::vector<Value> get_aggr_values(const std::vector<ColMeta> &rec_cols,
                                        const std::vector<std::unique_ptr<RmRecord>> &rec,
-                                       const std::vector<TabCol> &tab_cols,
-                                       const std::vector<AggregateType> &agg_types) {
+                                       const std::vector<TabCol> &tab_cols) {
         TRACE_FUNCTION
-
-        // 验证输入参数
-        if (tab_cols.size() != agg_types.size()) {
-            throw InternalError("Column list size does not match aggregate type list size");
-        }
 
         std::vector<Value> vals(tab_cols.size());         // 存储计算得到的聚合值
         std::vector<ColMeta> col_metas(tab_cols.size());  // 存储目标列的元数据信息
@@ -458,7 +451,7 @@ class AbstractExecutor {
         // 获取所有目标列的元数据信息
         for (size_t i = 0; i < tab_cols.size(); ++i) {
             const auto &tab_col = tab_cols[i];
-            if (tab_col.col_name == "*" && agg_types[i] == AggregateType::COUNT) {
+            if (tab_col.col_name == "*" && tab_col.agg_type == AggregateType::COUNT) {
                 // 特殊处理 COUNT(*) 情况
                 col_metas[i] =
                     ColMeta{.tab_name = "", .name = "*", .type = ColType::TYPE_INT, .len = sizeof(int), .offset = 0};
@@ -469,7 +462,7 @@ class AbstractExecutor {
         }
 
         for (size_t i = 0; i < tab_cols.size(); ++i) {
-            switch (agg_types[i]) {
+            switch (tab_cols[i].agg_type) {
                 case AggregateType::NONE:
                     // 非聚合函数，赋值第一行的值
                     if (!rec.empty()) {
@@ -518,9 +511,8 @@ class AbstractExecutor {
             return vals;
         }
 
-        if (std::all_of(agg_types.begin(), agg_types.end(), [](AggregateType type) {
-                return type == AggregateType::NONE || type == AggregateType::COUNT;
-            })) {
+        if (std::all_of(tab_cols.begin(), tab_cols.end(),
+                       [](const TabCol &col) { return col.agg_type == AggregateType::NONE || col.agg_type == AggregateType::COUNT; })) {
             // 如果所有聚合类型都是 NONE 或 COUNT，直接返回
             return vals;
         }
@@ -528,7 +520,7 @@ class AbstractExecutor {
         // 计算每个目标列的聚合值, 遍历records为外层循环以优化大表性能
         for (const auto &record : rec) {
             for (size_t i = 0; i < tab_cols.size(); i++) {
-                switch (agg_types[i]) {
+                switch (tab_cols[i].agg_type) {
                     case AggregateType::NONE:
                         // 非聚合函数，已经在上面处理
                         break;
@@ -621,7 +613,7 @@ class AbstractExecutor {
         }
         // 计算 AVG 聚合的最终值
         for (size_t i = 0; i < tab_cols.size(); ++i) {
-            if (agg_types[i] == AggregateType::AVG) {
+            if (tab_cols[i].agg_type == AggregateType::AVG) {
                 vals[i].set(vals[i].float_val / static_cast<float>(rec.size()));
             }
         }

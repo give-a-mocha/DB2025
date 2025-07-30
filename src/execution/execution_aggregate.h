@@ -14,7 +14,6 @@ class AggregateExecutor : public AbstractExecutor {
     std::unique_ptr<AbstractExecutor> prev_;                           // 前一个执行器
     std::vector<ColMeta> cols_;                                        // 输入列的元数据
     std::vector<ColMeta> output_cols_;                                 // 输出列的元数据
-    std::vector<AggregateType> agg_types_;                             // 聚合类型列表
     std::vector<std::unique_ptr<RmRecord>> aggregated_records_;        // 聚合后的记录
     std::vector<std::unique_ptr<RmRecord>>::iterator current_record_;  // 当前记录迭代器
 
@@ -25,9 +24,8 @@ class AggregateExecutor : public AbstractExecutor {
      * @param sel_cols 选择的列
      * @param agg_types 聚合类型
      */
-    AggregateExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols,
-                      const std::vector<AggregateType>& agg_types)
-        : prev_(std::move(prev)), agg_types_(agg_types) {
+    AggregateExecutor(std::unique_ptr<AbstractExecutor> prev, const std::vector<TabCol>& sel_cols)
+        : prev_(std::move(prev)) {
         TRACE_FUNCTION
         for (const auto& sel_col : sel_cols) {
             // 处理COUNT(*)的特殊情况
@@ -44,8 +42,9 @@ class AggregateExecutor : public AbstractExecutor {
         // 设置第一列的偏移量为0
         output_cols_.front().offset = 0;
         // 如果第一个聚合类型是COUNT，设置其类型为整数
-        if (agg_types.front() == AggregateType::COUNT) {
-            output_cols_.front().agg_type = agg_types.front();
+        if (sel_cols.front().agg_type == AggregateType::COUNT) {
+            cols_.front().agg_type = AggregateType::COUNT;  // 同步到输入列元数据
+            output_cols_.front().agg_type = AggregateType::COUNT;
             output_cols_.front().type = ColType::TYPE_INT;
             output_cols_.front().len = sizeof(int);
             beginIndex = 1;
@@ -54,7 +53,7 @@ class AggregateExecutor : public AbstractExecutor {
         // 设置其他列的类型和偏移量
         for (size_t i = beginIndex; i < output_cols_.size(); ++i) {
             // 根据聚合类型设置输出类型
-            switch (agg_types[i]) {
+            switch (sel_cols[i].agg_type) {
                 // 保持原始列类型
                 case AggregateType::SUM:
                 case AggregateType::MIN:
@@ -75,7 +74,8 @@ class AggregateExecutor : public AbstractExecutor {
                 default:
                     throw InternalError("Unknown aggregate type");
             }
-            output_cols_[i].agg_type = agg_types[i];  // 设置聚合类型
+            output_cols_[i].agg_type = sel_cols[i].agg_type;  // 设置聚合类型
+            cols_[i].agg_type = sel_cols[i].agg_type;         // 同步到输入列元数据
             // 计算列的偏移量（基于前一列的偏移量和长度）
             if (i != 0) output_cols_[i].offset = output_cols_[i - 1].offset + output_cols_[i - 1].len;
         }
@@ -159,12 +159,13 @@ class AggregateExecutor : public AbstractExecutor {
     std::unique_ptr<RmRecord> aggregateGroup(const std::vector<std::unique_ptr<RmRecord>>& records) {
         // 有记录的情况，执行实际的聚合计算
         size_t size = 0;
-        std::vector<TabCol> tab_cols(agg_types_.size());
-        for (size_t i = 0; i < agg_types_.size(); i++) {
+        std::vector<TabCol> tab_cols(cols_.size());
+        for (size_t i = 0; i < cols_.size(); i++) {
             tab_cols[i] = TabCol(cols_[i].tab_name, cols_[i].name);
+            tab_cols[i].agg_type = cols_[i].agg_type;
         }
-        std::vector<Value> values = get_aggr_values(cols_, records, tab_cols, agg_types_);
-        for (size_t i = 0; i < agg_types_.size(); ++i) {
+        std::vector<Value> values = get_aggr_values(cols_, records, tab_cols);
+        for (size_t i = 0; i < values.size(); ++i) {
             // 调用聚合函数计算结果
             values[i].init_raw();
             size += values[i].raw->size;

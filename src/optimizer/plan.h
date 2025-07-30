@@ -156,10 +156,8 @@ class AggregatePlan : public Plan {
    public:
     std::shared_ptr<Plan> subplan_;
     std::vector<TabCol> sel_cols_;
-    std::vector<AggregateType> agg_types_;
-    AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols,
-                  std::vector<AggregateType> agg_types)
-        : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)), agg_types_(std::move(agg_types)) {}
+    AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols)
+        : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)) {}
     ~AggregatePlan() = default;
 };
 

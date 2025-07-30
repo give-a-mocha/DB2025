@@ -209,8 +209,7 @@ class Portal {
                                                   x->is_desc_);
         } else if (plan->tag == PlanTag::T_Aggregate) {
             auto x = std::static_pointer_cast<AggregatePlan>(plan);
-            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
-                                                       x->agg_types_);
+            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_);
         } else if (plan->tag == PlanTag::T_Group) {
             auto x = std::static_pointer_cast<GroupPlan>(plan);
             return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,

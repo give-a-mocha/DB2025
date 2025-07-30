@@ -166,24 +166,19 @@ class GroupExecutor : public AbstractExecutor {
         std::vector<TabCol> lhs_cols;
         std::vector<AggregateType> lhs_agg_types;
         lhs_cols.reserve(conds.size());
-        lhs_agg_types.reserve(conds.size());
         std::for_each(conds.begin(), conds.end(), [&](const Condition& cond) {
             lhs_cols.emplace_back(cond.lhs_col);
-            lhs_agg_types.emplace_back(cond.lhs_col.agg_type);
         });
-        std::vector<Value> lhs_vals = get_aggr_values(rec_cols, records, lhs_cols, lhs_agg_types);
+        std::vector<Value> lhs_vals = get_aggr_values(rec_cols, records, lhs_cols);
         std::vector<Value> rhs_vals(conds.size());
         std::vector<TabCol> rhs_cols;
-        std::vector<AggregateType> rhs_agg_types;
         rhs_cols.reserve(conds.size());
-        rhs_agg_types.reserve(conds.size());
         std::for_each(conds.begin(), conds.end(), [&](const Condition& cond) {
             switch (cond.rhs_type) {
                 case ConditionRhsType::RHS_VALUE:
                     break;
                 case ConditionRhsType::RHS_COLUMN:
                     rhs_cols.emplace_back(cond.rhs_col);
-                    rhs_agg_types.emplace_back(cond.rhs_col.agg_type);
                     break;
                 case ConditionRhsType::RHS_EXPR:
                     break;
@@ -191,7 +186,7 @@ class GroupExecutor : public AbstractExecutor {
                     throw InternalError("Unsupported ConditionRhsType in HAVING clause");
             }
         });
-        std::vector<Value> rhs_aggr_vals = get_aggr_values(rec_cols, records, rhs_cols, rhs_agg_types);
+        std::vector<Value> rhs_aggr_vals = get_aggr_values(rec_cols, records, rhs_cols);
         for (size_t i = 0, j = 0; i < conds.size(); i++) {
             switch (conds[i].rhs_type) {
                 case ConditionRhsType::RHS_VALUE:
@@ -227,7 +222,7 @@ class GroupExecutor : public AbstractExecutor {
     [[maybe_unused]] bool eval_aggr_cond(const std::vector<ColMeta>& rec_cols, const Condition& cond,
                                          const std::vector<std::unique_ptr<RmRecord>>& rec) {
         // 计算条件的左侧聚合值
-        Value lhs_val = get_aggr_value(rec_cols, rec, cond.lhs_col, cond.lhs_col.agg_type);
+        Value lhs_val = get_aggr_value(rec_cols, rec, cond.lhs_col);
         Value rhs_val;  // 条件的右侧值
         // 根据 rhs_type 获取右侧值
         switch (cond.rhs_type) {
@@ -239,7 +234,7 @@ class GroupExecutor : public AbstractExecutor {
                     throw InternalError("Aggregate column name cannot be empty in HAVING clause RHS");
                 }
                 // 计算条件的右侧聚合值
-                rhs_val = get_aggr_value(rec_cols, rec, cond.rhs_col, cond.rhs_col.agg_type);
+                rhs_val = get_aggr_value(rec_cols, rec, cond.rhs_col);
                 break;
             case ConditionRhsType::RHS_EXPR:
                 rhs_val = EvaluateExpr(ExprTerm(cond.rhs_expr), nullptr, rec_cols);
