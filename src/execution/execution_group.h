@@ -166,9 +166,7 @@ class GroupExecutor : public AbstractExecutor {
         std::vector<TabCol> lhs_cols;
         std::vector<AggregateType> lhs_agg_types;
         lhs_cols.reserve(conds.size());
-        std::for_each(conds.begin(), conds.end(), [&](const Condition& cond) {
-            lhs_cols.emplace_back(cond.lhs_col);
-        });
+        std::for_each(conds.begin(), conds.end(), [&](const Condition& cond) { lhs_cols.emplace_back(cond.lhs_col); });
         std::vector<Value> lhs_vals = get_aggr_values(rec_cols, records, lhs_cols);
         std::vector<Value> rhs_vals(conds.size());
         std::vector<TabCol> rhs_cols;

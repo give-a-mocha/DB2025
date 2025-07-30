@@ -261,9 +261,8 @@ std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> qu
             query_cols.emplace_back(group_col);
         }
     }
-    if (all_of(query_cols.begin(), query_cols.end(), [](const TabCol &col) {
-            return col.agg_type == AggregateType::NONE;
-        })) {
+    if (all_of(query_cols.begin(), query_cols.end(),
+               [](const TabCol &col) { return col.agg_type == AggregateType::NONE; })) {
         // 如果没有聚合函数，则不需要生成聚合计划
         return plan;
     }

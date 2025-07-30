@@ -511,8 +511,9 @@ class AbstractExecutor {
             return vals;
         }
 
-        if (std::all_of(tab_cols.begin(), tab_cols.end(),
-                       [](const TabCol &col) { return col.agg_type == AggregateType::NONE || col.agg_type == AggregateType::COUNT; })) {
+        if (std::all_of(tab_cols.begin(), tab_cols.end(), [](const TabCol &col) {
+                return col.agg_type == AggregateType::NONE || col.agg_type == AggregateType::COUNT;
+            })) {
             // 如果所有聚合类型都是 NONE 或 COUNT，直接返回
             return vals;
         }
