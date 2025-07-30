@@ -60,10 +60,7 @@ class Page {
     friend class RmFileHandle;
 
    public:
-    Page() {
-        data_ = new char[PAGE_SIZE];  // 分配PAGE_SIZE大小的内存
-        reset_memory();               // 初始化内存，将data_的PAGE_SIZE个字节填
-    }
+    Page() { data_ = static_cast<char *>(calloc(PAGE_SIZE, sizeof(char))); }
 
     ~Page() { delete[] data_; }
 

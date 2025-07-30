@@ -34,12 +34,13 @@
 #include "optimizer/planner.h"
 #include "portal.h"
 #include "recovery/log_recovery.h"
+#include "common/utils/Format.h"
 
 #define SOCK_PORT 8765
 #define MAX_CONN_LIMIT 8
 
 // 是否开启 std::cout
-// #define ENABLE_COUT
+constexpr bool ENABLE_COUT = false;
 
 // #define ENABLE_SERIALIZE
 
@@ -68,6 +69,16 @@ pthread_mutex_t *sockfd_mutex;
 pthread_mutex_t *sql_mutex;
 #endif
 
+template <bool Flush = false, typename... Args>
+void Print(std::string_view fmt_str, Args &&...args) {
+    if constexpr (ENABLE_COUT) {
+        std::cout << util::format(std::string(fmt_str), std::forward<Args>(args)...);
+        if constexpr (Flush) {
+            std::cout.flush();
+        }
+    }
+}
+
 /* 用于处理Ctrl+C信号的跳转缓冲区 */
 static jmp_buf jmpbuf;
 
@@ -80,9 +91,7 @@ void sigint_handler(int signo) {
     TRACE_FUNCTION
     should_exit = true;
     // log_manager->flush_log_to_disk();
-#ifdef ENABLE_COUT
-    std::cout << "The Server receive Crtl+C, will been closed\n";
-#endif
+    Print("The Server receive Crtl+C, will been closed\n");
     longjmp(jmpbuf, 1);
 }
 
@@ -140,52 +149,36 @@ void *client_handler(void *sock_fd) {
     yyscan_t scanner;
     yylex_init(&scanner);
 
-#ifdef ENABLE_COUT
-    std::string output = "establish client connection, sockfd: " + std::to_string(fd) + "\n";
-    std::cout << output;
-#endif
+    Print("establish client connection, sockfd: {}\n", fd);
 
     while (true) {
-#ifdef ENABLE_COUT
-        std::cout << "Waiting for request..." << std::endl;
-#endif
+        Print<true>("Waiting for request...\n");
+
         memset(data_recv, 0, BUFFER_LENGTH);
 
         i_recvBytes = recv(fd, data_recv, BUFFER_LENGTH, 0);
 
         if (i_recvBytes == 0) {
-#ifdef ENABLE_COUT
-            std::cout << "Maybe the client has closed" << std::endl;
-#endif
+            Print<true>("Maybe the client has closed\n");
             break;
         }
         if (i_recvBytes == -1) {
-#ifdef ENABLE_COUT
-            std::cout << "Client read error!" << std::endl;
-#endif
+            Print<true>("Client read error!\n");
             break;
         }
 
-#ifdef ENABLE_COUT
-        printf("i_recvBytes: %d \n ", i_recvBytes);
-#endif
+        Print("i_recvBytes: {} \n ", i_recvBytes);
 
         if (strncasecmp(data_recv, "exit", 4) == 0) {
-#ifdef ENABLE_COUT
-            std::cout << "Client exit." << std::endl;
-#endif
+            Print("Client exit.\n", true);
             break;
         }
         if (strncasecmp(data_recv, "crash", 5) == 0) {
-#ifdef ENABLE_COUT
-            std::cout << "Server crash" << std::endl;
-#endif
+            Print("Server crash.\n", true);
             exit(1);
         }
 
-#ifdef ENABLE_COUT
-        std::cout << "Read from client " << fd << ": " << data_recv << std::endl;
-#endif
+        Print<true>("Read from client {}: {}\n", fd, data_recv);
 
 #ifdef ENABLE_SERIALIZE
         pthread_mutex_lock(sql_mutex);
@@ -199,24 +192,18 @@ void *client_handler(void *sock_fd) {
 
         // 用于判断是否已经调用了yy_delete_buffer来删除buf
         bool finish_analyze = false;
-        // pthread_mutex_lock(buffer_mutex);
         YY_BUFFER_STATE buf = yy_scan_string(data_recv, scanner);
         if (yyparse(scanner) == 0) {
             if (ast::parse_tree != nullptr) {
                 try {
-                    // analyze and rewrite
                     std::shared_ptr<Query> query = analyze.do_analyze(ast::parse_tree);
                     yy_delete_buffer(buf, scanner);
                     finish_analyze = true;
-                    // pthread_mutex_unlock(buffer_mutex);
-                    // 优化器
                     std::shared_ptr<Plan> plan = optimizer.plan_query(query, context.get());
-                    // portal
                     std::shared_ptr<PortalStmt> portalStmt = portal.start(plan, context.get());
                     portal.run(portalStmt, &txn_id, context.get());
                     portal.drop();
                 } catch (TransactionAbortException &e) {
-                    // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
                     std::string str = "abort\n";
                     memcpy(data_send, str.c_str(), str.length());
                     data_send[str.length()] = '\0';
@@ -228,9 +215,8 @@ void *client_handler(void *sock_fd) {
                     //     // 如果事务数量过多，或者有大量已终止的事务，则执行垃圾回收
                     //     txn_manager->GarbageCollection();
                     // }
-#ifdef ENABLE_COUT
-                    std::cout << e.GetInfo() << std::endl;
-#endif
+                    Print<true>("{}\n", e.GetInfo());
+
                     if (sm_manager.is_output_file_) {
                         std::fstream outfile;
                         outfile.open("output.txt", std::ios::out | std::ios::app);
@@ -240,9 +226,8 @@ void *client_handler(void *sock_fd) {
                 } catch (RMDBError &e) {
                     // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
                     // 遇到异常，打印异常信息
-#ifdef ENABLE_COUT
-                    std::cerr << "RMDBError " << e.what() << std::endl;
-#endif
+                    Print<true>("RMDBError {}\n", e.what());
+
                     memcpy(data_send, e.what(), e.get_msg_len());
                     data_send[e.get_msg_len()] = '\n';
                     data_send[e.get_msg_len() + 1] = '\0';
@@ -259,10 +244,11 @@ void *client_handler(void *sock_fd) {
             }
         } else {
             // 语法分析失败，返回错误信息
-            std::string str = "syntax error\n";
-            memcpy(data_send, str.c_str(), str.length());
-            data_send[str.length()] = '\0';
-            offset = str.length();
+            constexpr const char *str = "syntax error\n";
+            constexpr size_t len = 14;
+            memcpy(data_send, str, len);
+            data_send[len] = '\0';
+            offset = len;
 
             if (sm_manager.is_output_file_) {
                 // 将报错信息写入output.txt
@@ -303,9 +289,7 @@ void *client_handler(void *sock_fd) {
     yylex_destroy(scanner);  // 销毁扫描器
 
     // Clear
-#ifdef ENABLE_COUT
-    std::cout << "Terminating current client_connection..." << std::endl;
-#endif
+    Print<true>("Terminating current client_connection...\n");
     close(fd);           // close a file descriptor.
     pthread_exit(NULL);  // terminate calling thread!
 }
@@ -348,32 +332,24 @@ void start_server() {
     s_addr_in.sin_port = htons(SOCK_PORT);
     fd_temp = bind(sockfd_server, (struct sockaddr *)(&s_addr_in), sizeof(s_addr_in));
     if (fd_temp == -1) {
-#ifdef ENABLE_COUT
-        std::cout << "Bind error!" << std::endl;
-#endif
+        Print<true>("Bind error!\n");
         exit(1);
     }
 
     fd_temp = listen(sockfd_server, MAX_CONN_LIMIT);
     if (fd_temp == -1) {
-#ifdef ENABLE_COUT
-        std::cout << "Listen error!" << std::endl;
-#endif
+        Print<true>("Listen error!\n");
         exit(1);
     }
 
     while (!should_exit) {
-#ifdef ENABLE_COUT
-        std::cout << "Waiting for new connection..." << std::endl;
-#endif
+        Print<true>("Waiting for new connection...\n");
         pthread_t thread_id;
 
         struct sockaddr_in s_addr_client {};
         int client_length = sizeof(s_addr_client);
         if (setjmp(jmpbuf)) {
-#ifdef ENABLE_COUT
-            std::cout << "Break from Server Listen Loop\n";
-#endif
+            Print("Break from Server Listen Loop\n");
             break;
         }
 
@@ -381,25 +357,20 @@ void start_server() {
         pthread_mutex_lock(sockfd_mutex);
         int sockfd = accept(sockfd_server, (struct sockaddr *)(&s_addr_client), (socklen_t *)(&client_length));
         if (sockfd == -1) {
-#ifdef ENABLE_COUT
-            std::cout << "Accept error!" << std::endl;
-#endif
+            Print<true>("Accept error!\n");
             continue;  // ignore current socket ,continue while loop.
         }
 
         // 和客户端建立连接，并开启一个线程负责处理客户端请求
         if (pthread_create(&thread_id, nullptr, &client_handler, (void *)(&sockfd)) != 0) {
-#ifdef ENABLE_COUT
-            std::cout << "Create thread fail!" << std::endl;
-#endif
+            Print<true>("Create thread fail!\n");
             break;  // break while loop
         }
     }
 
     // Clear
-#ifdef ENABLE_COUT
-    std::cout << " Try to close all client-connection.\n";
-#endif
+    Print(" Try to close all client-connection.\n");
+
     int ret = shutdown(sockfd_server, SHUT_WR);
     // shut down the all or part of a full-duplex connection.
     if (ret == -1) {
@@ -407,10 +378,8 @@ void start_server() {
     }
     //    assert(ret != -1);
     sm_manager.close_db();
-#ifdef ENABLE_COUT
-    std::cout << " DB has been closed.\n";
-    std::cout << "Server shuts down." << std::endl;
-#endif
+    Print(" DB has been closed.\n");
+    Print<true>("Server shuts down.\n");
 }
 
 /**
@@ -433,19 +402,19 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, sigint_handler);
     try {
-#ifdef ENABLE_COUT
-        std::cout << "\n"
-                     "  _____  __  __ _____  ____  \n"
-                     " |  __ \\|  \\/  |  __ \\|  _ \\ \n"
-                     " | |__) | \\  / | |  | | |_) |\n"
-                     " |  _  /| |\\/| | |  | |  _ < \n"
-                     " | | \\ \\| |  | | |__| | |_) |\n"
-                     " |_|  \\_\\_|  |_|_____/|____/ \n"
-                     "\n"
-                     "Welcome to RMDB!\n"
-                     "Type 'help;' for help.\n"
-                     "\n";
-#endif
+        Print(
+            "\n"
+            "  _____  __  __ _____  ____  \n"
+            " |  __ \\|  \\/  |  __ \\|  _ \\ \n"
+            " | |__) | \\  / | |  | | |_) |\n"
+            " |  _  /| |\\/| | |  | |  _ < \n"
+            " | | \\ \\| |  | | |__| | |_) |\n"
+            " |_|  \\_\\_|  |_|_____/|____/ \n"
+            "\n"
+            "Welcome to RMDB!\n"
+            "Type 'help;' for help.\n"
+            "\n");
+
         // Database name is passed by args
         std::string db_name = argv[1];
         if (!sm_manager.is_dir(db_name)) {
