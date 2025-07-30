@@ -482,7 +482,7 @@ class AbstractExecutor {
                     }
                     break;
                 case AggregateType::COUNT:
-                    vals[i].set(0);
+                    vals[i].set(static_cast<int>(rec.size()));
                     break;
                 case AggregateType::SUM:
                     if (col_metas[i].type == ColType::TYPE_INT) {
@@ -518,6 +518,13 @@ class AbstractExecutor {
             return vals;
         }
 
+        if (std::all_of(agg_types.begin(), agg_types.end(), [](AggregateType type) {
+                return type == AggregateType::NONE || type == AggregateType::COUNT;
+            })) {
+            // 如果所有聚合类型都是 NONE 或 COUNT，直接返回
+            return vals;
+        }
+
         // 计算每个目标列的聚合值, 遍历records为外层循环以优化大表性能
         for (const auto &record : rec) {
             for (size_t i = 0; i < tab_cols.size(); i++) {
@@ -526,8 +533,7 @@ class AbstractExecutor {
                         // 非聚合函数，已经在上面处理
                         break;
                     case AggregateType::COUNT:
-                        // COUNT 聚合：返回记录总数
-                        vals[i].set(static_cast<int>(rec.size()));
+                        // COUNT 聚合：已经在上面处理
                         break;
                     case AggregateType::SUM:
                         // SUM 聚合：计算指定列所有值的总和
