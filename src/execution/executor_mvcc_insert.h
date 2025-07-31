@@ -72,9 +72,9 @@ class MvccInsertExecutor : public AbstractExecutor {
             // 处理类型不匹配的情况
             if (col.type != values_[i].type) {
                 if (col.type == ColType::TYPE_INT && values_[i].type == ColType::TYPE_FLOAT) {
-                    values_[i].set_int(static_cast<int>(values_[i].float_val));
+                    values_[i].set(static_cast<int>(values_[i].float_val));
                 } else if (col.type == ColType::TYPE_FLOAT && values_[i].type == ColType::TYPE_INT) {
-                    values_[i].set_float(static_cast<float>(values_[i].int_val));
+                    values_[i].set(static_cast<float>(values_[i].int_val));
                 } else {
                     throw IncompatibleTypeError(coltype2str(col.type), coltype2str(values_[i].type));
                 }

@@ -752,17 +752,17 @@ Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
     switch (sv_val->getType()) {
         case ast::AstType::IntLit: {
             auto int_lit = std::static_pointer_cast<ast::IntLit>(sv_val);
-            val.set_int(int_lit->val);
+            val.set(int_lit->val);
             break;
         }
         case ast::AstType::FloatLit: {
             auto float_lit = std::static_pointer_cast<ast::FloatLit>(sv_val);
-            val.set_float(float_lit->val);
+            val.set(float_lit->val);
             break;
         }
         case ast::AstType::StringLit: {
             auto str_lit = std::static_pointer_cast<ast::StringLit>(sv_val);
-            val.set_str(str_lit->val);
+            val.set(str_lit->val);
             break;
         }
         default:

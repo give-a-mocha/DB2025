@@ -108,9 +108,9 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 // 处理类型转换 (使用计算或获取到的 value.type)
                 if (col->type != value.type) {
                     if (col->type == ColType::TYPE_INT && value.type == ColType::TYPE_FLOAT) {
-                        value.set_int(static_cast<int>(value.float_val));
+                        value.set(static_cast<int>(value.float_val));
                     } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
-                        value.set_float(static_cast<float>(value.int_val));
+                        value.set(static_cast<float>(value.int_val));
                     } else if (col->type != value.type) {  // 添加一个检查，防止相同类型也抛出错误
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }

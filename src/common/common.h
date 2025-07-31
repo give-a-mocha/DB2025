@@ -178,7 +178,7 @@ struct Value {
      *
      * @param int_val_ 要设置的整数值
      */
-    void set_int(int int_val_) {
+    void set(int int_val_) {
         type = ColType::TYPE_INT;
         int_val = int_val_;
     }
@@ -188,7 +188,7 @@ struct Value {
      *
      * @param float_val_ 要设置的浮点数值
      */
-    void set_float(float float_val_) {
+    void set(float float_val_) {
         type = ColType::TYPE_FLOAT;
         float_val = float_val_;
     }
@@ -198,7 +198,7 @@ struct Value {
      *
      * @param str_val_ 要设置的字符串值
      */
-    void set_str(std::string str_val_) {
+    void set(std::string str_val_) {
         type = ColType::TYPE_STRING;
         str_val = std::move(str_val_);
     }
@@ -247,13 +247,13 @@ struct Value {
     void set_col_data(ColType type, char *data, size_t data_len = 0) {
         switch (type) {
             case ColType::TYPE_INT:
-                set_int(*(int *)data);
+                set(*(int *)data);
                 break;
             case ColType::TYPE_FLOAT:
-                set_float(*(float *)data);
+                set(*(float *)data);
                 break;
             case ColType::TYPE_STRING:
-                set_str(std::string(data, data_len));
+                set(std::string(data, data_len));
                 break;
             default:
                 break;
@@ -275,10 +275,10 @@ struct Value {
         // int -> float
         if (a.type == b.type) return;
         if (b.type == ColType::TYPE_INT) {
-            b.set_float(static_cast<float>(b.int_val));
+            b.set(static_cast<float>(b.int_val));
             return;
         } else {
-            a.set_float(static_cast<float>(a.int_val));
+            a.set(static_cast<float>(a.int_val));
             return;
         }
     }
@@ -360,13 +360,13 @@ struct Value {
         switch (p) {
             case ColType::TYPE_INT: {
                 int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
-                res.set_int(ia);
+                res.set(ia);
                 break;
             }
 
             case ColType::TYPE_FLOAT: {
                 float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
-                res.set_float(fa);
+                res.set(fa);
                 break;
             }
 

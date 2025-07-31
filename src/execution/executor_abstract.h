@@ -278,31 +278,31 @@ class AbstractExecutor {
                 }
                 break;
             case AggregateType::COUNT:
-                val.set_int(0);
+                val.set(0);
                 break;
             case AggregateType::SUM:
                 if (col_meta.type == ColType::TYPE_INT) {
-                    val.set_int(0);
+                    val.set(0);
                 } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                    val.set_float(0.0f);
+                    val.set(0.0f);
                 }
                 break;
             case AggregateType::MIN:
                 if (col_meta.type == ColType::TYPE_INT) {
-                    val.set_int(std::numeric_limits<int>::max());
+                    val.set(std::numeric_limits<int>::max());
                 } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                    val.set_float(std::numeric_limits<float>::max());
+                    val.set(std::numeric_limits<float>::max());
                 }
                 break;
             case AggregateType::MAX:
                 if (col_meta.type == ColType::TYPE_INT) {
-                    val.set_int(std::numeric_limits<int>::min());
+                    val.set(std::numeric_limits<int>::min());
                 } else if (col_meta.type == ColType::TYPE_FLOAT) {
-                    val.set_float(std::numeric_limits<float>::lowest());
+                    val.set(std::numeric_limits<float>::lowest());
                 }
                 break;
             case AggregateType::AVG:
-                val.set_float(0.0f);
+                val.set(0.0f);
                 break;
             default:
                 throw InternalError("Unknown aggregate type at " + getType());
@@ -320,7 +320,7 @@ class AbstractExecutor {
 
             case AggregateType::COUNT:
                 // COUNT 聚合：返回记录总数
-                val.set_int(static_cast<int>(rec.size()));
+                val.set(static_cast<int>(rec.size()));
                 break;
 
             case AggregateType::SUM:
@@ -330,7 +330,7 @@ class AbstractExecutor {
                         int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
                             return acc + *reinterpret_cast<const int *>(record->data + col_meta.offset);
                         });
-                        val.set_int(sum);
+                        val.set(sum);
                         break;
                     }
                     case ColType::TYPE_FLOAT: {
@@ -338,7 +338,7 @@ class AbstractExecutor {
                             std::accumulate(rec.begin(), rec.end(), 0.0f, [&col_meta](float acc, const auto &record) {
                                 return acc + *reinterpret_cast<const float *>(record->data + col_meta.offset);
                             });
-                        val.set_float(sum);
+                        val.set(sum);
                         break;
                     }
                     case ColType::TYPE_STRING:
@@ -356,7 +356,7 @@ class AbstractExecutor {
                         for (size_t i = 1; i < rec.size(); ++i) {
                             max_val = std::max(max_val, *reinterpret_cast<const int *>(rec[i]->data + col_meta.offset));
                         }
-                        val.set_int(max_val);
+                        val.set(max_val);
                         break;
                     }
                     case ColType::TYPE_FLOAT: {
@@ -365,7 +365,7 @@ class AbstractExecutor {
                             max_val =
                                 std::max(max_val, *reinterpret_cast<const float *>(rec[i]->data + col_meta.offset));
                         }
-                        val.set_float(max_val);
+                        val.set(max_val);
                         break;
                     }
                     case ColType::TYPE_STRING:
@@ -383,7 +383,7 @@ class AbstractExecutor {
                         for (size_t i = 1; i < rec.size(); ++i) {
                             min_val = std::min(min_val, *reinterpret_cast<const int *>(rec[i]->data + col_meta.offset));
                         }
-                        val.set_int(min_val);
+                        val.set(min_val);
                         break;
                     }
                     case ColType::TYPE_FLOAT: {
@@ -392,7 +392,7 @@ class AbstractExecutor {
                             min_val =
                                 std::min(min_val, *reinterpret_cast<const float *>(rec[i]->data + col_meta.offset));
                         }
-                        val.set_float(min_val);
+                        val.set(min_val);
                         break;
                     }
                     case ColType::TYPE_STRING:
@@ -409,7 +409,7 @@ class AbstractExecutor {
                         int sum = std::accumulate(rec.begin(), rec.end(), 0, [&col_meta](int acc, const auto &record) {
                             return acc + *reinterpret_cast<const int *>(record->data + col_meta.offset);
                         });
-                        val.set_float(static_cast<float>(sum) / static_cast<float>(rec.size()));
+                        val.set(static_cast<float>(sum) / static_cast<float>(rec.size()));
                         break;
                     }
                     case ColType::TYPE_FLOAT: {
@@ -417,7 +417,7 @@ class AbstractExecutor {
                             std::accumulate(rec.begin(), rec.end(), 0.0f, [&col_meta](float acc, const auto &record) {
                                 return acc + *reinterpret_cast<const float *>(record->data + col_meta.offset);
                             });
-                        val.set_float(sum / static_cast<float>(rec.size()));
+                        val.set(sum / static_cast<float>(rec.size()));
                         break;
                     }
                     case ColType::TYPE_STRING:
@@ -482,31 +482,31 @@ class AbstractExecutor {
                     }
                     break;
                 case AggregateType::COUNT:
-                    vals[i].set_int(0);
+                    vals[i].set(0);
                     break;
                 case AggregateType::SUM:
                     if (col_metas[i].type == ColType::TYPE_INT) {
-                        vals[i].set_int(0);
+                        vals[i].set(0);
                     } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
-                        vals[i].set_float(0.0f);
+                        vals[i].set(0.0f);
                     }
                     break;
                 case AggregateType::MIN:
                     if (col_metas[i].type == ColType::TYPE_INT) {
-                        vals[i].set_int(std::numeric_limits<int>::max());
+                        vals[i].set(std::numeric_limits<int>::max());
                     } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
-                        vals[i].set_float(std::numeric_limits<float>::max());
+                        vals[i].set(std::numeric_limits<float>::max());
                     }
                     break;
                 case AggregateType::MAX:
                     if (col_metas[i].type == ColType::TYPE_INT) {
-                        vals[i].set_int(std::numeric_limits<int>::min());
+                        vals[i].set(std::numeric_limits<int>::min());
                     } else if (col_metas[i].type == ColType::TYPE_FLOAT) {
-                        vals[i].set_float(std::numeric_limits<float>::lowest());
+                        vals[i].set(std::numeric_limits<float>::lowest());
                     }
                     break;
                 case AggregateType::AVG:
-                    vals[i].set_float(0.0f);
+                    vals[i].set(0.0f);
                     break;
                 default:
                     break;
@@ -527,7 +527,7 @@ class AbstractExecutor {
                         break;
                     case AggregateType::COUNT:
                         // COUNT 聚合：返回记录总数
-                        vals[i].set_int(static_cast<int>(rec.size()));
+                        vals[i].set(static_cast<int>(rec.size()));
                         break;
                     case AggregateType::SUM:
                         // SUM 聚合：计算指定列所有值的总和
@@ -535,13 +535,13 @@ class AbstractExecutor {
                             case ColType::TYPE_INT: {
                                 int sum = vals[i].int_val +
                                           *reinterpret_cast<const int *>(record->data + col_metas[i].offset);
-                                vals[i].set_int(sum);
+                                vals[i].set(sum);
                                 break;
                             }
                             case ColType::TYPE_FLOAT: {
                                 float sum = vals[i].float_val +
                                             *reinterpret_cast<const float *>(record->data + col_metas[i].offset);
-                                vals[i].set_float(sum);
+                                vals[i].set(sum);
                                 break;
                             }
                             case ColType::TYPE_STRING:
@@ -553,13 +553,13 @@ class AbstractExecutor {
                             case ColType::TYPE_INT: {
                                 float sum = vals[i].float_val + static_cast<float>(*reinterpret_cast<const int *>(
                                                                     record->data + col_metas[i].offset));
-                                vals[i].set_float(sum);
+                                vals[i].set(sum);
                                 break;
                             }
                             case ColType::TYPE_FLOAT: {
                                 float sum = vals[i].float_val +
                                             *reinterpret_cast<const float *>(record->data + col_metas[i].offset);
-                                vals[i].set_float(sum);
+                                vals[i].set(sum);
                                 break;
                             }
                             case ColType::TYPE_STRING:
@@ -573,14 +573,14 @@ class AbstractExecutor {
                                 int min_val =
                                     std::min(vals[i].int_val,
                                              *reinterpret_cast<const int *>(record->data + col_metas[i].offset));
-                                vals[i].set_int(min_val);
+                                vals[i].set(min_val);
                                 break;
                             }
                             case ColType::TYPE_FLOAT: {
                                 float min_val =
                                     std::min(vals[i].float_val,
                                              *reinterpret_cast<const float *>(record->data + col_metas[i].offset));
-                                vals[i].set_float(min_val);
+                                vals[i].set(min_val);
                                 break;
                             }
                             case ColType::TYPE_STRING:
@@ -594,14 +594,14 @@ class AbstractExecutor {
                                 int max_val =
                                     std::max(vals[i].int_val,
                                              *reinterpret_cast<const int *>(record->data + col_metas[i].offset));
-                                vals[i].set_int(max_val);
+                                vals[i].set(max_val);
                                 break;
                             }
                             case ColType::TYPE_FLOAT: {
                                 float max_val =
                                     std::max(vals[i].float_val,
                                              *reinterpret_cast<const float *>(record->data + col_metas[i].offset));
-                                vals[i].set_float(max_val);
+                                vals[i].set(max_val);
                                 break;
                             }
                             case ColType::TYPE_STRING:
@@ -616,7 +616,7 @@ class AbstractExecutor {
         // 计算 AVG 聚合的最终值
         for (size_t i = 0; i < tab_cols.size(); ++i) {
             if (agg_types[i] == AggregateType::AVG) {
-                vals[i].set_float(vals[i].float_val / static_cast<float>(rec.size()));
+                vals[i].set(vals[i].float_val / static_cast<float>(rec.size()));
             }
         }
         return vals;  // 返回计算得到的聚合值向量

@@ -127,7 +127,7 @@ Value EvaluateExpr(const ExprTerm &term, const std::unique_ptr<RmRecord> &record
                     default:
                         throw RMDBError("Unsupported arithmetic operator");
                 }
-                result.set_float(res_float);
+                result.set(res_float);
             } else if (lhs_val.type == ColType::TYPE_INT && rhs_val.type == ColType::TYPE_INT) {
                 // 两个操作数都是 INT，执行整数运算
                 int lhs_int = lhs_val.int_val;
@@ -155,7 +155,7 @@ Value EvaluateExpr(const ExprTerm &term, const std::unique_ptr<RmRecord> &record
                     default:
                         throw RMDBError("Unsupported arithmetic operator");
                 }
-                result.set_int(res_int);
+                result.set(res_int);
             } else {
                 // 不支持的操作数类型（例如字符串）
                 throw RMDBError("Unsupported operand types for arithmetic operation");
