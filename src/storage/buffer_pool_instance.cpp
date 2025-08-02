@@ -275,7 +275,7 @@ Page* BufferPoolInstance::new_page(PageId* page_id) {
  * 如果目标页不存在于buffer_pool或者成功被删除则返回true，若其存在于buffer_pool但无法删除则返回false
  * @param {PageId} page_id 目标页
  */
-bool BufferPoolInstance::delete_page(PageId page_id) {    
+bool BufferPoolInstance::delete_page(PageId page_id) {
     // 1.   在page_table_中查找目标页，若不存在返回true
     // 2.   若目标页的pin_count不为0，则返回false
     // 3.

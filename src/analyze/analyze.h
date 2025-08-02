@@ -151,7 +151,8 @@ class Analyze {
      */
     void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check);
 
-    void check_clause_with_cols(const std::vector<ColMeta> &all_cols, const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check);
+    void check_clause_with_cols(const std::vector<ColMeta> &all_cols, const std::vector<std::string> &tab_names,
+                                std::vector<Condition> &conds, bool agg_check);
     /**
      * @brief 将语法树中的值对象转换为系统内部的Value对象
      * @param sv_val 语法树中的值对象

@@ -16,8 +16,8 @@ class LimitExecutor : public AbstractExecutor {
    public:
     LimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count)
         : child_(std::move(child)), offset_(offset), count_(count), current_(0) {
-            TRACE_FUNCTION
-        }
+        TRACE_FUNCTION
+    }
 
     void beginTuple() override {
         current_ = 0;
