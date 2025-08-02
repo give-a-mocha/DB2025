@@ -38,11 +38,6 @@ class ProjectionExecutor : public AbstractExecutor {
         TRACE_FUNCTION
         // 转移前序执行器的所有权到当前执行器
         prev_ = std::move(prev);
-        if (prev_ != nullptr && (prev_->getType() == "AggregateExecutor" || prev_->getType() == "SortExecutor" ||
-                                 prev_->getType() == "GroupExecutor")) {
-            prev_is_aggr_ = true;
-        }
-
         // 初始化当前偏移量，用于计算投影后每列在记录中的位置
         size_t curr_offset = 0;
 
@@ -52,7 +47,7 @@ class ProjectionExecutor : public AbstractExecutor {
         // 遍历需要投影的每一列
         for (auto &sel_col : sel_cols) {
             // 在前序执行器的列中查找当前要投影的列
-            auto pos = get_col(prev_cols, sel_col, prev_is_aggr_);
+            auto pos = get_col(prev_cols, sel_col, true);
 
             // 记录该列在前序执行器结果中的索引位置
             // 用于后续从前序记录中提取对应列的数据
@@ -74,12 +69,6 @@ class ProjectionExecutor : public AbstractExecutor {
 
         // 设置投影后记录的总长度
         len_ = curr_offset;
-
-        // // 特殊处理：如果前序是聚合执行器
-        // // 直接使用前序执行器的列元数据，因为聚合结果的列结构可能已经发生变化
-        // if (prev_is_aggr_) {
-        //     cols_ = prev_cols;
-        // }
     }
 
     /**

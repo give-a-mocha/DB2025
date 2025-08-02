@@ -230,16 +230,6 @@ class MvccIndexScanExecutor : public AbstractExecutor {
     const std::vector<ColMeta> &cols() const override { return tab_.cols; }
 
     /**
-     * @brief 获取指定列的元数据
-     * @param target 目标列的表列引用
-     * @return 目标列的元数据
-     */
-    ColMeta get_col_offset(const TabCol &target) override {
-        auto pos = get_col(tab_.cols, target);
-        return *pos;
-    }
-
-    /**
      * @brief 获取当前记录的RID
      * @return 当前记录的RID引用
      */

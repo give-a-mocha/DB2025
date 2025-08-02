@@ -163,81 +163,27 @@ class AbstractExecutor {
                           const std::unique_ptr<RmRecord> &rec) {
         TRACE_FUNCTION
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
-        char *lhs_data = rec->data + lhs_col->offset;
-        char *rhs_data;
-        ColType rhs_type;
-        int rhs_len = 0;
-        Value rhs_expr_val;  // 用于存储表达式计算结果
+        Value lhs_val;
+        lhs_val.set_col_data(lhs_col->type, rec->data + lhs_col->offset, lhs_col->len);
+        Value rhs_val;
 
         // 根据 rhs_type 获取右侧操作数信息
         switch (cond.rhs_type) {
             case ConditionRhsType::RHS_VALUE:
-                rhs_data = cond.rhs_val.raw->data;
-                rhs_type = cond.rhs_val.type;
-                rhs_len = cond.rhs_val.raw->size;
+                rhs_val = cond.rhs_val;
                 break;
             case ConditionRhsType::RHS_COLUMN: {
                 auto rhs_col = get_col(rec_cols, cond.rhs_col);
-                rhs_data = rec->data + rhs_col->offset;
-                rhs_type = rhs_col->type;
-                rhs_len = rhs_col->len;
+                rhs_val.set_col_data(rhs_col->type, rec->data + rhs_col->offset, rhs_col->len);
                 break;
             }
             case ConditionRhsType::RHS_EXPR:
-                // 计算表达式的值
-                // 注意：需要将 ArithExpr 包装在 ExprTerm 中传递
-                rhs_expr_val = EvaluateExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
-                // 检查计算结果的 raw 是否有效
-                rhs_expr_val.raw.reset();  // 确保 raw 被正确初始化
-                rhs_expr_val.init_raw();   // 初始化 raw 缓冲区
-                rhs_data = rhs_expr_val.raw->data;
-                rhs_type = rhs_expr_val.type;
-                rhs_len = rhs_expr_val.raw->size;
+                rhs_val = EvaluateExpr(ExprTerm(cond.rhs_expr), rec, rec_cols);
                 break;
             default:
                 throw RMDBError("Unsupported ConditionRhsType");
         }
-
-        // 类型应该一致
-        bool is_numeric = is_numeric_type(lhs_col->type) && is_numeric_type(rhs_type);
-        if (lhs_col->type != rhs_type && !is_numeric) {
-            throw IncompatibleTypeError(coltype2str(lhs_col->type), coltype2str(rhs_type));
-        }
-
-        int cmp = 0;
-        if (is_numeric) {
-            Value lhs_val = Value::get_value(lhs_col->type, lhs_data);
-            Value rhs_val = Value::get_value(rhs_type, rhs_data);
-            // 整数比较
-            if (lhs_col->type == ColType::TYPE_INT && rhs_type == ColType::TYPE_INT) {
-                cmp = (lhs_val.int_val < rhs_val.int_val) ? -1 : (lhs_val.int_val > rhs_val.int_val) ? 1 : 0;
-            } else {
-                // 先转化成浮点数
-                Value::convert(lhs_val, rhs_val);
-                // 浮点数比较
-                cmp = (lhs_val.float_val < rhs_val.float_val) ? -1 : (lhs_val.float_val > rhs_val.float_val) ? 1 : 0;
-            }
-        } else if (lhs_col->type == ColType::TYPE_STRING) {
-            size_t len = std::max(lhs_col->len, rhs_len);
-            cmp = strncmp(lhs_data, rhs_data, len);
-        }
-
-        switch (cond.op) {
-            case CompOp::OP_EQ:
-                return cmp == 0;
-            case CompOp::OP_NE:
-                return cmp != 0;
-            case CompOp::OP_LT:
-                return cmp < 0;
-            case CompOp::OP_GT:
-                return cmp > 0;
-            case CompOp::OP_LE:
-                return cmp <= 0;
-            case CompOp::OP_GE:
-                return cmp >= 0;
-            default:
-                throw InternalError("eval_cond::Unexpected op type at StaticEval");
-        }
+        return Value::compare(lhs_val, rhs_val, cond.op);
     }
 
     /**

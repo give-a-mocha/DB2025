@@ -97,7 +97,7 @@ class SortExecutor : public AbstractExecutor {
         if (is_end()) {
             return nullptr;
         }
-        return std::make_unique<RmRecord>(*sorted_tuples_[current_index_]);
+        return std::move(sorted_tuples_[current_index_]);
     }
 
     bool is_end() const override { return current_index_ >= sorted_tuples_.size(); }
