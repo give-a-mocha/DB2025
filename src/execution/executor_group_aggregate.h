@@ -313,9 +313,9 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 }
                 break;
             case AggregateType::AVG:
-                if (aggr_value.type == ColType::TYPE_INT) {
+                if (val.type == ColType::TYPE_INT) {
                     aggr_value.float_val += val.int_val;  // 累加整数值
-                } else if (aggr_value.type == ColType::TYPE_FLOAT) {
+                } else if (val.type == ColType::TYPE_FLOAT) {
                     aggr_value.float_val += val.float_val;  // 累加浮点值
                 } else {
                     throw InternalError("Unsupported type for AVG in GroupAggregateExecutor::add");
