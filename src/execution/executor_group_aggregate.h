@@ -262,15 +262,15 @@ class GroupAggregateExecutor : public AbstractExecutor {
     std::string getType() override { return "GroupAggregateExecutor"; };
 
    private:
-    bool eval_having_conds(const std::vector<Value> &group_values, const std::vector<Value> &aggr_values) {
+    bool eval_having_conds(const std::vector<Value> &group_, const std::vector<Value> &aggr_) {
         auto get_val = [&](const TabCol &col) -> Value {
-            auto pos = get_col(cols_, col);
+            auto pos = get_col(cols_, col, true);
             int index = pos - cols_.begin();
             if (index < static_cast<int>(group_cols_.size())) {
-                return group_values[index];  // 返回分组列的值
+                return group_[index];  // 返回分组列的值
             } else {
                 index -= (int)group_cols_.size();
-                return aggr_values[index];  // 返回聚合列的值
+                return aggr_[index];  // 返回聚合列的值
             }
         };
         

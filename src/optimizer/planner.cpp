@@ -240,10 +240,14 @@ std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr
 
     for (const auto &cond : query->having_conds) {
         if (cond.lhs_col.agg_type != AggregateType::NONE) {
-            agg_cols.push_back(cond.lhs_col);
+            if (std::find(agg_cols.begin(), agg_cols.end(), cond.lhs_col) == agg_cols.end()) {
+                agg_cols.push_back(cond.lhs_col);
+            }
         }
         if (cond.rhs_type == ConditionRhsType::RHS_COLUMN && cond.rhs_col.agg_type != AggregateType::NONE) {
-            agg_cols.push_back(cond.rhs_col);
+            if (std::find(agg_cols.begin(), agg_cols.end(), cond.rhs_col) == agg_cols.end()) {
+                agg_cols.push_back(cond.rhs_col);
+            }
         }
     }
 
@@ -718,7 +722,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
                 project_cols.back().agg_type = AggregateType::NONE;
             }
         }
-        if (project_cols.size() != get_table_col_num(x->tab_name_)) {
+        if (project_cols.size() != static_cast<size_t>(get_table_col_num(x->tab_name_))) {
             return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), project_cols);
         }
         return x;
