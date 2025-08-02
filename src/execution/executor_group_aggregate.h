@@ -135,6 +135,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 auto it = grouped_values.find(group_);
                 if (it == grouped_values.end()) {
                     grouped_values[group_] = init_aggr_values();  // 如果分组不存在，则初始化聚合结果
+                    grouped_count[group_] = 0;  // 初始化分组计数
                     it = grouped_values.find(group_);
                 }
                 grouped_count[group_]++;  // 更新分组计数
