@@ -46,6 +46,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     NestedLoopJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
                            std::vector<Condition> conds) {
+        TRACE_FUNCTION
         left_ = std::move(left);
         right_ = std::move(right);
         len_ = left_->tupleLen() + right_->tupleLen();

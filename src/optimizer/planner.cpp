@@ -286,7 +286,6 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
             return x.tab_name == col.tab_name && x.col_name == col.col_name;
         }) == project_cols.end()) {
             project_cols.emplace_back(col);
-            project_cols.back().agg_type = AggregateType::NONE;
         }
     }
     plannerRoot = build_projection_plan_just_scan(std::move(plannerRoot), project_cols);
@@ -712,14 +711,15 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
         while (need_cols.size() > siz) {
             need_cols.pop_back();
         }
-        int cnt = 0;
+        std::vector<TabCol> project_cols;
         for (auto &col : need_cols) {
             if (col.tab_name.compare(x->tab_name_) == 0) {
-                cnt++;
+                project_cols.push_back(col);
+                project_cols.back().agg_type = AggregateType::NONE;
             }
         }
-        if (cnt != get_table_col_num(x->tab_name_)) {
-            return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), need_cols);
+        if (project_cols.size() != get_table_col_num(x->tab_name_)) {
+            return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plan), project_cols);
         }
         return x;
     } else if (plan->tag == PlanTag::T_Sort) {
@@ -730,7 +730,6 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
                 return x.tab_name == sort_col.tab_name && x.col_name == sort_col.col_name;
             }) == need_cols.end()) {
                 need_cols.emplace_back(sort_col);
-                need_cols.back().agg_type = AggregateType::NONE; 
             }
         }
         x->subplan_ = build_projection_plan_just_scan(std::move(x->subplan_), need_cols);
@@ -777,7 +776,6 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
                 return x.tab_name == col.tab_name && x.col_name == col.col_name;
             }) == need_cols.end()) {
                 need_cols.emplace_back(col);
-                need_cols.back().agg_type = AggregateType::NONE;
             }
         }
         if (!agg_star) {

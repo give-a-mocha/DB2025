@@ -25,7 +25,6 @@ extern DiskManager disk_manager;
  * @note 该函数在调用时需要持有缓冲池的互斥锁
  */
 bool BufferPoolInstance::find_victim_page(frame_id_t* frame_id) {
-    TRACE_FUNCTION
     // Todo:
     // !1 使用BufferPoolInstance::free_list_判断缓冲池是否已满需要淘汰页面
     // !1.1 未满获得frame
@@ -63,7 +62,6 @@ bool BufferPoolInstance::find_victim_page(frame_id_t* frame_id) {
  * @note 调用者必须确保传入参数的有效性
  */
 void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t new_frame_id) {
-    TRACE_FUNCTION
     // Todo:
     // !1 如果是脏页，写回磁盘，并且把dirty置为false
     // !2 更新page table
@@ -95,7 +93,6 @@ void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t 
  * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolInstance::fetch_page(PageId page_id) {
-    TRACE_FUNCTION
     // Todo:
     //  !1.     从page_table_中搜寻目标页
     //  !1.1
@@ -161,7 +158,6 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 bool BufferPoolInstance::unpin_page(PageId page_id, bool is_dirty) {
-    TRACE_FUNCTION
     // Todo:
     // !0. lock latch
     // !1. 尝试在page_table_中搜寻page_id对应的页P
@@ -210,7 +206,6 @@ bool BufferPoolInstance::unpin_page(PageId page_id, bool is_dirty) {
  * @param {PageId} page_id 目标页的page_id，不能为INVALID_PAGE_ID
  */
 bool BufferPoolInstance::flush_page(PageId page_id) {
-    TRACE_FUNCTION
     // Todo:
     // !0. lock latch
     // !1. 查找页表,尝试获取目标页P
@@ -247,7 +242,6 @@ bool BufferPoolInstance::flush_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolInstance::new_page(PageId* page_id) {
-    TRACE_FUNCTION
     // Todo:
     // !1.   获得一个可用的frame，若无法获得则返回nullptr
     // !2.   在fd对应的文件分配一个新的page_id
@@ -281,8 +275,7 @@ Page* BufferPoolInstance::new_page(PageId* page_id) {
  * 如果目标页不存在于buffer_pool或者成功被删除则返回true，若其存在于buffer_pool但无法删除则返回false
  * @param {PageId} page_id 目标页
  */
-bool BufferPoolInstance::delete_page(PageId page_id) {
-    TRACE_FUNCTION
+bool BufferPoolInstance::delete_page(PageId page_id) {    
     // 1.   在page_table_中查找目标页，若不存在返回true
     // 2.   若目标页的pin_count不为0，则返回false
     // 3.
@@ -337,7 +330,6 @@ bool BufferPoolInstance::delete_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolInstance::flush_all_pages(int fd) {
-    TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
     // 遍历页表
@@ -359,7 +351,6 @@ void BufferPoolInstance::flush_all_pages(int fd) {
  * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolInstance::delete_all_pages(int fd) {
-    TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
     for (auto it = page_table_.begin(); it != page_table_.end();) {
@@ -391,7 +382,6 @@ void BufferPoolInstance::delete_all_pages(int fd) {
 }
 
 auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
-    TRACE_FUNCTION
     std::scoped_lock lock{latch_};
     // 找一个可用frame
     frame_id_t frame_id;
@@ -410,7 +400,6 @@ auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
 }
 
 auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
-    TRACE_FUNCTION
     std::scoped_lock lock{latch_};
 
     // 在页表中查找目标页
@@ -444,13 +433,11 @@ auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
 }
 
 auto BufferPoolInstance::fetch_read_page(PageId page_id) -> ReadPageGuard {
-    TRACE_FUNCTION
     auto basic_guard = fetch_basic_page(page_id);
     return basic_guard.UpgradeRead();  // 获取读锁
 }
 
 auto BufferPoolInstance::fetch_write_page(PageId page_id) -> WritePageGuard {
-    TRACE_FUNCTION
     auto basic_guard = fetch_basic_page(page_id);
     return basic_guard.UpgradeWrite();  // 获取写锁
 }

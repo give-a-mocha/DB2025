@@ -161,6 +161,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
      * 从上一个执行器获取所有元组，进行分组，并根据 HAVING 条件过滤组。
      */
     void beginTuple() override {
+        TRACE_FUNCTION
         is_end_ = false;  // 重置结束标志
         if (!group_cols_.empty()) {
             now_iter = grouped_values.begin();  // 初始化迭代器

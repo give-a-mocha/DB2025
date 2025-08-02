@@ -44,6 +44,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @param context 执行上下文
      */
     MvccSeqScanExecutor(std::string tab_name, std::vector<Condition> conds, Context *context) {
+        TRACE_FUNCTION
         tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
 
