@@ -52,10 +52,10 @@ class GroupAggregateExecutor : public AbstractExecutor {
     std::vector<Value> aggr_values;             // 存储聚合结果的值
     std::vector<Condition> having_conds_;       // HAVING 子句中的过滤条件
     int offset;                                 // 记录偏移量，用于计算每个列在记录中的位置
-    int count_ = 0;                             // 用于 COUNT 聚合类型的计数器
     bool is_end_ = false;                       // 标记是否已经结束
 
     std::unordered_map<std::vector<Value>, std::vector<Value>> grouped_values;
+    std::unordered_map<std::vector<Value>, int> grouped_count;  // 存储每个分组的计数
     std::unordered_map<std::vector<Value>, std::vector<Value>>::iterator now_iter;
    public:
 
@@ -78,7 +78,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 this->aggr_cols_.push_back(ColMeta{"", "*", ColType::TYPE_INT, sizeof(int), 0, false, AggregateType::COUNT});
             } else {
                 this->aggr_cols_.push_back(*prev_->get_col(prev_->cols(), aggr_col));
-                this->aggr_cols_.back().agg_type = aggr_col.agg_type;  // 设置聚合类型
+                this->aggr_cols_.back().agg_type = aggr_col.agg_type;
             }
             this->cols_.push_back(this->aggr_cols_.back());
             this->cols_.back().offset = offset;  // 设置偏移量
@@ -86,6 +86,10 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 // AVG 聚合类型的列类型为 FLOAT
                 this->cols_.back().type = ColType::TYPE_FLOAT;
                 this->cols_.back().len = sizeof(float); 
+            } else if (this->cols_.back().agg_type == AggregateType::COUNT) {
+                // COUNT 聚合类型的列类型为 INT
+                this->cols_.back().type = ColType::TYPE_INT;
+                this->cols_.back().len = sizeof(int);
             }
             offset += this->cols_.back().len;  // 更新偏移量
         });
@@ -97,18 +101,21 @@ class GroupAggregateExecutor : public AbstractExecutor {
         if (group_cols_.empty()) {
             // 没有分组，那么直接统计数量
             aggr_values = init_aggr_values();
+            int count_ = 0;
             for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
                 auto record = prev_->Next();
                 count_++;
                 for (size_t i = 0; i < aggr_cols_.size(); i++) {
                     Value val;
                     val.set_col_data(aggr_cols_[i].type, record->data + aggr_cols_[i].offset, aggr_cols_[i].len);
-                    add(i, aggr_cols_[i].agg_type, aggr_values[i], val);
+                    add(i, cols_[i].agg_type, aggr_values[i], val);
                 }
             }
-            for (size_t i = 0; i < aggr_cols_.size(); i++) {
-                if (aggr_cols_[i].agg_type == AggregateType::AVG) {
-                    aggr_values[i].float_val = aggr_values[i].float_val / count_;
+            if (count_ != 0) {
+                for (size_t i = 0; i < aggr_cols_.size(); i++) {
+                    if (cols_[i].agg_type == AggregateType::AVG) {
+                        aggr_values[i].float_val = aggr_values[i].float_val / count_;
+                    }
                 }
             }
             std::vector<Value> group_values;
@@ -118,7 +125,6 @@ class GroupAggregateExecutor : public AbstractExecutor {
         } else {
             for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
                 auto record = prev_->Next();
-                count_++;
                 std::vector<Value> group_;
                 group_.reserve(group_cols_.size());
                 for (const auto &col : group_cols_) {
@@ -131,16 +137,18 @@ class GroupAggregateExecutor : public AbstractExecutor {
                     grouped_values[group_] = init_aggr_values();  // 如果分组不存在，则初始化聚合结果
                     it = grouped_values.find(group_);
                 }
+                grouped_count[group_]++;  // 更新分组计数
                 for (size_t i = 0; i < aggr_cols_.size(); i++) {
                     Value val;
                     val.set_col_data(aggr_cols_[i].type, record->data + aggr_cols_[i].offset, aggr_cols_[i].len);
-                    add(i, aggr_cols_[i].agg_type, (it->second)[i], val);
+                    add(i, cols_[i + group_cols_.size()].agg_type, (it->second)[i], val);
                 }
             }
 
             for (auto &[group, aggr] : grouped_values) {
+                int count_ = grouped_count[group];
                 for (size_t i = 0; i < aggr_cols_.size(); i++) {
-                    if (aggr_cols_[i].agg_type == AggregateType::AVG) {
+                    if (cols_[i + group_cols_.size()].agg_type == AggregateType::AVG) {
                         aggr[i].float_val = aggr[i].float_val / count_;  // 计算平均值
                     }
                 }
@@ -342,29 +350,32 @@ class GroupAggregateExecutor : public AbstractExecutor {
     std::vector<Value> init_aggr_values() {
         std::vector<Value> values;
         values.reserve(aggr_cols_.size());
-        for (const auto& aggr_col : aggr_cols_) {
+        // 聚合列从 group_cols_ 之后开始
+        for (auto it = cols_.begin() + group_cols_.size(); it != cols_.end(); ++it) {
             Value val;
-            if (aggr_col.type == ColType::TYPE_INT) {
-                if (aggr_col.agg_type == AggregateType::MAX) {
+            if (it->type == ColType::TYPE_INT) {
+                if (it->agg_type == AggregateType::MAX) {
                     val.set_int(std::numeric_limits<int>::min());  // MAX 初始化为最小值
-                } else if (aggr_col.agg_type == AggregateType::MIN) {
+                } else if (it->agg_type == AggregateType::MIN) {
                     val.set_int(std::numeric_limits<int>::max());  // MIN 初始化为最大值
                 } else {
                     val.set_int(0);  // COUNT 和 SUM 初始化为 0
                 }
-            } else if (aggr_col.type == ColType::TYPE_FLOAT) {
-                if (aggr_col.agg_type == AggregateType::MAX) {
+            } else if (it->type == ColType::TYPE_FLOAT) {
+                if (it->agg_type == AggregateType::MAX) {
                     val.set_float(std::numeric_limits<float>::lowest());  // MAX 初始化为最小浮点数
-                } else if (aggr_col.agg_type == AggregateType::MIN) {
+                } else if (it->agg_type == AggregateType::MIN) {
                     val.set_float(std::numeric_limits<float>::max());  // MIN 初始化为最大浮点数
                 } else {
                     val.set_float(0.0f);  // COUNT 和 SUM 初始化为 0.0
                 }
-            } else if (aggr_col.type == ColType::TYPE_STRING) {
-                if (aggr_col.agg_type == AggregateType::MAX) {
-                    val.set_str(std::string(aggr_col.len, 0));
-                } else if (aggr_col.agg_type == AggregateType::MIN) {
-                    val.set_str(std::string(aggr_col.len, 255));
+            } else if (it->type == ColType::TYPE_STRING) {
+                if (it->agg_type == AggregateType::MAX) {
+                    val.set_str(std::string(it->len, 0));
+                } else if (it->agg_type == AggregateType::MIN) {
+                    val.set_str(std::string(it->len, 255));
+                } else if (it->agg_type == AggregateType::COUNT) {
+                    val.set_int(0);  // COUNT 初始化为 0
                 } else {
                     throw InternalError("String aggregate unsupported in GroupAggregateExecutor::init_aggr_values");
                 }
