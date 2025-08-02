@@ -97,7 +97,8 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
  * @param tab_names 表名
  * @return std::vector<Condition>
  */
-std::unordered_map<std::string_view, std::vector<Condition>> pop_conds(std::vector<Condition> &conds, const std::vector<std::string> &tab_names) {
+std::unordered_map<std::string_view, std::vector<Condition>> pop_conds(std::vector<Condition> &conds,
+                                                                       const std::vector<std::string> &tab_names) {
     TRACE_FUNCTION
     std::unordered_map<std::string_view, std::vector<Condition>> cond_map;
     for (const auto &tab_name : tab_names) {
@@ -106,7 +107,7 @@ std::unordered_map<std::string_view, std::vector<Condition>> pop_conds(std::vect
     std::vector<Condition> remaining_conds;
     for (auto &it : conds) {
         if (it.rhs_type == ConditionRhsType::RHS_VALUE || it.rhs_type == ConditionRhsType::RHS_EXPR ||
-             it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0) {
+            it.lhs_col.tab_name.compare(it.rhs_col.tab_name) == 0) {
             cond_map[it.lhs_col.tab_name].emplace_back(std::move(it));
         } else {
             remaining_conds.emplace_back(std::move(it));
@@ -229,7 +230,8 @@ std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query,
                                        query->having_conds);
 }
 
-std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
+std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr<Query> query,
+                                                                 std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
     std::vector<TabCol> agg_cols;
     for (const auto &col : query->cols) {
@@ -254,8 +256,8 @@ std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr
     if (query->group_cols.empty() && agg_cols.empty()) {
         return plan;
     }
-    return std::make_shared<GroupAggregatePlan>(PlanTag::T_GroupAggregate, std::move(plan), std::move(query->group_cols), std::move(agg_cols),
-                                       query->having_conds);
+    return std::make_shared<GroupAggregatePlan>(PlanTag::T_GroupAggregate, std::move(plan),
+                                                std::move(query->group_cols), std::move(agg_cols), query->having_conds);
 }
 
 /**
@@ -290,9 +292,9 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     // 保证投影列不重复
     std::vector<TabCol> project_cols;
     for (auto &col : sel_cols) {
-        if (std::find_if(project_cols.begin(), project_cols.end(), [&](const TabCol& x) -> bool {
-            return x.tab_name == col.tab_name && x.col_name == col.col_name;
-        }) == project_cols.end()) {
+        if (std::find_if(project_cols.begin(), project_cols.end(), [&](const TabCol &x) -> bool {
+                return x.tab_name == col.tab_name && x.col_name == col.col_name;
+            }) == project_cols.end()) {
             project_cols.emplace_back(col);
         }
     }
@@ -504,7 +506,7 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
 
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
-    
+
     std::unordered_map<std::string_view, std::vector<Condition>> table_conds = pop_conds(query->conds, tables);
     for (size_t i = 0; i < tables.size(); i++) {
         auto curr_conds = std::move(table_conds[tables[i]]);
@@ -514,9 +516,11 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
         std::shared_ptr<Plan> scan_plan;
         if (index_exist == false) {  // 该表没有索引
             index_col_names.clear();
-            scan_plan = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, std::move(tables[i]), curr_conds, index_col_names);
+            scan_plan =
+                std::make_shared<ScanPlan>(PlanTag::T_SeqScan, std::move(tables[i]), curr_conds, index_col_names);
         } else {  // 存在索引
-            scan_plan = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, std::move(tables[i]), curr_conds, index_col_names);
+            scan_plan =
+                std::make_shared<ScanPlan>(PlanTag::T_IndexScan, std::move(tables[i]), curr_conds, index_col_names);
         }
         table_plans_with_cardinality[i] = {std::move(scan_plan), cardinality};
     }
@@ -675,20 +679,21 @@ std::shared_ptr<Plan> Planner::join_tables(std::shared_ptr<Plan> result, const s
  * @param all_cols 所有涉及的列
  * @return 优化后的执行计划
  */
-std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols) {
+std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<Plan> plan,
+                                                               std::vector<TabCol> &need_cols) {
     size_t siz = need_cols.size();
     if (plan->tag == PlanTag::T_NestLoop || plan->tag == PlanTag::T_SortMerge) {
         auto x = std::static_pointer_cast<JoinPlan>(plan);
         for (auto &cond : x->conds_) {
             // 检查是否已经存在
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == cond.lhs_col.tab_name && x.col_name == cond.lhs_col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == cond.lhs_col.tab_name && x.col_name == cond.lhs_col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(cond.lhs_col);
             }
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == cond.rhs_col.tab_name && x.col_name == cond.rhs_col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == cond.rhs_col.tab_name && x.col_name == cond.rhs_col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(cond.rhs_col);
             }
         }
@@ -701,14 +706,14 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
     } else if (plan->tag == PlanTag::T_SeqScan || plan->tag == PlanTag::T_IndexScan) {
         auto x = std::static_pointer_cast<ScanPlan>(plan);
         for (auto &cond : x->conds_) {
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == cond.lhs_col.tab_name && x.col_name == cond.lhs_col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == cond.lhs_col.tab_name && x.col_name == cond.lhs_col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(cond.lhs_col);
             }
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == cond.rhs_col.tab_name && x.col_name == cond.rhs_col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == cond.rhs_col.tab_name && x.col_name == cond.rhs_col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(cond.rhs_col);
             }
         }
@@ -730,9 +735,9 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
         auto x = std::static_pointer_cast<SortPlan>(plan);
         // 添加所有排序列到需要的列中
         for (const auto &sort_col : x->sel_cols_) {
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == sort_col.tab_name && x.col_name == sort_col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == sort_col.tab_name && x.col_name == sort_col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(sort_col);
             }
         }
@@ -744,9 +749,9 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
     } else if (plan->tag == PlanTag::T_Group) {
         auto x = std::static_pointer_cast<GroupPlan>(plan);
         for (const auto &col : x->group_cols_) {
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == col.tab_name && x.col_name == col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == col.tab_name && x.col_name == col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(col);
             }
         }
@@ -762,23 +767,23 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
     } else if (plan->tag == PlanTag::T_GroupAggregate) {
         auto x = std::static_pointer_cast<GroupAggregatePlan>(plan);
         for (const auto &col : x->group_cols_) {
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == col.tab_name && x.col_name == col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == col.tab_name && x.col_name == col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(col);
             }
         }
 
         bool agg_star = false;
-        
+
         for (const auto &col : x->agg_cols_) {
             if (col.col_name == "*" && col.agg_type == AggregateType::COUNT) {
                 agg_star = true;
                 break;
             }
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol& x) -> bool {
-                return x.tab_name == col.tab_name && x.col_name == col.col_name;
-            }) == need_cols.end()) {
+            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
+                    return x.tab_name == col.tab_name && x.col_name == col.col_name;
+                }) == need_cols.end()) {
                 need_cols.emplace_back(col);
             }
         }
@@ -793,7 +798,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
         auto x = std::static_pointer_cast<LimitPlan>(plan);
         x->subplan_ = build_projection_plan_just_scan(std::move(x->subplan_), need_cols);
         return x;
-    }  else {
+    } else {
         throw InternalError("Unexpected plan type in projection optimization");
     }
 }

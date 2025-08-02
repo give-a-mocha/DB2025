@@ -87,7 +87,7 @@ class Planner {
     std::shared_ptr<Plan> generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
     std::shared_ptr<Plan> generate_group_and_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
-    
+
     std::shared_ptr<Plan> generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
     std::shared_ptr<Plan> generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
@@ -104,7 +104,7 @@ class Planner {
     std::shared_ptr<Plan> make_one_rel_optimized(std::shared_ptr<Query> query);
 
     std::shared_ptr<Plan> build_projection_plan_just_scan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols);
-    
+
     std::shared_ptr<Plan> build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans,
                                                     std::list<Condition> &join_conditions);
 

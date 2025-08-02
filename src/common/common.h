@@ -397,7 +397,7 @@ struct Value {
         }
     }
 
-    friend bool operator==(const Value& lhs, const Value& rhs) {
+    friend bool operator==(const Value &lhs, const Value &rhs) {
         if (lhs.type != rhs.type) return false;
         switch (lhs.type) {
             case ColType::TYPE_INT:

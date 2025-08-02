@@ -117,7 +117,8 @@ class AbstractExecutor {
                                                         bool cmp_agg_type = false) {
         auto pos = std::find_if(rec_cols.begin(), rec_cols.end(), [&](const ColMeta &col) {
             return col.tab_name == target.tab_name && col.name == target.col_name &&
-                   ((!cmp_agg_type && col.agg_type == AggregateType::NONE) || (cmp_agg_type && col.agg_type == target.agg_type));
+                   ((!cmp_agg_type && col.agg_type == AggregateType::NONE) ||
+                    (cmp_agg_type && col.agg_type == target.agg_type));
         });
         if (pos == rec_cols.end()) {
             throw ColumnNotFoundError(target.tab_name + '.' + target.col_name + " at StaticEval");

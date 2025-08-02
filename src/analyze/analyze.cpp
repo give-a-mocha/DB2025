@@ -97,8 +97,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     convert_tabname(all_cols, sel_col, tab_refs);  // 处理表名和别名
                     query->cols.push_back(sel_col);                // 添加到查询列表
                 }
-            }
-            else {
+            } else {
                 query->cols.reserve(x->cols.size());
                 for (auto &sv_sel_col : x->cols) {
                     // 创建列引用，初始状态下表名可能为空
@@ -106,14 +105,14 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
                     sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
                     convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
-                    query->cols.push_back(sel_col);  // 添加到查询列表
+                    query->cols.push_back(sel_col);                    // 添加到查询列表
                 }
             }
 
-
             {
                 // 查询列必须的是group by中的列或聚合函数
-                std::unordered_set<TabCol, TabColHash> group_cols_set(query->group_cols.begin(), query->group_cols.end());
+                std::unordered_set<TabCol, TabColHash> group_cols_set(query->group_cols.begin(),
+                                                                      query->group_cols.end());
                 bool has_aggregate = false;
                 bool has_non_aggregate = false;
                 for (const auto &col : query->cols) {
@@ -122,14 +121,15 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                         // 如果是普通列，必须在GROUP BY中
                         if (!query->group_cols.empty() && group_cols_set.find(col) == group_cols_set.end()) {
                             throw InternalError("Column '" + col.to_string() +
-                                                 "' must be in GROUP BY clause or an aggregate function");
+                                                "' must be in GROUP BY clause or an aggregate function");
                         }
-                    }else {
+                    } else {
                         has_aggregate = true;  // 存在聚合列
                     }
                 }
                 if (query->group_cols.empty() && has_non_aggregate && has_aggregate) {
-                    throw InternalError("Cannot mix aggregate and non-aggregate columns in SELECT clause when group by is empty");
+                    throw InternalError(
+                        "Cannot mix aggregate and non-aggregate columns in SELECT clause when group by is empty");
                 }
             }
 
@@ -142,7 +142,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             check_clause_with_cols(all_cols, query->tables, query->having_conds, false);
             // 检查having条件中是否有不是聚合函数也不是group by的列
             check_having_conds(query->having_conds, query->group_cols);
-            
+
             // 如果没有GROUP BY子句但有HAVING条件，则抛出错误
             if (query->group_cols.empty() && !query->having_conds.empty()) {
                 throw InternalError("HAVING clause without GROUP BY is not allowed");
@@ -154,7 +154,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 for (auto &join_expr : x->jointree) {
                     std::string right_tab_name = join_expr->right->tab_name;
                     TabRef right_table(right_tab_name, join_expr->right->alias);
-                   
+
                     // 转换JOIN条件
                     std::vector<Condition> join_conds;
                     get_clause_alias(all_cols, join_expr->conds, join_conds, tab_refs);
@@ -293,7 +293,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
-            check_clause({x->tab_name}, query->conds, false);                     // 检查WHERE条件的有效性
+            check_clause({x->tab_name}, query->conds, false);              // 检查WHERE条件的有效性
             break;
         }
         case ast::AstType::InsertStmt: {
@@ -566,7 +566,8 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
  * @param tab_names 条件中涉及的表名列表
  * @param conds 需要检查的条件表达式集合(将被修改以填充完整的列信息)
  */
-void Analyze::check_clause_with_cols(const std::vector<ColMeta> &all_cols, const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check) {
+void Analyze::check_clause_with_cols(const std::vector<ColMeta> &all_cols, const std::vector<std::string> &tab_names,
+                                     std::vector<Condition> &conds, bool agg_check) {
     TRACE_FUNCTION
 
     // 遍历检查每个条件
