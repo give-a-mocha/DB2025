@@ -356,27 +356,27 @@ class GroupAggregateExecutor : public AbstractExecutor {
             Value val;
             if (it->type == ColType::TYPE_INT) {
                 if (it->agg_type == AggregateType::MAX) {
-                    val.set_int(std::numeric_limits<int>::min());  // MAX 初始化为最小值
+                    val.set(std::numeric_limits<int>::min());  // MAX 初始化为最小值
                 } else if (it->agg_type == AggregateType::MIN) {
-                    val.set_int(std::numeric_limits<int>::max());  // MIN 初始化为最大值
+                    val.set(std::numeric_limits<int>::max());  // MIN 初始化为最大值
                 } else {
-                    val.set_int(0);  // COUNT 和 SUM 初始化为 0
+                    val.set(0);  // COUNT 和 SUM 初始化为 0
                 }
             } else if (it->type == ColType::TYPE_FLOAT) {
                 if (it->agg_type == AggregateType::MAX) {
-                    val.set_float(std::numeric_limits<float>::lowest());  // MAX 初始化为最小浮点数
+                    val.set(std::numeric_limits<float>::lowest());  // MAX 初始化为最小浮点数
                 } else if (it->agg_type == AggregateType::MIN) {
-                    val.set_float(std::numeric_limits<float>::max());  // MIN 初始化为最大浮点数
+                    val.set(std::numeric_limits<float>::max());  // MIN 初始化为最大浮点数
                 } else {
-                    val.set_float(0.0f);  // COUNT 和 SUM 初始化为 0.0
+                    val.set(0.0f);  // COUNT 和 SUM 初始化为 0.0
                 }
             } else if (it->type == ColType::TYPE_STRING) {
                 if (it->agg_type == AggregateType::MAX) {
-                    val.set_str(std::string(it->len, 0));
+                    val.set(std::string(it->len, 0));
                 } else if (it->agg_type == AggregateType::MIN) {
-                    val.set_str(std::string(it->len, 255));
+                    val.set(std::string(it->len, 255));
                 } else if (it->agg_type == AggregateType::COUNT) {
-                    val.set_int(0);  // COUNT 初始化为 0
+                    val.set(0);  // COUNT 初始化为 0
                 } else {
                     throw InternalError("String aggregate unsupported in GroupAggregateExecutor::init_aggr_values");
                 }
