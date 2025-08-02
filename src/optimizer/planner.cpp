@@ -169,6 +169,10 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     plan = generate_group_and_aggregate_plan(query, std::move(plan));
     // 处理orderby
     plan = generate_sort_plan(query, std::move(plan));
+    // 处理limit
+    if (query->limit != std::make_pair(0, std::numeric_limits<int>::max())) {
+        plan = std::make_shared<LimitPlan>(std::move(plan), query->limit.first, query->limit.second);
+    }
     return plan;
 }
 
@@ -296,10 +300,6 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     } else {
         plannerRoot = std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot),
                                                        std::move(sel_cols), is_star);
-    }
-    // 处理limit
-    if (query->limit != std::make_pair(0, std::numeric_limits<int>::max())) {
-        plannerRoot = std::make_shared<LimitPlan>(std::move(plannerRoot), query->limit.first, query->limit.second);
     }
     return plannerRoot;
 }
@@ -785,7 +785,11 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
             need_cols.pop_back();
         }
         return x;
-    } else {
+    } else if (plan->tag == PlanTag::T_Limit) {
+        auto x = std::static_pointer_cast<LimitPlan>(plan);
+        x->subplan_ = build_projection_plan_just_scan(std::move(x->subplan_), need_cols);
+        return x;
+    }  else {
         throw InternalError("Unexpected plan type in projection optimization");
     }
 }

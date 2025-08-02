@@ -49,6 +49,7 @@
 #include "recovery/log_recovery.h"
 #include "system/sm.h"
 #include "transaction/transaction_manager.h"
+#include "common/TraceStack.hpp"
 
 extern SmManager sm_manager;
 extern TransactionManager txn_manager;
