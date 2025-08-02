@@ -15,7 +15,9 @@ class LimitExecutor : public AbstractExecutor {
 
    public:
     LimitExecutor(std::unique_ptr<AbstractExecutor> child, int offset, int count)
-        : child_(std::move(child)), offset_(offset), count_(count), current_(0) {}
+        : child_(std::move(child)), offset_(offset), count_(count), current_(0) {
+            TRACE_FUNCTION
+        }
 
     void beginTuple() override {
         current_ = 0;
@@ -45,4 +47,6 @@ class LimitExecutor : public AbstractExecutor {
     const std::vector<ColMeta> &cols() const override { return child_->cols(); }
 
     std::string getType() override { return "LimitExecutor"; }
+
+    size_t tupleLen() const override { return child_->tupleLen(); }
 };

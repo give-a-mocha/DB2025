@@ -50,6 +50,7 @@ enum class PlanTag {
     T_Projection,
     T_Group,
     T_Aggregate,
+    T_GroupAggregate,
     T_Create_StaticCheckPoint,
     T_LOAD,
     T_SetOutput,  // Set output file
@@ -176,6 +177,22 @@ class GroupPlan : public Plan {
           group_cols_(std::move(group_cols)),
           having_conds_(std::move(having_conds)) {}
     ~GroupPlan() = default;
+};
+
+class GroupAggregatePlan : public Plan {
+  public:
+    std::shared_ptr<Plan> subplan_;
+    std::vector<TabCol> group_cols_;
+    std::vector<TabCol> agg_cols_;  // 聚合列
+    std::vector<Condition> having_conds_;
+    
+    GroupAggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> group_cols, std::vector<TabCol> agg_cols, std::vector<Condition> having_conds)
+          : Plan(tag),
+            subplan_(std::move(subplan)),
+            group_cols_(std::move(group_cols)),
+            agg_cols_(std::move(agg_cols)),
+            having_conds_(std::move(having_conds)) {}
+    ~GroupAggregatePlan() = default;
 };
 
 /**

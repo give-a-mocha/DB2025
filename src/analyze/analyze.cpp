@@ -30,43 +30,6 @@ bool is_column_in_cols(const TabCol &check_col, const std::vector<TabCol> &cols)
                std::tie(check_col.tab_name, check_col.col_name, check_col.agg_type);
     });
 }
-
-/**
- * @brief 辅助函数：验证聚合函数类型是否与列类型兼容
- *
- * 验证不同聚合函数支持的列类型：
- * - COUNT：支持所有类型
- * - SUM/AVG：仅支持数值类型(INT, FLOAT)
- * - MIN/MAX：仅支持数值类型(INT, FLOAT)
- *
- * @param agg_type 聚合函数类型(COUNT, SUM, AVG, MIN, MAX)
- * @param col_type 列的数据类型(INT, FLOAT, STRING)
- * @throws InternalError 当聚合函数类型与列类型不兼容时抛出异常
- */
-[[maybe_unused]] void validate_aggregate_type(AggregateType agg_type, ColType col_type) {
-    if (agg_type == AggregateType::NONE) return;
-
-    switch (agg_type) {
-        case AggregateType::COUNT:
-            break;  // COUNT支持所有类型
-
-        case AggregateType::SUM:
-        case AggregateType::AVG:
-        case AggregateType::MIN:
-        case AggregateType::MAX:
-            if (col_type != ColType::TYPE_INT && col_type != ColType::TYPE_FLOAT) {
-                std::string agg_name = agg_type == AggregateType::SUM   ? "SUM"
-                                       : agg_type == AggregateType::AVG ? "AVG"
-                                       : agg_type == AggregateType::MIN ? "MIN"
-                                                                        : "MAX";
-                throw AggregateError("Cannot apply " + agg_name + " to non-numeric column");
-            }
-            break;
-
-        default:
-            throw AggregateError("Unknown aggregate type");
-    }
-}
 }  // namespace
 
 /**
@@ -87,7 +50,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             auto x = std::static_pointer_cast<ast::SelectStmt>(parse);  // 处理SELECT查询
             // 检查所有表是否存在并处理表名和别名
             std::vector<TabRef> tab_refs;  // 存储表引用及其别名
-            // std::unordered_map<std::string, TabCol> col_refs;  // 存储列别名及其对应列
             tab_refs.reserve(x->tabs.size());
             query->tables.reserve(x->tabs.size());
             for (const auto &sv_tab : x->tabs) {
@@ -108,13 +70,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                         throw TableNotFoundError(right_tab_name);
                     }
                     TabRef right_table(right_tab_name, join_expr->right->alias);
-                    bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
-                    // 在做列检查时不需要把半连接的表加入
-                    if (!isSemiJoin) {
-                        // 普通JOIN表
-                        query->tables.push_back(right_tab_name);
-                        tab_refs.push_back(right_table);
-                    }
+                    query->tables.push_back(right_tab_name);
+                    tab_refs.push_back(right_table);
                 }
             }
 
@@ -122,8 +79,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             std::vector<ColMeta> all_cols;
             get_all_cols(query->tables, all_cols);
 
-            // assert(x->group.empty());
-            // 处理group by子句
             for (auto &sv_group_col : x->group) {
                 if (sv_group_col->cols->aggregate_type != ast::SvAggregateType::NONE) {
                     throw AggregateError("GROUP BY column cannot have aggregate function");
@@ -143,7 +98,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     query->cols.push_back(sel_col);                // 添加到查询列表
                 }
             }
-            // 情况2: 查询指定的列
             else {
                 query->cols.reserve(x->cols.size());
                 for (auto &sv_sel_col : x->cols) {
@@ -152,36 +106,43 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
                     sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
                     convert_tabname(all_cols, sel_col, tab_refs);      // 处理表名和别名
-                    // if (!sel_col.col_alias.empty() && sel_col.col_alias != sel_col.col_name) {
-                    //     if (col_refs.count(sel_col.col_alias)) {
-                    //         throw InternalError("Duplicate column alias '" + sel_col.col_alias + "'");
-                    //     }
-                    //     col_refs[sel_col.col_alias] = sel_col;  // 存储列别名映射
-                    // }
                     query->cols.push_back(sel_col);  // 添加到查询列表
                 }
             }
 
-            // 检查别名是否与原有列冲突
-            // for (const auto &col : all_cols) {
-            //     if (col_refs.count(col.name)) {
-            //         throw InternalError("Column alias '" + col.name + "' conflicts with existing column");
-            //     }
-            // }
+
+            {
+                // 查询列必须的是group by中的列或聚合函数
+                std::unordered_set<TabCol, TabColHash> group_cols_set(query->group_cols.begin(), query->group_cols.end());
+                bool has_aggregate = false;
+                bool has_non_aggregate = false;
+                for (const auto &col : query->cols) {
+                    if (col.agg_type == AggregateType::NONE) {
+                        has_non_aggregate = true;  // 存在非聚合列
+                        // 如果是普通列，必须在GROUP BY中
+                        if (!query->group_cols.empty() && group_cols_set.find(col) == group_cols_set.end()) {
+                            throw InternalError("Column '" + col.to_string() +
+                                                 "' must be in GROUP BY clause or an aggregate function");
+                        }
+                    }else {
+                        has_aggregate = true;  // 存在聚合列
+                    }
+                }
+                if (query->group_cols.empty() && has_non_aggregate && has_aggregate) {
+                    throw InternalError("Cannot mix aggregate and non-aggregate columns in SELECT clause when group by is empty");
+                }
+            }
 
             // 处理WHERE条件子句
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
-            check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性
-            // 检查where条件中是否有聚合列
-            check_where_with_aggregate(query->conds);
+            check_clause_with_cols(all_cols, query->tables, query->conds, true);  // 检查WHERE条件的有效性
 
             // 处理having条件
             get_clause_alias(all_cols, x->having_conds, query->having_conds, tab_refs);
-            check_clause(query->tables, query->having_conds);
+            check_clause_with_cols(all_cols, query->tables, query->having_conds, false);
             // 检查having条件中是否有不是聚合函数也不是group by的列
             check_having_conds(query->having_conds, query->group_cols);
-            // 检查select和group中的列是否符合规范
-            check_select_and_group(query->cols, query->group_cols);
+            
             // 如果没有GROUP BY子句但有HAVING条件，则抛出错误
             if (query->group_cols.empty() && !query->having_conds.empty()) {
                 throw InternalError("HAVING clause without GROUP BY is not allowed");
@@ -193,43 +154,14 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 for (auto &join_expr : x->jointree) {
                     std::string right_tab_name = join_expr->right->tab_name;
                     TabRef right_table(right_tab_name, join_expr->right->alias);
-                    bool isSemiJoin = (convert_sv_join_type(join_expr->type) == JoinType::SEMI_JOIN);
-                    const size_t siz = all_cols.size();
-                    // 获取SEMI JOIN表的列
-                    if (isSemiJoin) {
-                        query->tables.push_back(right_tab_name);
-                        tab_refs.push_back(right_table);
-                        get_all_cols({right_tab_name}, all_cols);
-                    }
+                   
                     // 转换JOIN条件
                     std::vector<Condition> join_conds;
                     get_clause_alias(all_cols, join_expr->conds, join_conds, tab_refs);
-                    check_where_with_aggregate(join_conds);  // 检查JOIN条件中是否有聚合列
-
-                    if (isSemiJoin) {
-                        // 条件右侧是连接表
-                        for (auto &cond : join_conds) {
-                            if (cond.lhs_col.tab_name == right_tab_name) {
-                                std::swap(cond.lhs_col, cond.rhs_col);
-                                cond.op = swap_op(cond.op);
-                            }
-                        }
-                    }
-
-                    // 检查JOIN条件的有效性
-                    check_clause(query->tables, join_conds);
+                    check_clause(query->tables, join_conds, true);
                     // 创建JOIN节点并指定JOIN类型
                     JoinType join_type = convert_sv_join_type(join_expr->type);
                     query->jointree.emplace_back(std::move(right_tab_name), std::move(join_conds), join_type);
-
-                    if (isSemiJoin) {
-                        query->tables.pop_back();
-                        tab_refs.pop_back();
-                        // 移除SEMI JOIN表的列
-                        while (all_cols.size() > siz) {
-                            all_cols.pop_back();
-                        }
-                    }
                 }
             }
 
@@ -306,7 +238,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
-            check_clause(query->tables, query->conds);  // 检查WHERE条件的有效性
+            check_clause(query->tables, query->conds, true);  // 检查WHERE条件的有效性
 
             // 检查每个SET子句的有效性和类型兼容性
             for (auto &set_clause : query->set_clauses) {
@@ -361,7 +293,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
-            check_clause({x->tab_name}, query->conds);                     // 检查WHERE条件的有效性
+            check_clause({x->tab_name}, query->conds, false);                     // 检查WHERE条件的有效性
             break;
         }
         case ast::AstType::InsertStmt: {
@@ -608,50 +540,6 @@ void Analyze::get_clause_alias(const std::vector<ColMeta> &all_cols,
         conds.push_back(cond);  // 添加条件到结果集
     }
 }
-
-/**
- * @brief 将抽象语法树中的二元表达式转换为查询条件
- *
- * 该函数负责解析WHERE子句中的条件表达式，并将其转换为系统内部使用的Condition对象。
- * 支持处理列与值的比较以及列与列之间的比较。
- *
- * @param sv_conds 输入的语法树中的二元表达式集合
- * @param conds 输出参数，用于存储转换后的条件对象
- */
-/*
-void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds) {
-    TRACE_FUNCTION
-    // 清空输出条件向量
-    conds.clear();
-    // 预留足够空间以避免后续插入时的内存重分配
-    conds.reserve(sv_conds.size());
-
-    // 遍历每个二元表达式并转换为条件对象
-    for (auto &expr : sv_conds) {
-        Condition cond;
-        // 处理左侧操作数(通常是列)
-        cond.lhs_col.tab_name = expr->lhs->tab_name;
-        cond.lhs_col.col_name = expr->lhs->col_name;
-        // 转换比较操作符(如 =, <, >, !=等)
-        cond.op = convert_sv_comp_op(expr->op);
-
-        // 处理右侧操作数，可能是值或列
-        if (auto rhs_val = std::dynamic_pointer_cast<ast::Value>(expr->rhs)) {
-            // 右侧是常量值
-            cond.is_rhs_val = true;
-            cond.rhs_val = convert_sv_value(rhs_val);
-        } else if (auto rhs_col = std::dynamic_pointer_cast<ast::Col>(expr->rhs)) {
-            // 右侧是列名
-            cond.is_rhs_val = false;
-            cond.rhs_col.tab_name = rhs_col->tab_name;
-            cond.rhs_col.col_name = rhs_col->col_name;
-        }
-
-        // 将转换后的条件添加到结果集中
-        conds.push_back(cond);
-    }
-}
-*/
 /**
  * @brief 检查条件表达式的有效性及类型兼容性
  *
@@ -661,11 +549,25 @@ void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv
  * @param tab_names 条件中涉及的表名列表
  * @param conds 需要检查的条件表达式集合(将被修改以填充完整的列信息)
  */
-void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds) {
+void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check) {
     TRACE_FUNCTION
     // 获取相关表的所有列信息
     std::vector<ColMeta> all_cols;
     get_all_cols(tab_names, all_cols);
+    check_clause_with_cols(all_cols, tab_names, conds, agg_check);
+}
+
+/**
+ * @brief 检查条件表达式的有效性及类型兼容性
+ *
+ * 该函数检查WHERE或JOIN条件中涉及的列是否存在，以及比较操作的两侧是否类型兼容。
+ * 对于每个条件，确保左右两侧的类型相同或都是数值类型(INT和FLOAT之间可以相互比较)。
+ *
+ * @param tab_names 条件中涉及的表名列表
+ * @param conds 需要检查的条件表达式集合(将被修改以填充完整的列信息)
+ */
+void Analyze::check_clause_with_cols(const std::vector<ColMeta> &all_cols, const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check) {
+    TRACE_FUNCTION
 
     // 遍历检查每个条件
     for (auto &cond : conds) {
@@ -732,6 +634,13 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         // 如果类型不匹配且不是数值类型比较，则抛出类型不兼容错误
         if (lhs_type != rhs_type && !is_numeric) {
             throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
+        }
+        if (agg_check) {
+            // 如果是聚合检查，确保WHERE条件中不包含聚合列
+            if (cond.lhs_col.agg_type != AggregateType::NONE ||
+                (cond.rhs_type == ConditionRhsType::RHS_COLUMN && cond.rhs_col.agg_type != AggregateType::NONE)) {
+                throw AggregateError("WHERE clause cannot contain aggregate columns");
+            }
         }
     }
 }
@@ -831,25 +740,6 @@ JoinType Analyze::convert_sv_join_type(ast::JoinType type) {
     }
 }
 
-/**
- * @brief 检查WHERE条件中是否包含聚合函数
- *
- * WHERE子句不允许包含聚合函数，因为WHERE在分组之前执行。
- * 该函数检查WHERE条件中的所有列，确保没有使用聚合函数。
- *
- * @param conds WHERE条件列表
- * @throws AggregateError 如果在WHERE条件中发现聚合函数
- */
-void Analyze::check_where_with_aggregate(const std::vector<Condition> &conds) {
-    TRACE_FUNCTION
-    for (const auto &cond : conds) {
-        if (cond.lhs_col.agg_type != AggregateType::NONE ||
-            (cond.rhs_type == ConditionRhsType::RHS_COLUMN && cond.rhs_col.agg_type != AggregateType::NONE)) {
-            throw AggregateError("WHERE clause cannot contain aggregate columns");
-        }
-    }
-}
-
 void Analyze::check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols) {
     TRACE_FUNCTION
     for (auto &cond : conds) {
@@ -863,29 +753,6 @@ void Analyze::check_having_conds(const std::vector<Condition> &conds, const std:
             bool found = is_column_in_cols(cond.rhs_col, group_cols);
             if (!found) {
                 throw AggregateError("having_cond: Non aggregate column not in group by");
-            }
-        }
-    }
-}
-
-void Analyze::check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols) {
-    TRACE_FUNCTION
-    if (group_cols.empty()) {
-        bool has_aggr = std::any_of(cols.begin(), cols.end(),
-                                    [](const TabCol &col) { return col.agg_type != AggregateType::NONE; });
-        bool has_non_aggr = std::any_of(cols.begin(), cols.end(),
-                                        [](const TabCol &col) { return col.agg_type == AggregateType::NONE; });
-        if (has_aggr && has_non_aggr) {
-            throw AggregateError("SELECT must not contain both aggregate and non-aggregate columns without GROUP BY");
-        }
-    } else {
-        for (auto &col : cols) {
-            if (col.agg_type != AggregateType::NONE) {
-                continue;
-            }
-            bool found = is_column_in_cols(col, group_cols);
-            if (!found) {
-                throw AggregateError("SELECT column not in GROUP BY: " + col.col_name);
             }
         }
     }

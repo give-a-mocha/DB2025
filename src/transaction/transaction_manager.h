@@ -42,6 +42,16 @@ class TransactionManager {
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
+    struct PageIdHash {
+        size_t operator()(const PageId &pid) const {
+            uint32_t x = pid.fd ^ pid.page_no; // 初始混合
+            x ^= x >> 16; // 混合高16位到底16位
+            x ^= x >> 8;  // 混合高8位到底8位
+            return x;
+        }
+    };
+    PageIdHash hasher_;  // 哈希函数，用于计算PageId的哈希值
+
     // std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
 
     /**
@@ -72,6 +82,7 @@ class TransactionManager {
     std::array<PageVersionInfoShard, VERSION_INFO_SHARDS> version_info_shards_;
 
    private:
+
     // 事务使用的并发控制算法，目前只需要考虑2PL
     ConcurrencyMode concurrency_mode_;
 

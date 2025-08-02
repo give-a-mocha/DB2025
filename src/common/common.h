@@ -396,6 +396,20 @@ struct Value {
             }
         }
     }
+
+    friend bool operator==(const Value& lhs, const Value& rhs) {
+        if (lhs.type != rhs.type) return false;
+        switch (lhs.type) {
+            case ColType::TYPE_INT:
+                return lhs.int_val == rhs.int_val;
+            case ColType::TYPE_FLOAT:
+                return lhs.float_val == rhs.float_val;
+            case ColType::TYPE_STRING:
+                return lhs.str_val == rhs.str_val;
+            default:
+                return false;
+        }
+    }
 };
 
 // 前向声明 ArithExpr

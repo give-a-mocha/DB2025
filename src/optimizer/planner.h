@@ -82,110 +82,31 @@ class Planner {
     void set_enable_sortmerge_join(bool set_val) { enable_sortmerge_join = set_val; }
 
    private:
-    /**
-     * @brief 对查询进行逻辑优化
-     * @param query 要优化的查询对象
-     * @param context 当前查询的上下文
-     * @return 优化后的查询对象
-     * @note 逻辑优化不涉及具体的执行方法选择，
-     * 主要关注查询语义等价变换
-     */
-    std::shared_ptr<Query> logical_optimization(std::shared_ptr<Query> query, Context *context);
-    /**
-     * @brief 对查询进行物理优化
-     * @param query 要优化的查询对象
-     * @param context 当前查询的上下文
-     * @return 生成的物理执行计划
-     */
     std::shared_ptr<Plan> physical_optimization(std::shared_ptr<Query> query, Context *context);
 
-    /**
-     * @brief 为ORDER BY生成排序计划
-     * @param query 查询对象
-     * @param plan 输入计划
-     * @return 添加了排序的计划或原计划
-     * @note 排序是耗费资源的操作，
-     * 应当尽可能利用已有顺序和索引
-     */
     std::shared_ptr<Plan> generate_sort_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
-    /**
-     * @brief 为SELECT语句生成完整执行计划
-     * @param query SELECT查询对象
-     * @param context 执行上下文
-     * @return 完整的查询执行计划
-     * @throw PlanError 当计划生成失败时
-     */
-
+    std::shared_ptr<Plan> generate_group_and_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
+    
     std::shared_ptr<Plan> generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
     std::shared_ptr<Plan> generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
     std::shared_ptr<Plan> generate_select_plan(std::shared_ptr<Query> query, Context *context);
 
-    // int get_indexNo(std::string tab_name, std::vector<Condition> curr_conds);
-    /**
-     * @brief 识别条件中可用的索引列
-     * @param tab_name 表名
-     * @param curr_conds 当前条件集合
-     * @param index_col_names 输出参数，存储可用的索引列名
-     * @return 是否找到可用的索引列
-     * @throw TableNotFoundError 当表不存在时
-     */
     bool get_index_cols(std::string tab_name, std::vector<Condition> curr_conds,
                         std::vector<std::string> &index_col_names);
-    /**
-     * @brief 获取表的列数信息
-     * @param tab_name 表名
-     * @return 表的总列数
-     * @throw TableNotFoundError 当表不存在时
-     * @note 该信息用于：
-     * - 资源分配
-     * - 执行计划生成
-     * - 结果集处理
-     */
+
     int get_table_col_num(const std::string &tab_name);
-    /**
-     * @brief 获取表的记录数统计
-     * @param tab_name 表名
-     * @return 表中的记录总数
-     * @throw TableNotFoundError 当表不存在时
-     */
+
     size_t get_table_cardinality(const std::string &tab_name);
 
-    /**
-     * @brief 使用贪心算法优化多表连接顺序
-     * @param query 查询对象
-     * @return 优化后的查询计划
-     * @throw PlanError 当无法生成有效计划时
-     * @note 虽然不保证全局最优，但通常可以得到
-     * 较好的局部最优解，且计算开销可控
-     */
     std::shared_ptr<Plan> make_one_rel_optimized(std::shared_ptr<Query> query);
 
-    /**
-     * @brief 构建投影计划
-     * @param plan 输入计划
-     * @param need_cols 需要投影的列
-     * @param all_cols 原始的所有列
-     * @return 添加了投影的新计划
-     */
-    std::shared_ptr<Plan> build_projection_plan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols,
-                                                std::vector<TabCol> &all_cols);
-    /**
-     * @brief 构建左深树连接计划
-     * @param table_plans 表扫描计划列表
-     * @param join_conditions 连接条件
-     * @return 连接计划
-     */
+    std::shared_ptr<Plan> build_projection_plan_just_scan(std::shared_ptr<Plan> plan, std::vector<TabCol> &need_cols);
+    
     std::shared_ptr<Plan> build_left_deep_join_tree(std::list<std::shared_ptr<Plan>> &table_plans,
-                                                    std::list<Condition> &join_conditions,
-                                                    std::list<JoinNode> &semi_join,
-                                                    std::list<std::shared_ptr<Plan>> &semi_join_plans);
-
-    std::shared_ptr<Plan> add_semi_join(std::shared_ptr<Plan> result, std::unordered_set<std::string> &joined_tables,
-                                        std::list<JoinNode> &semi_join,
-                                        std::list<std::shared_ptr<Plan>> &semi_join_plans);
+                                                    std::list<Condition> &join_conditions);
 
     std::shared_ptr<Plan> add_join(std::shared_ptr<Plan> result, std::unordered_set<std::string> &joined_tables,
                                    std::list<std::shared_ptr<Plan>> &table_plans, std::list<Condition> &join_conditions,

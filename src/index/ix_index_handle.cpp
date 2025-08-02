@@ -10,7 +10,6 @@ See the Mulan PSL v2 for more details. */
 
 #include "ix_index_handle.h"
 #include "ix_scan.h"
-#include "common/TraceStack.hpp"
 
 /**
  * @brief 在当前节点中查找第一个大于等于target的key的位置
@@ -21,7 +20,6 @@ See the Mulan PSL v2 for more details. */
  *         - 如果返回num_key，表示target大于节点中的所有key
  */
 int IxNodeHandle::lower_bound(const char *target) const {
-    TRACE_FUNCTION
     // Todo:
     // 查找当前节点中第一个大于等于target的key，并返回key的位置给上层
     // 提示: 可以采用多种查找方式，如顺序遍历、二分查找等；使用ix_compare()函数进行比较
@@ -48,7 +46,6 @@ int IxNodeHandle::lower_bound(const char *target) const {
  *         - 如果返回num_key，表示target大于等于节点中所有key
  */
 int IxNodeHandle::upper_bound(const char *target) const {
-    TRACE_FUNCTION
     // Todo:
     // 查找当前节点中第一个大于target的key，并返回key的位置给上层
     // 提示: 可以采用多种查找方式：顺序遍历、二分查找等；使用ix_compare()函数进行比较
@@ -76,7 +73,6 @@ int IxNodeHandle::upper_bound(const char *target) const {
  *         - false：未找到目标键值对
  */
 bool IxNodeHandle::leaf_lookup(const char *key, Rid &value) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 在叶子节点中获取目标key所在位置
     // 2. 判断目标key是否存在
@@ -97,7 +93,6 @@ bool IxNodeHandle::leaf_lookup(const char *key, Rid &value) {
  * @return page_id_t 包含目标key的子节点页面编号
  */
 page_id_t IxNodeHandle::internal_lookup(const char *key) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 查找当前非叶子节点中目标key所在孩子节点（子树）的位置
     // 2. 获取该孩子节点（子树）所在页面的编号
@@ -125,7 +120,6 @@ page_id_t IxNodeHandle::internal_lookup(const char *key) {
  * - 需要同时维护keys和rids数组
  */
 void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 判断pos的合法性
     // 2. 通过key获取n个连续键值对的key值，并把n个key值插入到pos位置
@@ -160,7 +154,6 @@ void IxNodeHandle::insert_pairs(int pos, const char *key, const Rid *rid, int n)
  * @warning 调用前要确保节点有足够的空间存储新的键值对
  */
 int IxNodeHandle::insert(const char *key, const Rid &value) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 查找要插入的键值对应该插入到当前节点的哪个位置
     // 2. 如果key重复则不插入
@@ -183,7 +176,6 @@ int IxNodeHandle::insert(const char *key, const Rid &value) {
  * - 删除后要保证节点结构的完整性
  */
 void IxNodeHandle::erase_pair(int pos) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 删除该位置的key
     // 2. 删除该位置的rid
@@ -221,7 +213,6 @@ void IxNodeHandle::erase_pair(int pos) {
  * @warning 删除操作可能导致节点键值对数量低于最小值，需要额外处理
  */
 int IxNodeHandle::remove(const char *key) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 查找要删除键值对的位置
     // 2. 如果要删除的键值对存在，删除键值对
@@ -255,7 +246,6 @@ IxIndexHandle::IxIndexHandle(int fd) : fd_(fd) {
  * 注意：用了FindLeafPage之后一定要unlatch叶结点，否则下次latch该结点会堵塞！
  */
 Page *IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transaction *transaction) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 获取根节点
     // 2. 从根节点开始不断向下查找目标key
@@ -305,7 +295,6 @@ Page *IxIndexHandle::find_leaf_page(const char *key, Operation operation, Transa
 }
 
 Page *IxIndexHandle::find_leaf_page_without_lock(const char *key, Operation operation) {
-    TRACE_FUNCTION
     PageId page_id = {fd_, file_hdr_->root_page_};
     Page *page = buffer_pool_manager.fetch_page(page_id);
     auto node = new IxNodeHandle(file_hdr_, page);
@@ -334,7 +323,6 @@ Page *IxIndexHandle::find_leaf_page_without_lock(const char *key, Operation oper
  *         - false：未找到目标键值对
  */
 bool IxIndexHandle::get_value(const char *key, Rid &result, Transaction *transaction) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 获取目标key值所在的叶子结点
     // 2. 在叶子节点中查找目标key值的位置，并读取key对应的rid
@@ -357,7 +345,6 @@ bool IxIndexHandle::get_value(const char *key, Rid &result, Transaction *transac
 }
 
 bool IxIndexHandle::get_value_without_lock(const char *key, Rid &result) {
-    TRACE_FUNCTION
     Page *leaf_page = find_leaf_page_without_lock(key, Operation::FIND);
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
     bool ok = leaf_node->leaf_lookup(key, result);
@@ -367,7 +354,6 @@ bool IxIndexHandle::get_value_without_lock(const char *key, Rid &result) {
 }
 
 bool IxIndexHandle::get_value_with_root_lock(const char *key, Rid &result) {
-    TRACE_FUNCTION
     std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
     return get_value_without_lock(key, result);
 }
@@ -382,7 +368,6 @@ bool IxIndexHandle::get_value_with_root_lock(const char *key, Rid &result) {
  * - 分裂可能触发父节点的递归分裂
  */
 IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 将原结点的键值对平均分配，右半部分分裂为新的右兄弟结点
     //    需要初始化新节点的page_hdr内容
@@ -432,7 +417,6 @@ IxNodeHandle *IxIndexHandle::split(IxNodeHandle *node) {
  * - 调用者负责unpin所有节点
  */
 void IxIndexHandle::insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 分裂前的结点（原结点, old_node）是否为根结点，如果为根结点需要分配新的root
     // 2. 获取原结点（old_node）的父亲结点
@@ -489,7 +473,6 @@ void IxIndexHandle::create_new_root(const char *key, const Rid &value) {
 }
 
 bool IxIndexHandle::insert_into_leaf(const char *key, const Rid &value, IxNodeHandle *leaf_node) {
-    TRACE_FUNCTION
     int pos = leaf_node->lower_bound(key);
     if (pos < leaf_node->page_hdr->num_key &&
         ix_compare(leaf_node->get_key(pos), key, file_hdr_->col_types_, file_hdr_->col_lens_) == 0) {
@@ -523,7 +506,6 @@ bool IxIndexHandle::insert_into_leaf(const char *key, const Rid &value, IxNodeHa
  * - 要及时释放节点的内存资源
  */
 bool IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction *transaction) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 查找key值应该插入到哪个叶子节点
     // 2. 在该叶子节点中插入键值对
@@ -549,7 +531,6 @@ bool IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction 
 }
 
 bool IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &value) {
-    TRACE_FUNCTION
     if (is_empty()) {
         create_new_root(key, value);
         return true;
@@ -583,7 +564,6 @@ bool IxIndexHandle::insert_entry_with_root_lock(const char *key, const Rid &valu
  * - 注意资源的释放
  */
 bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 获取该键值对所在的叶子结点
     // 2. 在该叶子结点中删除键值对
@@ -622,7 +602,6 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
 }
 
 bool IxIndexHandle::delete_entry_without_lock(const char *key) {
-    TRACE_FUNCTION
     // 1. 获取目标key值所在的叶子结点 (不带锁)
     Page *leaf_page = find_leaf_page_without_lock(key, Operation::DELETE);  // 使用DELETE操作类型
     auto leaf_node = new IxNodeHandle(file_hdr_, leaf_page);
@@ -659,7 +638,6 @@ bool IxIndexHandle::delete_entry_with_root_lock(const char *key) {
  * @return 是否需要删除结点
  */
 bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 判断node结点是否为根节点
     //    1.1 如果是根节点，需要调用AdjustRoot() 函数来进行处理，返回根节点是否需要被删除
@@ -762,7 +740,6 @@ bool IxIndexHandle::coalesce_or_redistribute(IxNodeHandle *node) {
  * @note size of root page can be less than min size and this method is only called within coalesce_or_redistribute()
  */
 bool IxIndexHandle::adjust_root(IxNodeHandle *old_root_node) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 如果old_root_node是内部结点，并且大小为1，则直接把它的孩子更新成新的根结点
     // 2. 如果old_root_node是叶结点，且大小为0，则直接更新root page
@@ -799,7 +776,6 @@ bool IxIndexHandle::adjust_root(IxNodeHandle *old_root_node) {
  * @param index node在parent中的rid_idx
  */
 void IxIndexHandle::redistribute(IxNodeHandle *neighbor_node, IxNodeHandle *node, IxNodeHandle *parent, int index) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 通过index判断neighbor_node是否为node的前驱结点
     // 2. 从neighbor_node中移动一个键值对到node结点中
@@ -842,7 +818,6 @@ void IxIndexHandle::redistribute(IxNodeHandle *neighbor_node, IxNodeHandle *node
  * @note Assume that *neighbor_node is the left sibling of *node (neighbor -> node)
  */
 bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, IxNodeHandle **parent, int index) {
-    TRACE_FUNCTION
     // Todo:
     // 1. 用index判断neighbor_node是否为node的前驱结点，若不是则交换两个结点，让neighbor_node作为左结点，node作为右结点
     // 2. 把node结点的键值对移动到neighbor_node中，并更新node结点孩子结点的父节点信息（调用maintain_child函数）
@@ -889,7 +864,6 @@ bool IxIndexHandle::coalesce(IxNodeHandle **neighbor_node, IxNodeHandle **node, 
  * - 使用后必须释放节点资源
  */
 Rid IxIndexHandle::get_rid(const Iid &iid) const {
-    TRACE_FUNCTION
     IxNodeHandle *node = fetch_node(iid.page_no);
     if (iid.slot_no >= node->get_size()) {
         buffer_pool_manager.unpin_page(node->get_page_id(), false);
@@ -915,7 +889,6 @@ Rid IxIndexHandle::get_rid(const Iid &iid) const {
  * - 需要及时释放节点资源
  */
 Iid IxIndexHandle::lower_bound(const char *key) {
-    TRACE_FUNCTION
     //! DO
     if (is_empty()) {
         return {-1, -1};
@@ -940,7 +913,6 @@ Iid IxIndexHandle::lower_bound(const char *key) {
 }
 
 Iid IxIndexHandle::lower_bound_with_root_lock(const char *key) {
-    TRACE_FUNCTION
     std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
     //! DO
     if (is_empty()) {
@@ -971,7 +943,6 @@ Iid IxIndexHandle::lower_bound_with_root_lock(const char *key) {
  * @return Iid 找到的索引项ID
  */
 Iid IxIndexHandle::upper_bound(const char *key) {
-    TRACE_FUNCTION
     //! DO
     if (is_empty()) {
         return {-1, -1};
@@ -996,7 +967,6 @@ Iid IxIndexHandle::upper_bound(const char *key) {
 }
 
 Iid IxIndexHandle::upper_bound_with_root_lock(const char *key) {
-    TRACE_FUNCTION
     std::scoped_lock lock(root_latch_);  // 使用scoped_lock自动管理锁的生命周期
     //! DO
     if (is_empty()) {
@@ -1031,7 +1001,6 @@ Iid IxIndexHandle::upper_bound_with_root_lock(const char *key) {
  * @warning 使用后必须及时释放节点资源
  */
 Iid IxIndexHandle::leaf_end() const {
-    TRACE_FUNCTION
     IxNodeHandle *node = fetch_node(file_hdr_->last_leaf_);
     Iid iid = {.page_no = file_hdr_->last_leaf_, .slot_no = node->get_size()};
     buffer_pool_manager.unpin_page(node->get_page_id(), false);  // unpin it!
@@ -1049,7 +1018,6 @@ Iid IxIndexHandle::leaf_end() const {
  * - 可用于范围查询的起点
  */
 Iid IxIndexHandle::leaf_begin() const {
-    TRACE_FUNCTION
     Iid iid = {.page_no = file_hdr_->first_leaf_, .slot_no = 0};
     return iid;
 }
@@ -1064,7 +1032,6 @@ Iid IxIndexHandle::leaf_begin() const {
  * - 必须释放返回的节点内存
  */
 IxNodeHandle *IxIndexHandle::fetch_node(int page_no) const {
-    TRACE_FUNCTION
     Page *page = buffer_pool_manager.fetch_page(PageId{fd_, page_no});
     if (page == nullptr) {
         throw FileNotOpenError(fd_);
@@ -1079,7 +1046,6 @@ IxNodeHandle *IxIndexHandle::fetch_node(int page_no) const {
  * @return IxNodeHandle* 新创建的节点句柄
  */
 IxNodeHandle *IxIndexHandle::create_node() {
-    TRACE_FUNCTION
     IxNodeHandle *node;
     file_hdr_->num_pages_++;
 
@@ -1099,7 +1065,6 @@ IxNodeHandle *IxIndexHandle::create_node() {
  * - 需要正确维护内存中的数据
  */
 void IxIndexHandle::maintain_parent(IxNodeHandle *node) {
-    TRACE_FUNCTION
     IxNodeHandle *curr = node;
     while (curr->get_parent_page_no() != IX_NO_PAGE) {
         // Load its parent
@@ -1131,7 +1096,6 @@ void IxIndexHandle::maintain_parent(IxNodeHandle *node) {
  * - 需要正确处理资源释放
  */
 void IxIndexHandle::erase_leaf(IxNodeHandle *leaf) {
-    TRACE_FUNCTION
     assert(leaf->is_leaf_page());
 
     IxNodeHandle *prev = fetch_node(leaf->get_prev_leaf());
@@ -1160,7 +1124,6 @@ void IxIndexHandle::release_node_handle(IxNodeHandle &node) { file_hdr_->num_pag
  * @warning 必须正确处理资源释放
  */
 void IxIndexHandle::maintain_child(IxNodeHandle *node, int child_idx) {
-    TRACE_FUNCTION
     if (!node->is_leaf_page()) {
         //  Current node is inner node, load its child and set its parent to current node
         int child_page_no = node->value_at(child_idx);
@@ -1172,7 +1135,6 @@ void IxIndexHandle::maintain_child(IxNodeHandle *node, int child_idx) {
 }
 
 bool IxIndexHandle::is_page_safe(IxNodeHandle *node, Operation operation) {
-    TRACE_FUNCTION
     auto size = node->get_size();
 
     switch (operation) {
@@ -1191,7 +1153,6 @@ bool IxIndexHandle::is_page_safe(IxNodeHandle *node, Operation operation) {
 }
 
 void IxIndexHandle::UnlockAncestors(Transaction *transaction) {
-    TRACE_FUNCTION
     auto pages = transaction->get_index_latch_page_set();
     for (auto &page : *pages) {
         if (page == nullptr) {
@@ -1209,7 +1170,6 @@ void IxIndexHandle::UnlockAncestors(Transaction *transaction) {
  * @details 递归遍历B+树的所有节点，以树形结构显示页号和键的个数
  */
 void IxIndexHandle::debug_print_tree() {
-    TRACE_FUNCTION
     INFO("\n=== B+ Tree Structure Debug ===\n");
     if (is_empty()) {
         INFO("Tree is empty!\n");
@@ -1236,7 +1196,6 @@ void IxIndexHandle::debug_print_tree() {
  * @param depth 当前节点深度，用于控制缩进
  */
 void IxIndexHandle::debug_print_node(page_id_t page_no, int depth) {
-    TRACE_FUNCTION
     if (page_no == IX_NO_PAGE || page_no == INVALID_PAGE_ID) {
         return;
     }
@@ -1273,7 +1232,6 @@ void IxIndexHandle::debug_print_node(page_id_t page_no, int depth) {
  * @details 从第一个叶子节点开始，沿着链表打印所有叶子节点的连接关系
  */
 void IxIndexHandle::debug_print_leaf_chain() {
-    TRACE_FUNCTION
     if (is_empty()) {
         INFO("Leaf chain is empty.\n");
         return;
@@ -1298,7 +1256,6 @@ void IxIndexHandle::debug_print_leaf_chain() {
 // 可视化网站 http://dreampuf.github.io/GraphvizOnline/
 // Draw the B+ tree
 void IxIndexHandle::Draw(const std::string &outf = "bplustree.dot") {
-    TRACE_FUNCTION
     if (file_hdr_->root_page_ == INVALID_PAGE_ID) {  // Assuming INVALID_PAGE_ID indicates an empty tree
         // LOG_WARN("Drawing an empty tree"); // Assuming a logging mechanism exists
         return;
@@ -1313,7 +1270,6 @@ void IxIndexHandle::Draw(const std::string &outf = "bplustree.dot") {
 
 // Helper method to recursively draw the B+ tree
 void IxIndexHandle::ToGraph(int page_id, std::ofstream &out) {
-    TRACE_FUNCTION
     std::string leaf_prefix("LEAF_");
     std::string internal_prefix("INT_");
 

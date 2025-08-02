@@ -134,15 +134,6 @@ class Analyze {
     void get_all_cols(const std::vector<std::string> &tab_names, std::vector<ColMeta> &all_cols);
 
     /**
-     * @brief 处理WHERE条件的基本转换
-     * @param sv_conds 语法树中的条件表达式集合
-     * @param conds 输出参数，存储转换结果
-     * @throw SemanticError 当条件表达式存在语法或语义错误
-     * @note 该方法不处理表别名，需要配合get_clause_alias使用
-     */
-    void get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv_conds, std::vector<Condition> &conds);
-
-    /**
      * @brief 处理带有表别名的WHERE条件转换
      * @param all_cols 所有相关表的列元数据
      * @param sv_conds 语法树条件表达式集合
@@ -158,8 +149,9 @@ class Analyze {
      * @param tab_names 条件中涉及的表名列表
      * @param conds 需要检查的条件表达式集合
      */
-    void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds);
+    void check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check);
 
+    void check_clause_with_cols(const std::vector<ColMeta> &all_cols, const std::vector<std::string> &tab_names, std::vector<Condition> &conds, bool agg_check);
     /**
      * @brief 将语法树中的值对象转换为系统内部的Value对象
      * @param sv_val 语法树中的值对象
@@ -212,13 +204,6 @@ class Analyze {
      * @throw IncompatibleTypeError 如果发现非数值类型
      */
     void CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vector<ColMeta> &all_cols);
-    /**
-     * @brief 检查WHERE条件中是否包含聚合函数
-     * @param conds WHERE子句的条件表达式集合
-     * @throw SemanticError 当条件中包含聚合函数时
-     * @note 聚合函数通常只能在HAVING子句中使用
-     */
-    void check_where_with_aggregate(const std::vector<Condition> &conds);
 
     /**
      * @brief 检查HAVING子句中的条件表达式
@@ -227,8 +212,6 @@ class Analyze {
      * @throw SemanticError 当HAVING条件不合法时
      */
     void check_having_conds(const std::vector<Condition> &conds, const std::vector<TabCol> &group_cols);
-
-    void check_select_and_group(const std::vector<TabCol> &cols, const std::vector<TabCol> &group_cols);
 
     void check_orderby_with_group(const std::vector<OrderbyInfo> &order_bys, const std::vector<TabCol> &select_cols,
                                   const std::vector<TabCol> &group_cols);

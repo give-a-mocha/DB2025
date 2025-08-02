@@ -37,6 +37,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_mvcc_insert.h"
 #include "execution/executor_mvcc_seq_scan.h"
 #include "execution/executor_mvcc_index_scan.h"
+#include "execution/executor_group_aggregate.h"
 
 extern SmManager sm_manager;
 extern QlManager ql_manager;
@@ -217,6 +218,12 @@ class Portal {
         } else if (plan->tag == PlanTag::T_Limit) {
             auto x = std::static_pointer_cast<LimitPlan>(plan);
             return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context), x->offset_, x->count_);
+        } else if(plan->tag == PlanTag::T_GroupAggregate) {
+            auto x = std::static_pointer_cast<GroupAggregatePlan>(plan);
+            return std::make_unique<GroupAggregateExecutor>(convert_plan_executor(x->subplan_, context), 
+                                                            x->group_cols_, x->agg_cols_, x->having_conds_);
+        } else {
+            assert(0);  // 未知的计划类型
         }
         return nullptr;
     }
