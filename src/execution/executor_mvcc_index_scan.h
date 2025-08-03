@@ -84,19 +84,16 @@ class MvccIndexScanExecutor : public AbstractExecutor {
                 case ColType::TYPE_INT: {
                     max_val.set(std::numeric_limits<int>::max());
                     min_val.set(std::numeric_limits<int>::min());
-                    max_val.init_raw(sizeof(int)), min_val.init_raw(sizeof(int));
                     break;
                 }
                 case ColType::TYPE_FLOAT: {
                     max_val.set(std::numeric_limits<float>::max());
                     min_val.set(std::numeric_limits<float>::lowest());
-                    max_val.init_raw(sizeof(float)), min_val.init_raw(sizeof(float));
                     break;
                 }
                 case ColType::TYPE_STRING: {
                     max_val.set(std::string(col.len, 255));
                     min_val.set(std::string(col.len, 0));
-                    max_val.init_raw(col.len), min_val.init_raw(col.len);
                     break;
                 }
                 default:
@@ -145,8 +142,8 @@ class MvccIndexScanExecutor : public AbstractExecutor {
                     }
                 }
             }
-            memcpy(lower_record.data + offset, min_val.raw->data, col.len);
-            memcpy(upper_record.data + offset, max_val.raw->data, col.len);
+            min_val.set_record_data(lower_record.data + offset, col.len);
+            max_val.set_record_data(upper_record.data + offset, col.len);
             offset += col.len;
         }
         lower_iid = ih_->lower_bound(lower_record.data);
