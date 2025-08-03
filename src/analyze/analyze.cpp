@@ -295,8 +295,8 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             get_all_cols(query->tables, all_cols);                              // 获取所有相关表的列
             std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
             // 处理WHERE条件
-            get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
-            check_clause_with_cols(all_cols, {x->tab_name}, query->conds, false);              // 检查WHERE条件的有效性
+            get_clause_alias(all_cols, x->conds, query->conds, tab_refs);          // 获取WHERE条件并处理别名
+            check_clause_with_cols(all_cols, {x->tab_name}, query->conds, false);  // 检查WHERE条件的有效性
             break;
         }
         case ast::AstType::InsertStmt: {

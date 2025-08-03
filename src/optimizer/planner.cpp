@@ -721,7 +721,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
             need_cols.pop_back();
         }
         return x;
-    }  else if (plan->tag == PlanTag::T_GroupAggregate) {
+    } else if (plan->tag == PlanTag::T_GroupAggregate) {
         auto x = std::static_pointer_cast<GroupAggregatePlan>(plan);
         for (const auto &col : x->group_cols_) {
             if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {

@@ -13,53 +13,53 @@
 
 // 为 std::vector<Value> 提供哈希函数
 namespace std {
-    template<>
-    struct hash<std::vector<Value>> {
-        size_t operator()(const std::vector<Value>& v) const {
-            size_t hash_val = 0;
-            for (const auto& value : v) {
-                // 根据值的类型计算哈希值
-                size_t elem_hash = 0;
-                switch (value.type) {
-                    case ColType::TYPE_INT:
-                        elem_hash = std::hash<int>{}(value.int_val);
-                        break;
-                    case ColType::TYPE_FLOAT:
-                        elem_hash = std::hash<float>{}(value.float_val);
-                        break;
-                    case ColType::TYPE_STRING:
-                        elem_hash = std::hash<std::string>{}(value.str_val);
-                        break;
-                    default:
-                        // 对于其他类型，使用默认哈希
-                        elem_hash = 0;
-                }
-                // 组合哈希值
-                hash_val ^= elem_hash + 0x9e3779b9 + (hash_val << 6) + (hash_val >> 2);
+template <>
+struct hash<std::vector<Value>> {
+    size_t operator()(const std::vector<Value>& v) const {
+        size_t hash_val = 0;
+        for (const auto& value : v) {
+            // 根据值的类型计算哈希值
+            size_t elem_hash = 0;
+            switch (value.type) {
+                case ColType::TYPE_INT:
+                    elem_hash = std::hash<int>{}(value.int_val);
+                    break;
+                case ColType::TYPE_FLOAT:
+                    elem_hash = std::hash<float>{}(value.float_val);
+                    break;
+                case ColType::TYPE_STRING:
+                    elem_hash = std::hash<std::string>{}(value.str_val);
+                    break;
+                default:
+                    // 对于其他类型，使用默认哈希
+                    elem_hash = 0;
             }
-            return hash_val;
+            // 组合哈希值
+            hash_val ^= elem_hash + 0x9e3779b9 + (hash_val << 6) + (hash_val >> 2);
         }
-    };
-}
-
+        return hash_val;
+    }
+};
+}  // namespace std
 
 class GroupAggregateExecutor : public AbstractExecutor {
    private:
-    std::unique_ptr<AbstractExecutor> prev_;    // 指向上一个执行器的智能指针，用于获取输入元组
-    std::vector<ColMeta> cols_;               
-    std::vector<ColMeta> group_cols_;           // GROUP BY 子句中用于分组的列的元数据
-    std::vector<ColMeta> aggr_cols_;            // 聚合列的元数据
-    std::vector<Value> aggr_values;             // 存储聚合结果的值
-    std::vector<Condition> having_conds_;       // HAVING 子句中的过滤条件
-    int offset;                                 // 记录偏移量，用于计算每个列在记录中的位置
-    bool is_end_ = false;                       // 标记是否已经结束
+    std::unique_ptr<AbstractExecutor> prev_;  // 指向上一个执行器的智能指针，用于获取输入元组
+    std::vector<ColMeta> cols_;
+    std::vector<ColMeta> group_cols_;      // GROUP BY 子句中用于分组的列的元数据
+    std::vector<ColMeta> aggr_cols_;       // 聚合列的元数据
+    std::vector<Value> aggr_values;        // 存储聚合结果的值
+    std::vector<Condition> having_conds_;  // HAVING 子句中的过滤条件
+    int offset;                            // 记录偏移量，用于计算每个列在记录中的位置
+    bool is_end_ = false;                  // 标记是否已经结束
 
     std::unordered_map<std::vector<Value>, std::vector<Value>> grouped_values;
     std::unordered_map<std::vector<Value>, int> grouped_count;  // 存储每个分组的计数
     std::unordered_map<std::vector<Value>, std::vector<Value>>::iterator now_iter;
-   public:
 
-    GroupAggregateExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> group_cols, std::vector<TabCol> aggr_cols, std::vector<Condition> conds) {
+   public:
+    GroupAggregateExecutor(std::unique_ptr<AbstractExecutor> prev, std::vector<TabCol> group_cols,
+                           std::vector<TabCol> aggr_cols, std::vector<Condition> conds) {
         TRACE_FUNCTION
         prev_ = std::move(prev);
 
@@ -70,12 +70,13 @@ class GroupAggregateExecutor : public AbstractExecutor {
             this->group_cols_.push_back(*get_col(this->prev_->cols(), group_col));
             this->cols_.push_back(this->group_cols_.back());
             this->cols_.back().offset = offset;  // 设置偏移量
-            offset += this->cols_.back().len;  // 更新偏移量
+            offset += this->cols_.back().len;    // 更新偏移量
         });
 
         std::for_each(aggr_cols.begin(), aggr_cols.end(), [this](const auto& aggr_col) {
             if (aggr_col.col_name == "*" && aggr_col.agg_type == AggregateType::COUNT) {
-                this->aggr_cols_.push_back(ColMeta{"", "*", ColType::TYPE_INT, sizeof(int), 0, false, AggregateType::COUNT});
+                this->aggr_cols_.push_back(
+                    ColMeta{"", "*", ColType::TYPE_INT, sizeof(int), 0, false, AggregateType::COUNT});
             } else {
                 this->aggr_cols_.push_back(*prev_->get_col(prev_->cols(), aggr_col));
                 this->aggr_cols_.back().agg_type = aggr_col.agg_type;
@@ -85,7 +86,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
             if (this->cols_.back().agg_type == AggregateType::AVG) {
                 // AVG 聚合类型的列类型为 FLOAT
                 this->cols_.back().type = ColType::TYPE_FLOAT;
-                this->cols_.back().len = sizeof(float); 
+                this->cols_.back().len = sizeof(float);
             } else if (this->cols_.back().agg_type == AggregateType::COUNT) {
                 // COUNT 聚合类型的列类型为 INT
                 this->cols_.back().type = ColType::TYPE_INT;
@@ -127,7 +128,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 auto record = prev_->Next();
                 std::vector<Value> group_;
                 group_.reserve(group_cols_.size());
-                for (const auto &col : group_cols_) {
+                for (const auto& col : group_cols_) {
                     Value val;
                     val.set_value_data(col.type, record->data + col.offset, col.len);
                     group_.push_back(val);  // 获取分组列的值
@@ -135,7 +136,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 auto it = grouped_values.find(group_);
                 if (it == grouped_values.end()) {
                     grouped_values[group_] = init_aggr_values();  // 如果分组不存在，则初始化聚合结果
-                    grouped_count[group_] = 0;  // 初始化分组计数
+                    grouped_count[group_] = 0;                    // 初始化分组计数
                     it = grouped_values.find(group_);
                 }
                 grouped_count[group_]++;  // 更新分组计数
@@ -146,7 +147,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 }
             }
 
-            for (auto &[group, aggr] : grouped_values) {
+            for (auto& [group, aggr] : grouped_values) {
                 int count_ = grouped_count[group];
                 for (size_t i = 0; i < aggr_cols_.size(); i++) {
                     if (cols_[i + group_cols_.size()].agg_type == AggregateType::AVG) {
@@ -182,7 +183,6 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 is_end_ = true;  // 如果没有分组列且没有聚合结果，则标记为结束
             }
         }
-        
     }
 
     /**
@@ -213,7 +213,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
      * 注意：返回的元组所有权被转移。
      */
     std::unique_ptr<RmRecord> Next() override {
-        std::unique_ptr<RmRecord> record = std::make_unique<RmRecord>(offset);   
+        std::unique_ptr<RmRecord> record = std::make_unique<RmRecord>(offset);
         if (group_cols_.empty()) {
             for (size_t i = 0; i < aggr_cols_.size(); i++) {
                 aggr_values[i].set_record_data(record->data + cols_[i].offset, cols_[i].len);
@@ -227,7 +227,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 // 设置分组列的值
                 val.set_record_data(record->data + col.offset, col.len);
             }
-            
+
             // 再处理聚合列
             for (size_t i = 0; i < aggr_cols_.size(); i++) {
                 const auto& col = cols_[i + group_cols_.size()];
@@ -250,8 +250,8 @@ class GroupAggregateExecutor : public AbstractExecutor {
     std::string getType() override { return "GroupAggregateExecutor"; };
 
    private:
-    bool eval_having_conds(const std::vector<Value> &group_, const std::vector<Value> &aggr_) {
-        auto get_val = [&](const TabCol &col) -> Value {
+    bool eval_having_conds(const std::vector<Value>& group_, const std::vector<Value>& aggr_) {
+        auto get_val = [&](const TabCol& col) -> Value {
             auto pos = get_col(cols_, col, true);
             int index = pos - cols_.begin();
             if (index < static_cast<int>(group_cols_.size())) {
@@ -261,8 +261,8 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 return aggr_[index];  // 返回聚合列的值
             }
         };
-        
-        for (const auto &cond : having_conds_) {
+
+        for (const auto& cond : having_conds_) {
             Value lhs_val = get_val(cond.lhs_col);  // 获取左侧列的值
             Value rhs_val;
 
@@ -282,11 +282,11 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 return false;  // 如果有一个条件不满足，则返回 false
             }
         }
-        
+
         return true;  // 所有条件都满足，返回 true
     }
 
-    void add(int i, AggregateType type, Value &aggr_value, const Value& val) {
+    void add(int i, AggregateType type, Value& aggr_value, const Value& val) {
         switch (type) {
             case AggregateType::COUNT:
                 aggr_value.int_val += 1;  // COUNT 聚合类型直接计数
