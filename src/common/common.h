@@ -244,7 +244,7 @@ struct Value {
         }
     }
 
-    void set_col_data(ColType type, char *data, size_t data_len = 0) {
+    void set_value_data(ColType type, char *data, size_t data_len = 0) {
         switch (type) {
             case ColType::TYPE_INT:
                 set(*(int *)data);
@@ -256,6 +256,24 @@ struct Value {
                 set(std::string(data, data_len));
                 break;
             default:
+                break;
+        }
+    }
+
+    void set_record_data(char *data, size_t len) const {
+        switch (type) {
+            case ColType::TYPE_INT:
+                memcpy(data, &int_val, len);
+                break;
+            case ColType::TYPE_FLOAT:
+                memcpy(data, &float_val, len);
+                break;
+            case ColType::TYPE_STRING:
+                memset(data, 0, len);  // 清空数据
+                memcpy(data, str_val.c_str(), len);
+                break;
+            default:
+                throw InternalError("Unsupported Value type for set_record_data");
                 break;
         }
     }
@@ -342,40 +360,6 @@ struct Value {
             default:
                 throw InternalError("compare::Unexpected op type at compare.");
         }
-    }
-
-    /**
-     * @brief 从原始数据中提取值
-     *
-     * 根据列类型从内存中读取数据并转换为Value对象
-     * 支持INT和FLOAT类型，不支持直接获取STRING类型
-     *
-     * @param p 值的类型
-     * @param a 指向原始数据的指针
-     * @return 转换后的Value对象
-     * @throw InternalError 当尝试获取STRING类型时
-     */
-    static Value get_value(ColType p, const char *a) {
-        Value res;
-        switch (p) {
-            case ColType::TYPE_INT: {
-                int ia = static_cast<int>(*reinterpret_cast<const int *>(a));
-                res.set(ia);
-                break;
-            }
-
-            case ColType::TYPE_FLOAT: {
-                float fa = static_cast<float>(*reinterpret_cast<const float *>(a));
-                res.set(fa);
-                break;
-            }
-
-            case ColType::TYPE_STRING: {
-                // 需要手动处理string类型的获取
-                throw InternalError("get_value::Unexpected string value type.");
-            }
-        }
-        return res;
     }
 
     std::string to_string() {

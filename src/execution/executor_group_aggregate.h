@@ -107,7 +107,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 count_++;
                 for (size_t i = 0; i < aggr_cols_.size(); i++) {
                     Value val;
-                    val.set_col_data(aggr_cols_[i].type, record->data + aggr_cols_[i].offset, aggr_cols_[i].len);
+                    val.set_value_data(aggr_cols_[i].type, record->data + aggr_cols_[i].offset, aggr_cols_[i].len);
                     add(i, cols_[i].agg_type, aggr_values[i], val);
                 }
             }
@@ -129,7 +129,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 group_.reserve(group_cols_.size());
                 for (const auto &col : group_cols_) {
                     Value val;
-                    val.set_col_data(col.type, record->data + col.offset, col.len);
+                    val.set_value_data(col.type, record->data + col.offset, col.len);
                     group_.push_back(val);  // 获取分组列的值
                 }
                 auto it = grouped_values.find(group_);
@@ -141,7 +141,7 @@ class GroupAggregateExecutor : public AbstractExecutor {
                 grouped_count[group_]++;  // 更新分组计数
                 for (size_t i = 0; i < aggr_cols_.size(); i++) {
                     Value val;
-                    val.set_col_data(aggr_cols_[i].type, record->data + aggr_cols_[i].offset, aggr_cols_[i].len);
+                    val.set_value_data(aggr_cols_[i].type, record->data + aggr_cols_[i].offset, aggr_cols_[i].len);
                     add(i, cols_[i + group_cols_.size()].agg_type, (it->second)[i], val);
                 }
             }
@@ -214,23 +214,9 @@ class GroupAggregateExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         std::unique_ptr<RmRecord> record = std::make_unique<RmRecord>(offset);   
-
-        auto set_value = [&](const ColMeta& col, const Value& val) {
-            if (col.type == ColType::TYPE_INT) {
-                memcpy(record->data + col.offset, &(val.int_val), col.len);
-            } else if (col.type == ColType::TYPE_FLOAT) {
-                memcpy(record->data + col.offset, &(val.float_val), col.len);
-            } else if (col.type == ColType::TYPE_STRING) {
-                memset(record->data + col.offset, 0, col.len);  // 对于字符串类型，清空数据
-                memcpy(record->data + col.offset, val.str_val.c_str(), val.str_val.size());
-            } else {
-                throw InternalError("Unsupported type in GroupAggregateExecutor::Next");
-            }
-        };
-
         if (group_cols_.empty()) {
             for (size_t i = 0; i < aggr_cols_.size(); i++) {
-                set_value(cols_[i], aggr_values[i]);
+                aggr_values[i].set_record_data(record->data + cols_[i].offset, cols_[i].len);
             }
         } else {
             // 有分组的情况，需要处理分组列和聚合列
@@ -238,14 +224,16 @@ class GroupAggregateExecutor : public AbstractExecutor {
             for (size_t i = 0; i < group_cols_.size(); i++) {
                 const auto& col = cols_[i];
                 const auto& val = now_iter->first[i];
-                set_value(col, val);  // 设置分组列的值
+                // 设置分组列的值
+                val.set_record_data(record->data + col.offset, col.len);
             }
             
             // 再处理聚合列
             for (size_t i = 0; i < aggr_cols_.size(); i++) {
                 const auto& col = cols_[i + group_cols_.size()];
                 const auto& val = now_iter->second[i];
-                set_value(col, val);  // 设置聚合列的值
+                // 设置聚合列的值
+                val.set_record_data(record->data + col.offset, col.len);
             }
         }
         return record;

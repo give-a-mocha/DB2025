@@ -165,7 +165,7 @@ class AbstractExecutor {
         TRACE_FUNCTION
         auto lhs_col = get_col(rec_cols, cond.lhs_col);
         Value lhs_val;
-        lhs_val.set_col_data(lhs_col->type, rec->data + lhs_col->offset, lhs_col->len);
+        lhs_val.set_value_data(lhs_col->type, rec->data + lhs_col->offset, lhs_col->len);
         Value rhs_val;
 
         // 根据 rhs_type 获取右侧操作数信息
@@ -175,7 +175,7 @@ class AbstractExecutor {
                 break;
             case ConditionRhsType::RHS_COLUMN: {
                 auto rhs_col = get_col(rec_cols, cond.rhs_col);
-                rhs_val.set_col_data(rhs_col->type, rec->data + rhs_col->offset, rhs_col->len);
+                rhs_val.set_value_data(rhs_col->type, rec->data + rhs_col->offset, rhs_col->len);
                 break;
             }
             case ConditionRhsType::RHS_EXPR:

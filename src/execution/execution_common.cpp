@@ -25,7 +25,7 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
     values.reserve(cols_.size());  // 预分配空间以提高性能
     for (const auto &col : cols_) {
         Value value;
-        value.set_col_data(col.type, record->data + col.offset, col.len);
+        value.set_value_data(col.type, record->data + col.offset, col.len);
         value.init_raw(col.len);  // 确保每个Value都有原始数据缓冲区
         values.push_back(value);
     }
@@ -66,7 +66,7 @@ auto IsWriteWriteConflict(Transaction *txn, UndoLink undolink) -> bool {
  */
 Value GetColumnValue(const std::unique_ptr<RmRecord> &record, const ColMeta &col) {
     Value val;
-    val.set_col_data(col.type, record->data + col.offset, col.len);
+    val.set_value_data(col.type, record->data + col.offset, col.len);
     return val;
 }
 
