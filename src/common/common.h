@@ -171,11 +171,8 @@ struct Value {
     };
     std::string str_val;  // 字符串值
 
-    std::shared_ptr<RmRecord> raw;  // 原始记录缓冲区
-
     /**
      * @brief 设置整数值
-     *
      * @param int_val_ 要设置的整数值
      */
     void set(int int_val_) {
@@ -185,7 +182,6 @@ struct Value {
 
     /**
      * @brief 设置浮点数值
-     *
      * @param float_val_ 要设置的浮点数值
      */
     void set(float float_val_) {
@@ -195,53 +191,11 @@ struct Value {
 
     /**
      * @brief 设置字符串值
-     *
      * @param str_val_ 要设置的字符串值
      */
     void set(std::string str_val_) {
         type = ColType::TYPE_STRING;
         str_val = std::move(str_val_);
-    }
-
-    /**
-     * @brief 初始化原始数据缓冲区
-     *
-     * 根据当前值的类型，将值转换为原始字节格式存储在缓冲区中。
-     * 对于字符串类型，会检查长度是否超出限制。
-     *
-     * @param len 缓冲区长度(字节)
-     * @throw StringOverflowError 字符串长度超过指定长度时抛出
-     */
-    void init_raw(int len) {
-        assert(raw == nullptr);
-        raw = std::make_shared<RmRecord>(len);
-        if (type == ColType::TYPE_INT) {
-            assert(len == sizeof(int));
-            *(int *)(raw->data) = int_val;  // 将整数值写入缓冲区
-        } else if (type == ColType::TYPE_FLOAT) {
-            assert(len == sizeof(float));
-            *(float *)(raw->data) = float_val;  // 将浮点数值写入缓冲区
-        } else if (type == ColType::TYPE_STRING) {
-            if (len < (int)str_val.size()) {
-                throw StringOverflowError();  // 字符串长度溢出异常
-            }
-            memset(raw->data, 0, len);                           // 初始化缓冲区为0
-            memcpy(raw->data, str_val.c_str(), str_val.size());  // 复制字符串到缓冲区
-        }
-    }
-
-    void init_raw() {
-        assert(raw == nullptr);
-        if (type == ColType::TYPE_INT) {
-            raw = std::make_shared<RmRecord>(sizeof(int));
-            *(int *)(raw->data) = int_val;
-        } else if (type == ColType::TYPE_FLOAT) {
-            raw = std::make_shared<RmRecord>(sizeof(float));
-            *(float *)(raw->data) = float_val;
-        } else if (type == ColType::TYPE_STRING) {
-            raw = std::make_shared<RmRecord>(str_val.size());
-            memcpy(raw->data, str_val.c_str(), str_val.size());
-        }
     }
 
     void set_value_data(ColType type, char *data, size_t data_len = 0) {
