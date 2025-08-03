@@ -253,7 +253,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     if (col->type != set_clause.rhs_val.type && !is_numeric) {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
                     }
-                    set_clause.rhs_val.init_raw(col->len);  // 初始化值的原始数据
+                    if (col->type == ColType::TYPE_STRING) {
+                        if (col->len < static_cast<int>(set_clause.rhs_val.str_val.size())) {
+                            throw StringOverflowError();  // 字符串长度溢出异常
+                        }
+                    }
                 } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
                     // 检查右侧列是否存在
                     set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
@@ -599,8 +603,11 @@ void Analyze::check_clause_with_cols(const std::vector<ColMeta> &all_cols, const
         // 获取右侧的类型信息(可能是值或列)
         ColType rhs_type;
         if (cond.rhs_type == ConditionRhsType::RHS_VALUE) {
-            // 如果右侧是常量值，初始化其原始数据，并获取类型
-            cond.rhs_val.init_raw(lhs_col_len);
+            if (cond.rhs_val.type == ColType::TYPE_STRING) {
+                if (lhs_col_len < static_cast<int>(cond.rhs_val.str_val.size())) {
+                    throw StringOverflowError();  // 字符串长度溢出异常
+                }
+            }
             rhs_type = cond.rhs_val.type;
         } else if (cond.rhs_type == ConditionRhsType::RHS_COLUMN) {
             if (cond.rhs_col.agg_type != AggregateType::COUNT) {
@@ -863,7 +870,6 @@ void Analyze::CheckArithExprType(std::shared_ptr<ExprTerm> term, const std::vect
             if (term->val.type == ColType::TYPE_STRING) {
                 throw IncompatibleTypeError("Arithmetic expression", coltype2str(term->val.type));
             }
-            term->val.init_raw();
             break;
         case TermType::COLUMN: {
             // 如果是列检查是不是在全部列中，
