@@ -79,10 +79,8 @@ class MvccInsertExecutor : public AbstractExecutor {
                     throw IncompatibleTypeError(coltype2str(col.type), coltype2str(values_[i].type));
                 }
             }
-
-            // 复制值到记录中
-            values_[i].init_raw(col.len);
-            memcpy(rec->data + col.offset, values_[i].raw->data, col.len);
+            // 设置记录数据
+            values_[i].set_record_data(rec->data + col.offset, col.len);
         }
         std::vector<Rid> rids = sm_manager.exist_in_index(tab_, rec, context_->txn_);
 

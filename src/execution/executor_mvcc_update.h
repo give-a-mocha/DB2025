@@ -111,11 +111,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }
-
-                value.raw.reset();         // 确保 raw 数据被重置
-                value.init_raw(col->len);  // 确保 raw 数据被初始化
-
-                memcpy(new_rec->data + col->offset, value.raw->data, col->len);
+                // 将值设置到新记录中
+                value.set_record_data(new_rec->data + col->offset, col->len);
             }
 
             std::vector<Rid> rids = sm_manager.exist_in_index(tab_, new_rec, context_->txn_);
