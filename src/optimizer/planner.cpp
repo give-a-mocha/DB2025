@@ -37,7 +37,7 @@ extern SmManager sm_manager;
  * @param index_col_names 输出参数，存储选中的索引列名
  * @return 是否找到可用索引
  */
-bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds,
+bool Planner::get_index_cols(const std::string &tab_name, const std::vector<Condition> &curr_conds,
                              std::vector<std::string> &index_col_names) {
     TRACE_FUNCTION
     index_col_names.clear();
@@ -47,7 +47,7 @@ bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_c
     }
 
     // 从条件中提取所有涉及该表的列
-    std::unordered_set<std::string> cols;
+    std::unordered_set<std::string_view> cols;
     for (auto &cond : curr_conds) {
         if (cond.rhs_type == ConditionRhsType::RHS_VALUE && cond.lhs_col.tab_name.compare(tab_name) == 0) {
             // 支持等值条件和范围条件
@@ -165,8 +165,6 @@ std::shared_ptr<Plan> Planner::physical_optimization(std::shared_ptr<Query> quer
     // 使用优化的连接顺序生成计划
     std::shared_ptr<Plan> plan = make_one_rel_optimized(query);
 
-    // plan = generate_group_plan(query, std::move(plan));
-    // plan = generate_aggregate_plan(query, std::move(plan));
     plan = generate_group_and_aggregate_plan(query, std::move(plan));
     // 处理orderby
     plan = generate_sort_plan(query, std::move(plan));
@@ -244,8 +242,6 @@ std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr
  */
 std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query, Context *context) {
     TRACE_FUNCTION
-    // 逻辑优化
-    // query = logical_optimization(std::move(query), context);
 
     // 物理优化
     auto sel_cols = query->cols;

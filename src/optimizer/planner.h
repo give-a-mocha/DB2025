@@ -88,13 +88,9 @@ class Planner {
 
     std::shared_ptr<Plan> generate_group_and_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
 
-    std::shared_ptr<Plan> generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
-
-    std::shared_ptr<Plan> generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan);
-
     std::shared_ptr<Plan> generate_select_plan(std::shared_ptr<Query> query, Context *context);
 
-    bool get_index_cols(std::string tab_name, std::vector<Condition> curr_conds,
+    bool get_index_cols(const std::string &tab_name, const std::vector<Condition> &curr_conds,
                         std::vector<std::string> &index_col_names);
 
     int get_table_col_num(const std::string &tab_name);
