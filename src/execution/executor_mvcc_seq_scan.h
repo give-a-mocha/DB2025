@@ -64,7 +64,6 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      */
     void beginTuple() override {
         TRACE_FUNCTION
-        INFO("beginTuple record at table {}", tab_name_);
         // 创建扫描迭代器
         scan_ = std::make_unique<RmScan>(fh_);
 
@@ -74,7 +73,6 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
             auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
-            INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
                 tuple_meta_ = base_meta;
@@ -90,7 +88,6 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         TRACE_FUNCTION
-        INFO("Next record at table {}", tab_name_);
         // 检查扫描器状态
         if (scan_ == nullptr) {
             throw InternalError("Scan not initialized at " + getType());
@@ -107,7 +104,6 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
             auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
-            INFO("undologs size {}", undologs.size());
             if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
                 rec_ = std::move(rec);
                 tuple_meta_ = base_meta;

@@ -205,36 +205,6 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
     return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), sel_cols, is_desc_list);
 }
 
-std::shared_ptr<Plan> Planner::generate_aggregate_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
-    TRACE_FUNCTION
-    auto query_cols = query->cols;
-    for (const auto &group_col : query->group_cols) {
-        if (std::find_if(query_cols.begin(), query_cols.end(), [&](const TabCol &col) {
-                return std::tie(col.tab_name, col.col_name, col.agg_type) ==
-                       std::tie(group_col.tab_name, group_col.col_name, group_col.agg_type);
-            }) == query_cols.end()) {
-            // 如果分组列不在查询列中，则添加到查询列中
-            query_cols.emplace_back(group_col);
-        }
-    }
-    if (all_of(query_cols.begin(), query_cols.end(),
-               [](const TabCol &col) { return col.agg_type == AggregateType::NONE; })) {
-        // 如果没有聚合函数，则不需要生成聚合计划
-        return plan;
-    }
-    return std::make_shared<AggregatePlan>(PlanTag::T_Aggregate, std::move(plan), query_cols);
-}
-
-// GROUPANDAGGREGATE PLAN
-std::shared_ptr<Plan> Planner::generate_group_plan(std::shared_ptr<Query> query, std::shared_ptr<Plan> plan) {
-    TRACE_FUNCTION
-    if (query->group_cols.empty()) {
-        return plan;
-    }
-    return std::make_shared<GroupPlan>(PlanTag::T_Group, std::move(plan), query->cols, query->group_cols,
-                                       query->having_conds);
-}
-
 std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr<Query> query,
                                                                  std::shared_ptr<Plan> plan) {
     TRACE_FUNCTION
@@ -751,25 +721,7 @@ std::shared_ptr<Plan> Planner::build_projection_plan_just_scan(std::shared_ptr<P
             need_cols.pop_back();
         }
         return x;
-    } else if (plan->tag == PlanTag::T_Group) {
-        auto x = std::static_pointer_cast<GroupPlan>(plan);
-        for (const auto &col : x->group_cols_) {
-            if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {
-                    return x.tab_name == col.tab_name && x.col_name == col.col_name;
-                }) == need_cols.end()) {
-                need_cols.emplace_back(col);
-            }
-        }
-        x->subplan_ = build_projection_plan_just_scan(std::move(x->subplan_), need_cols);
-        while (need_cols.size() > siz) {
-            need_cols.pop_back();
-        }
-        return x;
-    } else if (plan->tag == PlanTag::T_Aggregate) {
-        auto x = std::static_pointer_cast<AggregatePlan>(plan);
-        x->subplan_ = build_projection_plan_just_scan(std::move(x->subplan_), need_cols);
-        return x;
-    } else if (plan->tag == PlanTag::T_GroupAggregate) {
+    }  else if (plan->tag == PlanTag::T_GroupAggregate) {
         auto x = std::static_pointer_cast<GroupAggregatePlan>(plan);
         for (const auto &col : x->group_cols_) {
             if (std::find_if(need_cols.begin(), need_cols.end(), [&](const TabCol &x) -> bool {

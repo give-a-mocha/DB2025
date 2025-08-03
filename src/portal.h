@@ -16,15 +16,12 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/common.h"
 #include "common/print.hpp"
-#include "execution/execution_aggregate.h"
 #include "execution/explain/execution_explain_filter.h"
-#include "execution/explain/execution_explain_group.h"
 #include "execution/explain/execution_explain_join.h"
 #include "execution/explain/execution_explain_limit.h"
 #include "execution/explain/execution_explain_project.h"
 #include "execution/explain/execution_explain_scan.h"
 #include "execution/explain/execution_explain_sort.h"
-#include "execution/execution_group.h"
 #include "execution/execution_sort.h"
 #include "execution/executor_abstract.h"
 #include "execution/executor_limit.h"
@@ -208,13 +205,6 @@ class Portal {
             auto x = std::static_pointer_cast<SortPlan>(plan);
             return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
                                                   x->is_desc_);
-        } else if (plan->tag == PlanTag::T_Aggregate) {
-            auto x = std::static_pointer_cast<AggregatePlan>(plan);
-            return std::make_unique<AggregateExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_);
-        } else if (plan->tag == PlanTag::T_Group) {
-            auto x = std::static_pointer_cast<GroupPlan>(plan);
-            return std::make_unique<GroupExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
-                                                   x->group_cols_, x->having_conds_);
         } else if (plan->tag == PlanTag::T_Limit) {
             auto x = std::static_pointer_cast<LimitPlan>(plan);
             return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context), x->offset_, x->count_);
@@ -294,14 +284,6 @@ class Portal {
             return std::make_unique<ExplainSortExecutor>(
                 convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
                 std::move(x->sel_cols_), std::move(x->is_desc_), offset);
-        } else if (plan->tag == PlanTag::T_Aggregate) {
-            auto x = std::static_pointer_cast<AggregatePlan>(plan);
-            return convert_plan_explain_executor(std::move(x->subplan_), context, offset, join_tables);
-        } else if (plan->tag == PlanTag::T_Group) {
-            auto x = std::static_pointer_cast<GroupPlan>(plan);
-            return std::make_unique<ExplainGroupExecutor>(
-                convert_plan_explain_executor(std::move(x->subplan_), context, offset + 1, join_tables),
-                std::move(x->group_cols_), std::move(x->having_conds_), offset);
         } else if (plan->tag == PlanTag::T_Limit) {
             auto x = std::static_pointer_cast<LimitPlan>(plan);
             return std::make_unique<ExplainLimitExecutor>(

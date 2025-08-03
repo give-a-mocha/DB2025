@@ -217,7 +217,6 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             for (auto &sv_set_clause : x->set_clauses) {
                 SetClause set_clause;
                 set_clause.lhs.tab_name = x->tab_name->tab_name;    // 设置左侧列的表名
-                set_clause.lhs.tab_alias = x->tab_name->alias;      // 设置左侧列的别名
                 set_clause.lhs.col_name = sv_set_clause->col_name;  // 设置左侧列名
 
                 auto rhs_term = AnalyzeExprTerm(sv_set_clause->val, all_cols, tab_refs);
@@ -238,7 +237,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
-            check_clause(query->tables, query->conds, true);  // 检查WHERE条件的有效性
+            check_clause_with_cols(all_cols, query->tables, query->conds, true);  // 检查WHERE条件的有效性
 
             // 检查每个SET子句的有效性和类型兼容性
             for (auto &set_clause : query->set_clauses) {
@@ -293,7 +292,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
-            check_clause({x->tab_name}, query->conds, false);              // 检查WHERE条件的有效性
+            check_clause_with_cols(all_cols, {x->tab_name}, query->conds, false);              // 检查WHERE条件的有效性
             break;
         }
         case ast::AstType::InsertStmt: {

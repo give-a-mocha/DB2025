@@ -48,8 +48,6 @@ enum class PlanTag {
     T_SortMerge,  // sort merge join
     T_Sort,
     T_Projection,
-    T_Group,
-    T_Aggregate,
     T_GroupAggregate,
     T_Create_StaticCheckPoint,
     T_LOAD,
@@ -151,32 +149,6 @@ class ProjectionPlan : public Plan {
     ~ProjectionPlan() = default;
     ProjectionPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols, bool isStar = false)
         : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)), isStar_(isStar) {}
-};
-
-class AggregatePlan : public Plan {
-   public:
-    std::shared_ptr<Plan> subplan_;
-    std::vector<TabCol> sel_cols_;
-    AggregatePlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols)
-        : Plan(tag), subplan_(std::move(subplan)), sel_cols_(std::move(sel_cols)) {}
-    ~AggregatePlan() = default;
-};
-
-class GroupPlan : public Plan {
-   public:
-    std::shared_ptr<Plan> subplan_;
-    std::vector<TabCol> sel_cols_;
-    std::vector<TabCol> group_cols_;
-    std::vector<Condition> having_conds_;
-
-    GroupPlan(PlanTag tag, std::shared_ptr<Plan> subplan, std::vector<TabCol> sel_cols, std::vector<TabCol> group_cols,
-              std::vector<Condition> having_conds)
-        : Plan(tag),
-          subplan_(std::move(subplan)),
-          sel_cols_(std::move(sel_cols)),
-          group_cols_(std::move(group_cols)),
-          having_conds_(std::move(having_conds)) {}
-    ~GroupPlan() = default;
 };
 
 class GroupAggregatePlan : public Plan {

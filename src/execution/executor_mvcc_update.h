@@ -58,7 +58,6 @@ class MvccUpdateExecutor : public AbstractExecutor {
             auto &base_meta = std::get<0>(rec_tuple);
             auto &old_rec = std::get<1>(rec_tuple);
             auto &rid_ = std::get<2>(rec_tuple);
-            WARN("Updating rid: {}", rid_);
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid_);
 
             if (IsWriteWriteConflict(context_->txn_, link)) {
@@ -102,16 +101,13 @@ class MvccUpdateExecutor : public AbstractExecutor {
                     throw RMDBError("Unsupported SetRhsType");
                 }
 
-                // 确保 value 有 raw 数据，但避免不必要的重置
-                // value.raw.reset(); // 移除这行，因为 EvaluateExpr 和 GetColumnValue 会处理
-
                 // 处理类型转换 (使用计算或获取到的 value.type)
                 if (col->type != value.type) {
                     if (col->type == ColType::TYPE_INT && value.type == ColType::TYPE_FLOAT) {
                         value.set(static_cast<int>(value.float_val));
                     } else if (col->type == ColType::TYPE_FLOAT && value.type == ColType::TYPE_INT) {
                         value.set(static_cast<float>(value.int_val));
-                    } else if (col->type != value.type) {  // 添加一个检查，防止相同类型也抛出错误
+                    } else {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(value.type));
                     }
                 }
