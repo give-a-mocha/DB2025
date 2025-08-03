@@ -26,7 +26,6 @@ std::vector<Value> convert_record_to_values(const std::unique_ptr<RmRecord> &rec
     for (const auto &col : cols_) {
         Value value;
         value.set_value_data(col.type, record->data + col.offset, col.len);
-        value.init_raw(col.len);  // 确保每个Value都有原始数据缓冲区
         values.push_back(value);
     }
     return values;
