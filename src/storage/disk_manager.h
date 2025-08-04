@@ -43,19 +43,6 @@ class DiskManager {
 
     void deallocate_page(page_id_t page_id);
 
-    /**
-     * @brief 目录相关操作
-     *
-     * @details 提供完整的目录管理功能：
-     * 1. is_dir: 检查目录是否存在
-     * 2. create_dir: 创建新目录
-     * 3. destroy_dir: 删除目录及其内容
-     *
-     * @note 目录操作需要考虑：
-     * 1. 权限检查
-     * 2. 递归处理
-     * 3. 错误恢复
-     */
     bool is_dir(const std::string &path);
 
     void create_dir(const std::string &path);

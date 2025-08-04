@@ -98,6 +98,7 @@ class MvccInsertExecutor : public AbstractExecutor {
         }
         TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         if (!rids.empty()) {
+            //!这里使用back在唯一索引下才是对的
             rid_ = rids.back();
             if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta_, new_meta, nullptr, rec,
                                                     context_->txn_)) {

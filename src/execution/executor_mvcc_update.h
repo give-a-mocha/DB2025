@@ -118,7 +118,6 @@ class MvccUpdateExecutor : public AbstractExecutor {
             // 唯一性检查
             TupleMeta base_meta_(0, true);
             for (const auto &rid : rids) {
-                INFO("Checking unique constraint for rid: {}", rid);
                 auto [tuple_meta, tuple_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
                 base_meta_ = tuple_meta;
                 if (IsWriteWriteConflict(context_->txn_, link)) {
@@ -133,6 +132,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
             if (!rids.empty()) {
+                //!这里使用back在唯一索引下才是对的
                 insert_rid = rids.back();
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, base_meta, old_rec, insert_rid, base_meta_, nullptr,
                                               new_rec, context_->txn_)) {
