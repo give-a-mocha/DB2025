@@ -44,11 +44,7 @@ struct PageId {
 template <>
 struct std::hash<PageId> {
     size_t operator()(const PageId &pid) const {
-        uint32_t h = static_cast<uint32_t>(pid.fd) ^ pid.page_no;
-        h ^= h >> 16;  // 混合高16位
-        h ^= h >> 8;   // 混合高8位到低8位
-        h ^= h >> 4;   // 额外混合高4位
-        return h;
+        return (pid.fd << 16) | pid.page_no;
     }
 };
 

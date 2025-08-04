@@ -44,10 +44,7 @@ class TransactionManager {
 
     struct PageIdHash {
         size_t operator()(const PageId &pid) const {
-            uint32_t x = pid.fd ^ pid.page_no;  // 初始混合
-            x ^= x >> 16;                       // 混合高16位到底16位
-            x ^= x >> 8;                        // 混合高8位到底8位
-            return x;
+            return static_cast<size_t>(pid.fd) * 131 + static_cast<size_t>(pid.page_no);
         }
     };
     PageIdHash hasher_;  // 哈希函数，用于计算PageId的哈希值
