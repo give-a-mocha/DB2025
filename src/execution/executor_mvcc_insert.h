@@ -30,7 +30,6 @@ class MvccInsertExecutor : public AbstractExecutor {
     TabMeta &tab_;               // 表的元数据
     std::vector<Value> values_;  // 待插入的值列表
     RmFileHandle *fh_;           // 表的数据文件句柄
-    std::string tab_name_;       // 表名
     Rid rid_;                    // 插入记录的位置(插入成功后赋值)
 
    public:
@@ -42,15 +41,14 @@ class MvccInsertExecutor : public AbstractExecutor {
      * @param context 执行上下文
      * @throw InvalidValueCountError 当值的数量与表的列数不匹配时
      */
-    MvccInsertExecutor(const std::string &tab_name, std::vector<Value> values, Context *context)
+    MvccInsertExecutor(std::string tab_name, std::vector<Value> values, Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
-        values_ = values;
-        tab_name_ = tab_name;
+        values_ = std::move(values);
         // 检查插入值的数量是否与表的列数匹配
-        if (values.size() != tab_.cols.size()) {
+        if (values_.size() != tab_.cols.size()) {
             throw InvalidValueCountError();
         }
-        fh_ = sm_manager.fhs_.at(tab_name).get();
+        fh_ = sm_manager.fhs_.at(tab_.name).get();
         context_ = context;
     };
 
@@ -101,14 +99,14 @@ class MvccInsertExecutor : public AbstractExecutor {
         TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         if (!rids.empty()) {
             rid_ = rids.back();
-            if (!txn_manager.UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta_, new_meta, nullptr, rec,
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta_, new_meta, nullptr, rec,
                                                     context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
         } else {
             rid_ = fh_->GetNewRid();
             TupleMeta base_meta(0, true);
-            if (!txn_manager.UpdateTupleAndUndoLink(tab_name_, fh_, rid_, base_meta, new_meta, nullptr, rec,
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta, new_meta, nullptr, rec,
                                                     context_->txn_)) {
                 fh_->delete_record(rid_);
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);

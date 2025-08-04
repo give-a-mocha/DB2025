@@ -88,8 +88,9 @@ class Portal {
             switch (x->tag) {
                 case PlanTag::T_select: {
                     auto p = std::static_pointer_cast<ProjectionPlan>(x->subplan_);
+                    auto sel_cols = p->sel_cols_;
                     std::unique_ptr<AbstractExecutor> root = convert_plan_executor(p, context);
-                    return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(p->sel_cols_), std::move(root),
+                    return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(sel_cols), std::move(root),
                                                         plan);
                 }
 
@@ -113,7 +114,7 @@ class Portal {
                     }
 
                     std::unique_ptr<AbstractExecutor> root =
-                        std::make_unique<MvccDeleteExecutor>(x->tab_name_, x->conds_, std::move(old_recs), context);
+                        std::make_unique<MvccDeleteExecutor>(std::move(x->tab_name_), std::move(x->conds_), std::move(old_recs), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -121,7 +122,7 @@ class Portal {
 
                 case PlanTag::T_Insert: {
                     std::unique_ptr<AbstractExecutor> root =
-                        std::make_unique<MvccInsertExecutor>(x->tab_name_, x->values_, context);
+                        std::make_unique<MvccInsertExecutor>(std::move(x->tab_name_), std::move(x->values_), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -182,18 +183,18 @@ class Portal {
         TRACE_FUNCTION
         if (plan->tag == PlanTag::T_Projection) {
             auto x = std::static_pointer_cast<ProjectionPlan>(plan);
-            return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_);
+            return std::make_unique<ProjectionExecutor>(convert_plan_executor(std::move(x->subplan_), context), std::move(x->sel_cols_));
         } else if (plan->tag == PlanTag::T_SeqScan || plan->tag == PlanTag::T_IndexScan) {
             auto x = std::static_pointer_cast<ScanPlan>(plan);
             if (x->tag == PlanTag::T_SeqScan) {
-                return std::make_unique<MvccSeqScanExecutor>(x->tab_name_, x->conds_, context);
+                return std::make_unique<MvccSeqScanExecutor>(std::move(x->tab_name_), std::move(x->conds_), context);
             } else {
-                return std::make_unique<MvccIndexScanExecutor>(x->tab_name_, x->conds_, x->index_col_names_, context);
+                return std::make_unique<MvccIndexScanExecutor>(std::move(x->tab_name_), std::move(x->conds_), std::move(x->index_col_names_), context);
             }
         } else if (plan->tag == PlanTag::T_NestLoop || plan->tag == PlanTag::T_SortMerge) {
             auto x = std::static_pointer_cast<JoinPlan>(plan);
-            std::unique_ptr<AbstractExecutor> left = convert_plan_executor(x->left_, context);
-            std::unique_ptr<AbstractExecutor> right = convert_plan_executor(x->right_, context);
+            std::unique_ptr<AbstractExecutor> left = convert_plan_executor(std::move(x->left_), context);
+            std::unique_ptr<AbstractExecutor> right = convert_plan_executor(std::move(x->right_), context);
             if (x->type == JoinType::SEMI_JOIN) {
                 return std::make_unique<NestedLoopSemiJoinExecutor>(std::move(left), std::move(right),
                                                                     std::move(x->conds_));
@@ -203,15 +204,15 @@ class Portal {
             }
         } else if (plan->tag == PlanTag::T_Sort) {
             auto x = std::static_pointer_cast<SortPlan>(plan);
-            return std::make_unique<SortExecutor>(convert_plan_executor(x->subplan_, context), x->sel_cols_,
-                                                  x->is_desc_);
+            return std::make_unique<SortExecutor>(convert_plan_executor(std::move(x->subplan_), context), std::move(x->sel_cols_),
+                                                  std::move(x->is_desc_));
         } else if (plan->tag == PlanTag::T_Limit) {
             auto x = std::static_pointer_cast<LimitPlan>(plan);
-            return std::make_unique<LimitExecutor>(convert_plan_executor(x->subplan_, context), x->offset_, x->count_);
+            return std::make_unique<LimitExecutor>(convert_plan_executor(std::move(x->subplan_), context), std::move(x->offset_), std::move(x->count_));
         } else if (plan->tag == PlanTag::T_GroupAggregate) {
             auto x = std::static_pointer_cast<GroupAggregatePlan>(plan);
-            return std::make_unique<GroupAggregateExecutor>(convert_plan_executor(x->subplan_, context), x->group_cols_,
-                                                            x->agg_cols_, x->having_conds_);
+            return std::make_unique<GroupAggregateExecutor>(convert_plan_executor(std::move(x->subplan_), context), std::move(x->group_cols_),
+                                                            std::move(x->agg_cols_), std::move(x->having_conds_));
         } else {
             assert(0);  // 未知的计划类型
         }

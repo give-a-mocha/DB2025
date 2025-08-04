@@ -27,14 +27,12 @@ class MvccDeleteExecutor : public AbstractExecutor {
     TabMeta &tab_;                                                                 // 表的元数据
     std::vector<Condition> conds_;                                                 // 删除条件列表
     RmFileHandle *fh_;                                                             // 表的数据文件句柄
-    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表
-    std::string tab_name_;                                                         // 表名
+    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表                                                        // 表名
 
    public:
-    MvccDeleteExecutor(const std::string &tab_name, std::vector<Condition> conds,
+    MvccDeleteExecutor(std::string tab_name, std::vector<Condition> conds,
                        std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
-        tab_name_ = tab_name;
         fh_ = sm_manager.fhs_.at(tab_name).get();
         conds_ = std::move(conds);
         old_recs_ = std::move(old_recs);
@@ -56,7 +54,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), true);
-            if (!txn_manager.UpdateTupleAndUndoLink(tab_name_, fh_, rid, base_meta, new_meta, old_rec, nullptr,
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid, base_meta, new_meta, old_rec, nullptr,
                                                     context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }

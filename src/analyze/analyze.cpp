@@ -604,7 +604,7 @@ void Analyze::check_clause_with_cols(const std::vector<ColMeta> &all_cols, const
         ColType rhs_type;
         if (cond.rhs_type == ConditionRhsType::RHS_VALUE) {
             if (cond.rhs_val.type == ColType::TYPE_STRING) {
-                if (lhs_col_len < static_cast<int>(cond.rhs_val.str_val.size())) {
+                if (lhs_col_len < static_cast<size_t>(cond.rhs_val.str_val.size())) {
                     throw StringOverflowError();  // 字符串长度溢出异常
                 }
             }

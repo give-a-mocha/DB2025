@@ -25,10 +25,9 @@ extern TransactionManager txn_manager;
  */
 class MvccSeqScanExecutor : public AbstractExecutor {
    private:
-    std::string tab_name_;           // 扫描的表名
+    TabMeta &tab_;                   // 表的元数据
     std::vector<Condition> conds_;   // 过滤条件列表
     RmFileHandle *fh_;               // 表文件句柄
-    std::vector<ColMeta> cols_;      // 输出列的元数据
     size_t len_;                     // 记录总长度(字节)
     Rid rid_;                        // 当前记录的RID
     std::unique_ptr<RecScan> scan_;  // 表扫描迭代器
@@ -43,19 +42,11 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @param conds 过滤条件列表
      * @param context 执行上下文
      */
-    MvccSeqScanExecutor(std::string tab_name, std::vector<Condition> conds, Context *context) {
+    MvccSeqScanExecutor(std::string tab_name, std::vector<Condition> conds, Context *context):tab_(sm_manager.db_.get_table(tab_name)) {
         TRACE_FUNCTION
-        tab_name_ = std::move(tab_name);
         conds_ = std::move(conds);
-
-        // 获取表信息
-        TabMeta &tab = sm_manager.db_.get_table(tab_name_);
-        fh_ = sm_manager.fhs_.at(tab_name_).get();
-        cols_ = tab.cols;
-
-        // 计算记录长度
-        len_ = cols_.back().offset + cols_.back().len;
-
+        fh_ = sm_manager.fhs_.at(tab_name).get();
+        len_ = tab_.cols.back().offset + tab_.cols.back().len;
         context_ = context;
     }
 
@@ -73,7 +64,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
             auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
-            if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
+            if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
                 tuple_meta_ = base_meta;
                 return;
@@ -104,7 +95,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
             auto [base_meta, base_tuple, link] = txn_manager.GetTupleAndUndoLink(fh_, rid_);
             auto undologs = txn_manager.CollectUndoLogs(rid_, link, context_->txn_);
             auto rec = ReconstructTuple(std::move(base_tuple), base_meta, undologs);
-            if (rec != nullptr && eval_conds(cols_, conds_, rec)) {
+            if (rec != nullptr && eval_conds(tab_.cols, conds_, rec)) {
                 rec_ = std::move(rec);
                 tuple_meta_ = base_meta;
                 return;
@@ -142,7 +133,7 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      *
      * @note 包含列的类型、长度、偏移等信息
      */
-    const std::vector<ColMeta> &cols() const override { return cols_; }
+    const std::vector<ColMeta> &cols() const override { return tab_.cols; }
 
     /**
      * @brief 获取当前记录的RID

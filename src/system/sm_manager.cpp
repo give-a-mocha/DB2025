@@ -241,7 +241,7 @@ void SmManager::show_tables(Context* context) {
  * @param {Context*} context 执行上下文
  * @throw TableNotFoundError 如果表不存在
  */
-void SmManager::show_index(const std::string& tab_name, Context* context) {
+void SmManager::show_index(std::string tab_name, Context* context) {
     // 检查表是否存在
     if (db_.tabs_.find(tab_name) == db_.tabs_.end()) {
         throw TableNotFoundError(tab_name);
@@ -286,7 +286,7 @@ void SmManager::show_index(const std::string& tab_name, Context* context) {
  * @param {string&} tab_name 表名称
  * @param {Context*} context 执行上下文
  */
-void SmManager::desc_table(const std::string& tab_name, Context* context) {
+void SmManager::desc_table(std::string tab_name, Context* context) {
     TabMeta& tab = db_.get_table(tab_name);
 
     std::vector<std::string> captions = {"Field", "Type", "Index"};
@@ -311,7 +311,7 @@ void SmManager::desc_table(const std::string& tab_name, Context* context) {
  * @param {Context*} context 执行上下文
  * @throw TableExistsError 如果表已经存在
  */
-void SmManager::create_table(const std::string& tab_name, const std::vector<ColDef>& col_defs, Context* context) {
+void SmManager::create_table(std::string tab_name, std::vector<ColDef> col_defs, Context* context) {
     // 1. 检查表是否已存在
     if (db_.is_table(tab_name)) {
         throw TableExistsError(tab_name);
@@ -358,7 +358,7 @@ void SmManager::create_table(const std::string& tab_name, const std::vector<ColD
  * @param {Context*} context 执行上下文
  * @throw TableNotFoundError 如果表不存在
  */
-void SmManager::drop_table(const std::string& tab_name, Context* context) {
+void SmManager::drop_table(std::string tab_name, Context* context) {
     // 1. 验证表是否存在，不存在则抛出异常
     if (!db_.is_table(tab_name)) {
         throw TableNotFoundError(tab_name);
@@ -404,7 +404,7 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
  * @throw IndexExistsError 如果索引已存在
  * @warning 应该在并发前建好
  */
-void SmManager::create_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
+void SmManager::create_index(std::string tab_name, std::vector<std::string> col_names, Context* context) {
     // 1. 获取表的元数据并验证
     TabMeta& tab = db_.get_table(tab_name);
 
@@ -479,7 +479,7 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
  * @param {Context*} context 执行上下文
  * @throw IndexNotFoundError 如果索引不存在
  */
-void SmManager::drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
+void SmManager::drop_index(std::string tab_name, std::vector<std::string> col_names, Context* context) {
     //! DO
     auto&& index_name = ix_manager.get_index_name(tab_name, col_names);
     if (!ix_manager.exists_with_index_name(index_name)) {
@@ -511,7 +511,7 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<std::s
  * @param {vector<ColMeta>&} cols 索引包含的字段元数据
  * @param {Context*} context 执行上下文
  */
-void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMeta>& cols, Context* context) {
+void SmManager::drop_index(std::string tab_name, std::vector<ColMeta> cols, Context* context) {
     //! DO
     std::vector<std::string> col_names;
     for (auto& col : cols) {

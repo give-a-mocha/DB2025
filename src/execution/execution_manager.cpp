@@ -75,19 +75,19 @@ void QlManager::run_mutli_query(std::shared_ptr<Plan> plan, Context *context) {
     auto x = std::static_pointer_cast<DDLPlan>(plan);
     switch (x->tag) {
         case PlanTag::T_CreateTable: {
-            sm_manager.create_table(x->tab_name_, x->cols_, context);
+            sm_manager.create_table(std::move(x->tab_name_), std::move(x->cols_), context);
             break;
         }
         case PlanTag::T_DropTable: {
-            sm_manager.drop_table(x->tab_name_, context);
+            sm_manager.drop_table(std::move(x->tab_name_), context);
             break;
         }
         case PlanTag::T_CreateIndex: {
-            sm_manager.create_index(x->tab_name_, x->tab_col_names_, context);
+            sm_manager.create_index(std::move(x->tab_name_), std::move(x->tab_col_names_), context);
             break;
         }
         case PlanTag::T_DropIndex: {
-            sm_manager.drop_index(x->tab_name_, x->tab_col_names_, context);
+            sm_manager.drop_index(std::move(x->tab_name_), std::move(x->tab_col_names_), context);
             break;
         }
         default:
@@ -117,12 +117,12 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
         }
         case PlanTag::T_ShowIndex: {
             auto x = std::static_pointer_cast<OtherPlan>(plan);
-            sm_manager.show_index(x->tab_name_, context);
+            sm_manager.show_index(std::move(x->tab_name_), context);
             break;
         }
         case PlanTag::T_DescTable: {
             auto x = std::static_pointer_cast<OtherPlan>(plan);
-            sm_manager.desc_table(x->tab_name_, context);
+            sm_manager.desc_table(std::move(x->tab_name_), context);
             break;
         }
         case PlanTag::T_Transaction_begin: {

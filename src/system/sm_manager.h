@@ -138,14 +138,14 @@ class SmManager {
      * @param tab_name 表名
      * @param context 执行上下文
      */
-    void show_index(const std::string& tab_name, Context* context);
+    void show_index(std::string tab_name, Context* context);
 
     /**
      * @brief 描述指定表的结构
      * @param tab_name 表名
      * @param context 执行上下文
      */
-    void desc_table(const std::string& tab_name, Context* context);
+    void desc_table(std::string tab_name, Context* context);
 
     /**
      * @brief 创建新表
@@ -153,14 +153,14 @@ class SmManager {
      * @param col_defs 列定义向量
      * @param context 执行上下文
      */
-    void create_table(const std::string& tab_name, const std::vector<ColDef>& col_defs, Context* context);
+    void create_table(std::string tab_name, std::vector<ColDef> col_defs, Context* context);
 
     /**
      * @brief 删除指定的表
      * @param tab_name 要删除的表名
      * @param context 执行上下文
      */
-    void drop_table(const std::string& tab_name, Context* context);
+    void drop_table(std::string tab_name, Context* context);
 
     /**
      * @brief 在指定表上创建索引
@@ -168,7 +168,7 @@ class SmManager {
      * @param col_names 需要创建索引的列名向量
      * @param context 执行上下文
      */
-    void create_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context);
+    void create_index(std::string tab_name, std::vector<std::string> col_names, Context* context);
 
     /**
      * @brief 删除指定表上的索引
@@ -176,7 +176,7 @@ class SmManager {
      * @param col_names 索引列名向量
      * @param context 执行上下文
      */
-    void drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context);
+    void drop_index(std::string tab_name, std::vector<std::string> col_names, Context* context);
 
     /**
      * @brief 删除指定表上的索引(使用列元数据)
@@ -184,7 +184,7 @@ class SmManager {
      * @param col_names 索引列元数据向量
      * @param context 执行上下文
      */
-    void drop_index(const std::string& tab_name, const std::vector<ColMeta>& col_names, Context* context);
+    void drop_index(std::string tab_name, std::vector<ColMeta> col_names, Context* context);
 
     void set_log_offset(size_t offset) {
         db_.log_offset_ = offset;
