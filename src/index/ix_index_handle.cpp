@@ -226,14 +226,16 @@ int IxNodeHandle::remove(const char *key) {
 
 IxIndexHandle::IxIndexHandle(int fd) : fd_(fd) {
     // init file_hdr_
-    char *buf = new char[PAGE_SIZE];
-    memset(buf, 0, PAGE_SIZE);
+    // char *buf = new char[PAGE_SIZE];
+    // memset(buf, 0, PAGE_SIZE);
+    char *buf = static_cast<char *>(calloc(PAGE_SIZE, sizeof(char)));
     disk_manager.read_page(fd, IX_FILE_HDR_PAGE, buf, PAGE_SIZE);
     file_hdr_ = new IxFileHdr();
     file_hdr_->deserialize(buf);
     // disk_manager管理的fd对应的文件中，设置从file_hdr_->num_pages开始分配page_no
     disk_manager.set_fd2pageno(fd, file_hdr_->num_pages_);
-    delete[] buf;
+    // delete[] buf;
+    free(buf);
 }
 
 /**

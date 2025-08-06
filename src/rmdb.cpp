@@ -154,9 +154,10 @@ void *client_handler(void *sock_fd) {
     while (true) {
         Print<true>("Waiting for request...\n");
 
-        memset(data_recv, 0, BUFFER_LENGTH);
+        // memset(data_recv, 0, BUFFER_LENGTH);
 
         i_recvBytes = recv(fd, data_recv, BUFFER_LENGTH, 0);
+        data_recv[i_recvBytes] = '\0';
 
         if (i_recvBytes == 0) {
             Print<true>("Maybe the client has closed\n");
