@@ -146,11 +146,11 @@ class IxManager {
         disk_manager.write_page(fd, IX_FILE_HDR_PAGE, data, fhdr->tot_len_);
 
         char page_buf[PAGE_SIZE];  // 在内存中初始化page_buf中的内容，然后将其写入磁盘
-        // memset(page_buf, 0, PAGE_SIZE);
+        memset(page_buf, 0, PAGE_SIZE);
         // 注意leaf header页号为1，也标记为叶子结点，其前一个/后一个叶子均指向root node
         // Create leaf list header page and write to file
         {
-            // memset(page_buf, 0, PAGE_SIZE);
+            memset(page_buf, 0, PAGE_SIZE);
             auto phdr = reinterpret_cast<IxPageHdr *>(page_buf);
             *phdr = {
                 .next_free_page_no = IX_NO_PAGE,
@@ -165,7 +165,7 @@ class IxManager {
         // 注意root node页号为2，也标记为叶子结点，其前一个/后一个叶子均指向leaf header
         // Create root node and write to file
         {
-            // memset(page_buf, 0, PAGE_SIZE);
+            memset(page_buf, 0, PAGE_SIZE);
             auto phdr = reinterpret_cast<IxPageHdr *>(page_buf);
             *phdr = {
                 .next_free_page_no = IX_NO_PAGE,
