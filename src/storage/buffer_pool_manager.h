@@ -30,8 +30,8 @@ extern DiskManager disk_manager;
  */
 class BufferPoolManager {
    private:
-    size_t pool_size_;                                                      // 缓冲池大小（帧数）
-    BufferPoolInstance* buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
+    static constexpr size_t pool_size_ = BUFFER_POOL_SIZE;                  // 缓冲池大小（帧数）
+    BufferPoolInstance buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
 
     struct PageIdHash {
         size_t operator()(const PageId& pid) const {
@@ -41,18 +41,8 @@ class BufferPoolManager {
     PageIdHash hasher_;  // 哈希函数，用于计算PageId的哈希值
 
    public:
-    BufferPoolManager(size_t pool_size) : pool_size_(pool_size) {
-        // 为buffer pool分配一块连续的内存空间
-        for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            buffer_pool_instances_[i] = new BufferPoolInstance(pool_size / BUFFER_POOL_INSTANCE_SIZE);
-        }
-    }
-
-    ~BufferPoolManager() {
-        for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            delete buffer_pool_instances_[i];
-        }
-    }
+    BufferPoolManager() = default;
+    ~BufferPoolManager() = default;
 
     /**
      * @description: 将目标页面标记为脏页

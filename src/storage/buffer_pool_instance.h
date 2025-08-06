@@ -27,24 +27,22 @@ See the Mulan PSL v2 for more details. */
 
 extern DiskManager disk_manager;
 
+using ReplacerType = LRUReplacer;
+
 /**
  * @brief 缓冲池管理器类
  */
 class BufferPoolInstance {
    private:
-    size_t pool_size_;                                   // 缓冲池大小（帧数）
-    Page* pages_;                                        // 缓冲池中的页面数组，连续分配
-    std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
-    std::list<frame_id_t> free_list_;                    // 空闲帧链表
-    Replacer* replacer_;                                 // 页面替换策略实现
-    std::mutex latch_;                                   // 并发控制锁
+    static constexpr size_t pool_size_ = BUFFER_POOL_SIZE / BUFFER_POOL_INSTANCE_SIZE;  // 缓冲池大小（帧数）
+    Page pages_[pool_size_];                                                                       // 缓冲池中的页面数组，连续分配
+    std::unordered_map<PageId, frame_id_t> page_table_;                                 // 页面到帧的映射表
+    std::list<frame_id_t> free_list_;                                                   // 空闲帧链表
+    ReplacerType replacer_;                                                                // 页面替换策略实现
+    std::mutex latch_;                                                                  // 并发控制锁
 
    public:
-    BufferPoolInstance(size_t pool_size) : pool_size_(pool_size) {
-        // 为buffer pool分配一块连续的内存空间
-        pages_ = new Page[pool_size_];
-        // 可以被Replacer改变
-        replacer_ = new LRUReplacer(pool_size_);  // 使用LRU替换策略
+    BufferPoolInstance() {
         // 初始化时，所有的page都在free_list_中
         for (size_t i = 0; i < pool_size_; ++i) {
             free_list_.emplace_back(static_cast<frame_id_t>(i));  // static_cast转换数据类型
@@ -52,10 +50,7 @@ class BufferPoolInstance {
         page_table_.reserve(pool_size_);  // 预留空间，避免频繁扩容
     }
 
-    ~BufferPoolInstance() {
-        delete[] pages_;
-        delete replacer_;
-    }
+    ~BufferPoolInstance() = default;
 
     /**
      * @description: 将目标页面标记为脏页

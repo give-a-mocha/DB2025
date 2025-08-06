@@ -10,10 +10,9 @@ See the Mulan PSL v2 for more details. */
 
 #include "lru_replacer.h"
 
-LRUReplacer::LRUReplacer(size_t num_pages) {
-    max_size_ = num_pages;
-    LRUhash_.resize(num_pages);
-    is_pinned_.resize(num_pages, true);
+LRUReplacer::LRUReplacer() {
+    LRUhash_.resize(max_size_);
+    is_pinned_.resize(max_size_, true);
 }
 
 LRUReplacer::~LRUReplacer() = default;
