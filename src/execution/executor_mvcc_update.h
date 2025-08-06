@@ -132,7 +132,7 @@ class MvccUpdateExecutor : public AbstractExecutor {
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
             if (!rids.empty()) {
-                //!这里使用back在唯一索引下才是对的
+                //! 这里使用back在唯一索引下才是对的
                 insert_rid = rids.back();
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, base_meta, old_rec, insert_rid, base_meta_, nullptr,
                                               new_rec, context_->txn_)) {

@@ -27,7 +27,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
     TabMeta &tab_;                                                                 // 表的元数据
     std::vector<Condition> conds_;                                                 // 删除条件列表
     RmFileHandle *fh_;                                                             // 表的数据文件句柄
-    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表                                                        // 表名
+    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表 // 表名
 
    public:
     MvccDeleteExecutor(std::string tab_name, std::vector<Condition> conds,

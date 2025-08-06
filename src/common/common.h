@@ -222,7 +222,7 @@ struct Value {
             case ColType::TYPE_FLOAT:
                 memcpy(data, &float_val, len);
                 break;
-            case ColType::TYPE_STRING: 
+            case ColType::TYPE_STRING:
                 memset(data, 0, len);  // 清空数据
                 memcpy(data, str_val.c_str(), std::min(len, str_val.size()));
                 break;

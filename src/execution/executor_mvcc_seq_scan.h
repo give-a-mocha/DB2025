@@ -42,7 +42,8 @@ class MvccSeqScanExecutor : public AbstractExecutor {
      * @param conds 过滤条件列表
      * @param context 执行上下文
      */
-    MvccSeqScanExecutor(std::string tab_name, std::vector<Condition> conds, Context *context):tab_(sm_manager.db_.get_table(tab_name)) {
+    MvccSeqScanExecutor(std::string tab_name, std::vector<Condition> conds, Context *context)
+        : tab_(sm_manager.db_.get_table(tab_name)) {
         TRACE_FUNCTION
         conds_ = std::move(conds);
         fh_ = sm_manager.fhs_.at(tab_name).get();

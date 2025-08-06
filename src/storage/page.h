@@ -43,9 +43,7 @@ struct PageId {
 
 template <>
 struct std::hash<PageId> {
-    size_t operator()(const PageId &pid) const {
-        return (pid.fd << 16) | pid.page_no;
-    }
+    size_t operator()(const PageId &pid) const { return (pid.fd << 16) | pid.page_no; }
 };
 
 /**
