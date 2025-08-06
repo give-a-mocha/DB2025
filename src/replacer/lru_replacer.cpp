@@ -9,10 +9,11 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "lru_replacer.h"
+#include <cstring>
 
 LRUReplacer::LRUReplacer() {
-    LRUhash_.resize(max_size_);
-    is_pinned_.resize(max_size_, true);
+    memset(LRUhash_, 0, sizeof(LRUhash_));
+    std::fill(std::begin(is_pinned_), std::end(is_pinned_), true);
 }
 
 LRUReplacer::~LRUReplacer() = default;
