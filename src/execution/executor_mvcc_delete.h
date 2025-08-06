@@ -25,16 +25,13 @@ extern TransactionManager txn_manager;
 class MvccDeleteExecutor : public AbstractExecutor {
    private:
     TabMeta &tab_;                                                                 // 表的元数据
-    std::vector<Condition> conds_;                                                 // 删除条件列表
     RmFileHandle *fh_;                                                             // 表的数据文件句柄
     std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表 // 表名
 
    public:
-    MvccDeleteExecutor(std::string tab_name, std::vector<Condition> conds,
-                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
+    MvccDeleteExecutor(std::string tab_name, std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
         fh_ = sm_manager.fhs_.at(tab_name).get();
-        conds_ = std::move(conds);
         old_recs_ = std::move(old_recs);
         context_ = context;
     }

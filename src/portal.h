@@ -100,7 +100,7 @@ class Portal {
                         old_recs.emplace_back(scan->tuple_meta(), scan->Next(), scan->rid());
                     }
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
-                        x->tab_name_, x->set_clauses_, x->conds_, std::move(old_recs), context);
+                        x->tab_name_, std::move(x->set_clauses_), std::move(old_recs), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -113,7 +113,7 @@ class Portal {
                     }
 
                     std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(
-                        std::move(x->tab_name_), std::move(x->conds_), std::move(old_recs), context);
+                        std::move(x->tab_name_), std::move(old_recs), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);

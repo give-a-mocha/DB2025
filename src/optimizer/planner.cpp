@@ -200,7 +200,7 @@ std::shared_ptr<Plan> Planner::generate_sort_plan(std::shared_ptr<Query> query, 
         is_desc_list.push_back(orderby_info.dir == ast::OrderByDir::OrderBy_DESC);
     }
 
-    return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), sel_cols, is_desc_list);
+    return std::make_shared<SortPlan>(PlanTag::T_Sort, std::move(plan), std::move(sel_cols), std::move(is_desc_list));
 }
 
 std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr<Query> query,
@@ -230,7 +230,7 @@ std::shared_ptr<Plan> Planner::generate_group_and_aggregate_plan(std::shared_ptr
         return plan;
     }
     return std::make_shared<GroupAggregatePlan>(PlanTag::T_GroupAggregate, std::move(plan),
-                                                std::move(query->group_cols), std::move(agg_cols), query->having_conds);
+                                                std::move(query->group_cols), std::move(agg_cols), std::move(query->having_conds));
 }
 
 /**
@@ -244,10 +244,10 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     TRACE_FUNCTION
 
     // 物理优化
-    auto sel_cols = query->cols;
     // joinPlan Or scanPlan Or sortPlan
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
     bool is_star = std::static_pointer_cast<ast::SelectStmt>(query->parse)->cols.empty();
+    auto&& sel_cols = query->cols;
     bool is_count_star = false;
     for (const auto &col : sel_cols) {
         if (col.agg_type == AggregateType::COUNT && col.col_name == "*") {
@@ -258,7 +258,7 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     }
     // 如果是 * 或者 count(*)，则不需要投影下推
     if (is_star || is_count_star) {
-        return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), sel_cols, is_star);
+        return std::make_shared<ProjectionPlan>(PlanTag::T_Projection, std::move(plannerRoot), std::move(sel_cols), is_star);
     }
     // 保证投影列不重复
     std::vector<TabCol> project_cols;
@@ -337,21 +337,21 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
             auto x = std::static_pointer_cast<ast::CreateIndex>(query->parse);
             // create index;
             plannerRoot =
-                std::make_shared<DDLPlan>(PlanTag::T_CreateIndex, x->tab_name, x->col_names, std::vector<ColDef>());
+                std::make_shared<DDLPlan>(PlanTag::T_CreateIndex, std::move(x->tab_name), std::move(x->col_names), std::vector<ColDef>());
             break;
         }
         case ast::AstType::DropIndex: {
             auto x = std::static_pointer_cast<ast::DropIndex>(query->parse);
             // drop index
             plannerRoot =
-                std::make_shared<DDLPlan>(PlanTag::T_DropIndex, x->tab_name, x->col_names, std::vector<ColDef>());
+                std::make_shared<DDLPlan>(PlanTag::T_DropIndex, std::move(x->tab_name), std::move(x->col_names), std::vector<ColDef>());
             break;
         }
         case ast::AstType::InsertStmt: {
             auto x = std::static_pointer_cast<ast::InsertStmt>(query->parse);
             // insert;
             plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Insert, std::shared_ptr<Plan>(), x->tab_name,
-                                                    query->values, std::vector<Condition>(), std::vector<SetClause>());
+                                                    std::move(query->values), std::vector<Condition>(), std::vector<SetClause>());
             break;
         }
         case ast::AstType::DeleteStmt: {
@@ -367,14 +367,14 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
             if (index_exist == false) {  // 该表没有索引
                 index_col_names.clear();
                 table_scan_executors =
-                    std::make_shared<ScanPlan>(PlanTag::T_SeqScan, x->tab_name, query->conds, index_col_names);
+                    std::make_shared<ScanPlan>(PlanTag::T_SeqScan, x->tab_name, std::move(query->conds), std::move(index_col_names));
             } else {  // 存在索引
                 table_scan_executors =
-                    std::make_shared<ScanPlan>(PlanTag::T_IndexScan, x->tab_name, query->conds, index_col_names);
+                    std::make_shared<ScanPlan>(PlanTag::T_IndexScan, x->tab_name, std::move(query->conds), std::move(index_col_names));
             }
 
-            plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Delete, table_scan_executors, x->tab_name,
-                                                    std::vector<Value>(), query->conds, std::vector<SetClause>());
+            plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Delete, std::move(table_scan_executors), x->tab_name,
+                                                    std::vector<Value>(), std::vector<Condition>(), std::vector<SetClause>());
             break;
         }
         case ast::AstType::UpdateStmt: {
@@ -390,13 +390,13 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
             if (index_exist == false) {  // 该表没有索引
                 index_col_names.clear();
                 table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_SeqScan, x->tab_name->tab_name,
-                                                                  query->conds, index_col_names);
+                                                                  std::move(query->conds), std::move(index_col_names));
             } else {  // 存在索引
-                table_scan_executors = std::make_shared<ScanPlan>(PlanTag::T_IndexScan, x->tab_name->tab_name,
-                                                                  query->conds, index_col_names);
+                table_scan_executors = std::make_unique<ScanPlan>(PlanTag::T_IndexScan, x->tab_name->tab_name,
+                                                                  std::move(query->conds), std::move(index_col_names));
             }
-            plannerRoot = std::make_shared<DMLPlan>(PlanTag::T_Update, table_scan_executors, x->tab_name->tab_name,
-                                                    std::vector<Value>(), query->conds, query->set_clauses);
+            plannerRoot = std::make_unique<DMLPlan>(PlanTag::T_Update, std::move(table_scan_executors), x->tab_name->tab_name,
+                                                    std::vector<Value>(), std::vector<Condition>(), std::move(query->set_clauses));
             break;
         }
         case ast::AstType::ExplainStmt: {
