@@ -24,15 +24,15 @@ extern TransactionManager txn_manager;
  */
 class MvccDeleteExecutor : public AbstractExecutor {
    private:
+    std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
     TabMeta &tab_;                                                                 // 表的元数据
     RmFileHandle *fh_;                                                             // 表的数据文件句柄
-    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表 // 表名
 
    public:
-    MvccDeleteExecutor(std::string tab_name, std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
+    MvccDeleteExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
+        prev_ = std::move(prev);
         fh_ = sm_manager.fhs_.at(tab_name).get();
-        old_recs_ = std::move(old_recs);
         context_ = context;
     }
 
@@ -41,10 +41,10 @@ class MvccDeleteExecutor : public AbstractExecutor {
      * @return nullptr，因为DELETE不产生结果集
      */
     std::unique_ptr<RmRecord> Next() override {
-        for (auto &rec_tuple : old_recs_) {
-            auto &base_meta = std::get<0>(rec_tuple);
-            auto &old_rec = std::get<1>(rec_tuple);
-            auto &rid = std::get<2>(rec_tuple);
+        for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
+            auto &base_meta = prev_->tuple_meta();
+            auto old_rec = prev_->Next();
+            auto &rid = prev_->rid();
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid);
 
             if (IsWriteWriteConflict(context_->txn_, link)) {

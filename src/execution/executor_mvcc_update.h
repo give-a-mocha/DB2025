@@ -28,18 +28,17 @@ extern TransactionManager txn_manager;
  */
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
+    std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
     TabMeta &tab_;                                                                 // 表的元数据
     RmFileHandle *fh_;                                                             // 表的数据文件句柄
-    std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs_;  // 旧记录列表
     std::vector<SetClause> set_clauses_;                                           // SET子句列表(新值)
 
    public:
-    MvccUpdateExecutor(std::string tab_name, std::vector<SetClause> set_clauses, 
-                       std::vector<std::tuple<TupleMeta, std::unique_ptr<RmRecord>, Rid>> old_recs, Context *context)
+    MvccUpdateExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, std::vector<SetClause> set_clauses, Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
+        prev_ = std::move(prev);
         set_clauses_ = std::move(set_clauses);
         fh_ = sm_manager.fhs_.at(tab_name).get();
-        old_recs_ = std::move(old_recs);
         context_ = context;
     }
 
@@ -50,10 +49,10 @@ class MvccUpdateExecutor : public AbstractExecutor {
      * @throw RMDBError 当索引更新失败需要回滚时
      */
     std::unique_ptr<RmRecord> Next() override {
-        for (auto &rec_tuple : old_recs_) {
-            auto &base_meta = std::get<0>(rec_tuple);
-            auto &old_rec = std::get<1>(rec_tuple);
-            auto &rid_ = std::get<2>(rec_tuple);
+        for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
+            auto &base_meta = prev_->tuple_meta();
+            auto old_rec = prev_->Next();
+            auto &rid_ = prev_->rid();
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid_);
 
             if (IsWriteWriteConflict(context_->txn_, link)) {
