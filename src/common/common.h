@@ -95,14 +95,17 @@ struct TabCol {
      */
     std::string get_tab_name() const { return tab_alias.empty() ? tab_name : tab_alias; }
 
+    std::string get_col_name() const {
+        if (!col_alias.empty()) return col_alias;  // 如果有列别名，返回列别名
+        return col_name;                            // 否则返回列名
+    }
     /**
      * @brief 获取表列引用的字符串表示
      *
      * @return 格式为"表名.列名"的字符串
      */
     std::string to_string() const {
-        if (!col_alias.empty()) return col_alias;
-        return get_tab_name() + "." + col_name;
+        return get_tab_name() + "." + get_col_name();
     }
 
     void set_col_alias(const std::string &alias) { col_alias = alias; }

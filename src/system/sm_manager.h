@@ -71,6 +71,8 @@ class SmManager {
     // 用途：管理当前数据库中每个索引的文件访问
     bool is_output_file_ = true;  // 是否启用输出文件
 
+    bool is_analyze_check_ = true;  // 用来打开analyze的数据检查功能
+
     SmManager() = default;
     ~SmManager() = default;
 

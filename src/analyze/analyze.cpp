@@ -50,13 +50,17 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             auto x = std::static_pointer_cast<ast::SelectStmt>(parse);  // 处理SELECT查询
             // 检查所有表是否存在并处理表名和别名
             std::vector<TabRef> tab_refs;  // 存储表引用及其别名
-            tab_refs.reserve(x->tabs.size());
+            if (sm_manager.is_analyze_check_) {
+                tab_refs.reserve(x->tabs.size());
+            }
             query->tables.reserve(x->tabs.size());
             for (const auto &sv_tab : x->tabs) {
                 std::string tab_name = sv_tab->tab_name;
-                tab_refs.push_back(TabRef(tab_name, sv_tab->alias));  // 添加表引用
-                if (!sm_manager.db_.is_table(tab_name)) {             // 检查表是否存在
-                    throw TableNotFoundError(tab_name);
+                if (sm_manager.is_analyze_check_) {
+                    tab_refs.push_back(TabRef(tab_name, sv_tab->alias));  // 添加表引用
+                    if (!sm_manager.db_.is_table(tab_name)) {             // 检查表是否存在
+                        throw TableNotFoundError(tab_name);
+                    }
                 }
                 query->tables.push_back(tab_name);  // 添加到查询的表列表
             }
@@ -66,26 +70,30 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 for (const auto &join_expr : x->jointree) {
                     // 检查JOIN右侧的表是否存在
                     std::string right_tab_name = join_expr->right->tab_name;
-                    if (!sm_manager.db_.is_table(right_tab_name)) {
-                        throw TableNotFoundError(right_tab_name);
+                    if (sm_manager.is_analyze_check_) {
+                        if (!sm_manager.db_.is_table(right_tab_name)) {
+                            throw TableNotFoundError(right_tab_name);
+                        }
+                        TabRef right_table(right_tab_name, join_expr->right->alias);
+                        tab_refs.push_back(right_table);
                     }
-                    TabRef right_table(right_tab_name, join_expr->right->alias);
                     query->tables.push_back(right_tab_name);
-                    tab_refs.push_back(right_table);
                 }
             }
 
             // 获取所有相关表的全部列
             std::vector<ColMeta> all_cols;
             get_all_cols(query->tables, all_cols);
-
-            for (auto &sv_group_col : x->group) {
-                if (sv_group_col->cols->aggregate_type != ast::SvAggregateType::NONE) {
-                    throw AggregateError("GROUP BY column cannot have aggregate function");
+            if (!x->group.empty()) {
+                query->group_cols.reserve(x->group.size());
+                for (auto &sv_group_col : x->group) {
+                    if (sv_group_col->cols->aggregate_type != ast::SvAggregateType::NONE) {
+                        throw AggregateError("GROUP BY column cannot have aggregate function");
+                    }
+                    TabCol group_col = {"", sv_group_col->cols->col_name, sv_group_col->cols->tab_name};
+                    convert_tabname(all_cols, group_col, tab_refs);  // 处理表名和别名
+                    query->group_cols.push_back(group_col);          // 添加到查询的分组列列表
                 }
-                TabCol group_col = {"", sv_group_col->cols->col_name, sv_group_col->cols->tab_name};
-                convert_tabname(all_cols, group_col, tab_refs);  // 处理表名和别名
-                query->group_cols.push_back(group_col);          // 添加到查询的分组列列表
             }
 
             // 处理要查询的列：
@@ -94,13 +102,15 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 query->cols.reserve(all_cols.size());
                 for (const auto &col : all_cols) {
                     TabCol sel_col = {col.tab_name, col.name};     // 创建表列引用
-                    convert_tabname(all_cols, sel_col, tab_refs);  // 处理表名和别名
+                    if (sm_manager.is_analyze_check_) {
+                        convert_tabname(all_cols, sel_col, tab_refs);  // 处理表名和别名
+                    }
                     query->cols.push_back(sel_col);                // 添加到查询列表
                 }
             } else {
                 query->cols.reserve(x->cols.size());
                 for (auto &sv_sel_col : x->cols) {
-                    // 创建列引用，初始状态下表名可能为空
+                    // 创建列引用，初始状态下表名为空
                     TabCol sel_col = {"", sv_sel_col->col_name, sv_sel_col->tab_name};
                     sel_col.set_col_alias(sv_sel_col->alias);          // 设置列别名
                     sel_col.set_agg_type(sv_sel_col->aggregate_type);  // 设置聚合类型
@@ -109,7 +119,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 }
             }
 
-            {
+            if (sm_manager.is_analyze_check_) {
                 // 查询列必须的是group by中的列或聚合函数
                 std::unordered_set<TabCol, TabColHash> group_cols_set(query->group_cols.begin(),
                                                                       query->group_cols.end());
@@ -135,18 +145,23 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 
             // 处理WHERE条件子句
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
-            check_clause_with_cols(all_cols, query->tables, query->conds, true);  // 检查WHERE条件的有效性
-
             // 处理having条件
             get_clause_alias(all_cols, x->having_conds, query->having_conds, tab_refs);
-            check_clause_with_cols(all_cols, query->tables, query->having_conds, false);
-            // 检查having条件中是否有不是聚合函数也不是group by的列
-            check_having_conds(query->having_conds, query->group_cols);
-
-            // 如果没有GROUP BY子句但有HAVING条件，则抛出错误
-            if (query->group_cols.empty() && !query->having_conds.empty()) {
-                throw InternalError("HAVING clause without GROUP BY is not allowed");
+            
+            if (sm_manager.is_analyze_check_) {
+                // 检查WHERE条件的有效性
+                check_clause_with_cols(all_cols, query->tables, query->conds, true);  // 检查WHERE条件的有效性
+                // 检查having条件的有效性
+                check_clause_with_cols(all_cols, query->tables, query->having_conds, false);
+                // 检查having条件中是否有不是聚合函数也不是group by的列
+                check_having_conds(query->having_conds, query->group_cols);
+                
+                // 如果没有GROUP BY子句但有HAVING条件，则抛出错误
+                if (query->group_cols.empty() && !query->having_conds.empty()) {
+                    throw InternalError("HAVING clause without GROUP BY is not allowed");
+                }
             }
+
 
             // 处理JOIN操作及其条件
             if (!x->jointree.empty()) {
@@ -158,7 +173,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     // 转换JOIN条件
                     std::vector<Condition> join_conds;
                     get_clause_alias(all_cols, join_expr->conds, join_conds, tab_refs);
-                    check_clause(query->tables, join_conds, true);
+                    if (sm_manager.is_analyze_check_) {
+                        check_clause_with_cols(all_cols, query->tables, join_conds, true);
+                    }
                     // 创建JOIN节点并指定JOIN类型
                     JoinType join_type = convert_sv_join_type(join_expr->type);
                     query->jointree.emplace_back(std::move(right_tab_name), std::move(join_conds), join_type);
@@ -167,6 +184,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 
             // 处理ORDER BY子句
             if (x->has_sort) {
+                query->order_bys.reserve(x->orders.size());
                 for (auto &sv_order_by : x->orders) {
                     OrderbyInfo order_by_info;
                     order_by_info.dir = sv_order_by->orderby_dir;
@@ -177,7 +195,9 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                     order_by_info.col = check_column(all_cols, order_by_col);
                     query->order_bys.push_back(order_by_info);
                 }
-                check_orderby_with_group(query->order_bys, query->cols, query->group_cols);
+                if (sm_manager.is_analyze_check_) {
+                    check_orderby_with_group(query->order_bys, query->cols, query->group_cols);
+                }
             }
 
             // 处理 limit
@@ -237,54 +257,57 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
 
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
-            check_clause_with_cols(all_cols, query->tables, query->conds, true);  // 检查WHERE条件的有效性
-
-            // 检查每个SET子句的有效性和类型兼容性
-            for (auto &set_clause : query->set_clauses) {
-                set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
-
-                if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
-                    TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
-                    auto col = tab.get_col(set_clause.lhs.col_name);
-                    // 允许数值类型之间的转换(INT与FLOAT)
-                    bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
-                                      (set_clause.rhs_val.type == ColType::TYPE_INT ||
-                                       set_clause.rhs_val.type == ColType::TYPE_FLOAT);
-                    if (col->type != set_clause.rhs_val.type && !is_numeric) {
-                        throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
-                    }
-                    if (col->type == ColType::TYPE_STRING) {
-                        if (col->len < static_cast<int>(set_clause.rhs_val.str_val.size())) {
-                            throw StringOverflowError();  // 字符串长度溢出异常
+            if (sm_manager.is_analyze_check_) {
+                // 检查WHERE条件的有效性
+                check_clause_with_cols(all_cols, query->tables, query->conds, true);
+                // 检查每个SET子句的有效性和类型兼容性
+                for (auto &set_clause : query->set_clauses) {
+                    set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
+    
+                    if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
+                        TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
+                        auto col = tab.get_col(set_clause.lhs.col_name);
+                        // 允许数值类型之间的转换(INT与FLOAT)
+                        bool is_numeric = (col->type == ColType::TYPE_INT || col->type == ColType::TYPE_FLOAT) &&
+                                          (set_clause.rhs_val.type == ColType::TYPE_INT ||
+                                           set_clause.rhs_val.type == ColType::TYPE_FLOAT);
+                        if (col->type != set_clause.rhs_val.type && !is_numeric) {
+                            throw IncompatibleTypeError(coltype2str(col->type), coltype2str(set_clause.rhs_val.type));
                         }
-                    }
-                } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
-                    // 检查右侧列是否存在
-                    set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
-                    // 类型兼容校验：允许 INT↔FLOAT，其他必须完全一致
-                    TabMeta &lhs_tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
-                    auto l_col = lhs_tab.get_col(set_clause.lhs.col_name);
-                    TabMeta &rhs_tab = sm_manager.db_.get_table(set_clause.rhs_col.tab_name);
-                    auto r_col = rhs_tab.get_col(set_clause.rhs_col.col_name);
-
-                    bool is_numeric = (l_col->type == ColType::TYPE_INT || l_col->type == ColType::TYPE_FLOAT) &&
-                                      (r_col->type == ColType::TYPE_INT || r_col->type == ColType::TYPE_FLOAT);
-                    if (l_col->type != r_col->type && !is_numeric) {
-                        throw IncompatibleTypeError(coltype2str(l_col->type), coltype2str(r_col->type));
-                    }
-                } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
-                    std::shared_ptr<ExprTerm> temp = std::make_shared<ExprTerm>(set_clause.rhs_expr);
-                    std::vector<ColMeta> ltable_cols;
-                    get_all_cols({set_clause.lhs.tab_name}, ltable_cols);  // 获取左侧表的所有列
-                    CheckArithExprType(temp, ltable_cols);
-                    set_clause.rhs_expr = std::move(temp->expr);
-                    TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
-                    auto col = tab.get_col(set_clause.lhs.col_name);
-                    if (col->type == ColType::TYPE_STRING) {
-                        throw IncompatibleTypeError(coltype2str(col->type), coltype2str(ColType::TYPE_FLOAT));
+                        if (col->type == ColType::TYPE_STRING) {
+                            if (col->len < static_cast<int>(set_clause.rhs_val.str_val.size())) {
+                                throw StringOverflowError();  // 字符串长度溢出异常
+                            }
+                        }
+                    } else if (set_clause.rhs_type == SetRhsType::SET_RHS_COL) {
+                        // 检查右侧列是否存在
+                        set_clause.rhs_col = check_column(all_cols, set_clause.rhs_col);
+                        // 类型兼容校验：允许 INT↔FLOAT，其他必须完全一致
+                        TabMeta &lhs_tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
+                        auto l_col = lhs_tab.get_col(set_clause.lhs.col_name);
+                        TabMeta &rhs_tab = sm_manager.db_.get_table(set_clause.rhs_col.tab_name);
+                        auto r_col = rhs_tab.get_col(set_clause.rhs_col.col_name);
+    
+                        bool is_numeric = (l_col->type == ColType::TYPE_INT || l_col->type == ColType::TYPE_FLOAT) &&
+                                          (r_col->type == ColType::TYPE_INT || r_col->type == ColType::TYPE_FLOAT);
+                        if (l_col->type != r_col->type && !is_numeric) {
+                            throw IncompatibleTypeError(coltype2str(l_col->type), coltype2str(r_col->type));
+                        }
+                    } else if (set_clause.rhs_type == SetRhsType::SET_RHS_EXPR) {
+                        std::shared_ptr<ExprTerm> temp = std::make_shared<ExprTerm>(set_clause.rhs_expr);
+                        std::vector<ColMeta> ltable_cols;
+                        get_all_cols({set_clause.lhs.tab_name}, ltable_cols);  // 获取左侧表的所有列
+                        CheckArithExprType(temp, ltable_cols);
+                        set_clause.rhs_expr = std::move(temp->expr);
+                        TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
+                        auto col = tab.get_col(set_clause.lhs.col_name);
+                        if (col->type == ColType::TYPE_STRING) {
+                            throw IncompatibleTypeError(coltype2str(col->type), coltype2str(ColType::TYPE_FLOAT));
+                        }
                     }
                 }
             }
+
             break;
         }
         case ast::AstType::DeleteStmt: {
@@ -296,7 +319,10 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
             // 处理WHERE条件
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);          // 获取WHERE条件并处理别名
-            check_clause_with_cols(all_cols, {x->tab_name}, query->conds, false);  // 检查WHERE条件的有效性
+            if (sm_manager.is_analyze_check_) {
+                // 检查WHERE条件的有效性
+                check_clause_with_cols(all_cols, {x->tab_name}, query->conds, false);  // 检查WHERE条件的有效性
+            }
             break;
         }
         case ast::AstType::InsertStmt: {
@@ -333,68 +359,80 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
     if (target.col_name == "*" && target.agg_type == AggregateType::COUNT) {
         return;
     }
-    // 情况1: 有表名但没有别名 - 尝试找到表名对应的真实表并处理表别名
-    if (target.tab_alias.empty() && !target.tab_name.empty()) {
-        TabRef res = {target.tab_name, target.tab_alias};  // 初始化结果
-        int cnt = 0;                                       // 计数器，用于检测歧义
-        for (const auto &tab_ref : tab_refs) {
-            if (tab_ref.name == target.tab_name) {
-                cnt++;
-                res = tab_ref;
-                if (cnt > 1) {
-                    // 如果找到多个匹配的表名，抛出列名歧义错误
-                    throw AmbiguousColumnError(target.col_name);
+    if (sm_manager.is_analyze_check_) {
+
+        // 情况1: 有表名但没有别名 - 尝试找到表名对应的真实表并处理表别名
+        if (target.tab_alias.empty() && !target.tab_name.empty()) {
+            TabRef res = {target.tab_name, target.tab_alias};  // 初始化结果
+            int cnt = 0;                                       // 计数器，用于检测歧义
+            for (const auto &tab_ref : tab_refs) {
+                if (tab_ref.name == target.tab_name) {
+                    cnt++;
+                    res = tab_ref;
+                    if (cnt > 1) {
+                        // 如果找到多个匹配的表名，抛出列名歧义错误
+                        throw AmbiguousColumnError(target.col_name);
+                    }
                 }
             }
+            if (cnt == 0) {
+                // 如果没找到匹配的表，抛出表不存在错误
+                throw TableNotFoundError(target.tab_name);
+            }
+            target.tab_name = res.name;    // 设置真实表名
+            target.tab_alias = res.alias;  // 设置表别名
+            return;
         }
-        if (cnt == 0) {
-            // 如果没找到匹配的表，抛出表不存在错误
-            throw TableNotFoundError(target.tab_name);
-        }
-        target.tab_name = res.name;    // 设置真实表名
-        target.tab_alias = res.alias;  // 设置表别名
-        return;
-    }
-    // 情况2: 有别名 - 尝试通过别名找到真实表名
-    else if (!target.tab_alias.empty()) {
-        TabRef res = {target.tab_name, target.tab_alias};  // 默认表名和别名相同
-        int cnt = 0;
-        for (const auto &tab_ref : tab_refs) {
-            if (tab_ref.get_name() == target.tab_alias) {
-                cnt++;
-                res = tab_ref;
-                if (cnt > 1) {
-                    // 如果找到多个匹配的别名，抛出列名歧义错误
-                    throw AmbiguousColumnError(target.col_name);
+        // 情况2: 有别名 - 尝试通过别名找到真实表名
+        else if (!target.tab_alias.empty()) {
+            TabRef res = {target.tab_name, target.tab_alias};  // 默认表名和别名相同
+            int cnt = 0;
+            for (const auto &tab_ref : tab_refs) {
+                if (tab_ref.get_name() == target.tab_alias) {
+                    cnt++;
+                    res = tab_ref;
+                    if (cnt > 1) {
+                        // 如果找到多个匹配的别名，抛出列名歧义错误
+                        throw AmbiguousColumnError(target.col_name);
+                    }
                 }
             }
+            if (cnt == 0) {
+                // 如果没找到匹配的别名，抛出列不存在错误
+                throw ColumnNotFoundError(target.col_name);
+            }
+            target.tab_name = res.name;    // 设置真实表名
+            target.tab_alias = res.alias;  // 设置表别名
+            return;
         }
-        if (cnt == 0) {
-            // 如果没找到匹配的别名，抛出列不存在错误
+        // 情况3: 既没有表名也没有别名 - 尝试从所有表的列中推断表名
+        else {
+            std::string tab_name;
+            for (auto &col : all_cols) {
+                if (col.name == target.col_name) {
+                    if (!tab_name.empty()) {
+                        // 如果在多个表中找到同名列，抛出列名歧义错误
+                        throw AmbiguousColumnError(target.col_name);
+                    }
+                    tab_name = col.tab_name;
+                }
+            }
+            if (tab_name.empty()) {
+                // 如果没找到匹配的列，抛出列不存在错误
+                throw ColumnNotFoundError(target.col_name);
+            }
+            target.tab_name = tab_name;                   // 设置推断出的表名
+            convert_tabname(all_cols, target, tab_refs);  // 递归调用，进一步解析表名和别名
+        }
+    } else {
+        auto it = std::find_if(all_cols.begin(), all_cols.end(),
+                             [&](const ColMeta &col) { return col.name == target.col_name; });
+        if (it != all_cols.end()) {
+            target.tab_name = it->tab_name;  // 设置表名为找到的列
+        } else {
+            // 如果没有找到匹配的列，抛出列不存在错误
             throw ColumnNotFoundError(target.col_name);
         }
-        target.tab_name = res.name;    // 设置真实表名
-        target.tab_alias = res.alias;  // 设置表别名
-        return;
-    }
-    // 情况3: 既没有表名也没有别名 - 尝试从所有表的列中推断表名
-    else {
-        std::string tab_name;
-        for (auto &col : all_cols) {
-            if (col.name == target.col_name) {
-                if (!tab_name.empty()) {
-                    // 如果在多个表中找到同名列，抛出列名歧义错误
-                    throw AmbiguousColumnError(target.col_name);
-                }
-                tab_name = col.tab_name;
-            }
-        }
-        if (tab_name.empty()) {
-            // 如果没找到匹配的列，抛出列不存在错误
-            throw ColumnNotFoundError(target.col_name);
-        }
-        target.tab_name = tab_name;                   // 设置推断出的表名
-        convert_tabname(all_cols, target, tab_refs);  // 递归调用，进一步解析表名和别名
     }
 }
 
@@ -839,7 +877,9 @@ std::shared_ptr<ExprTerm> Analyze::AnalyzeExprTerm(const std::shared_ptr<ast::Ex
             common_col.set_col_alias(sv_col->alias);
             common_col.set_agg_type(sv_col->aggregate_type);
             convert_tabname(all_cols, common_col, tab_refs);
-            check_column(all_cols, common_col);
+            if (sm_manager.is_analyze_check_) {
+                check_column(all_cols, common_col);
+            }
             return std::make_shared<ExprTerm>(common_col);
         }
         case ast::AstType::ArithExpr: {

@@ -587,7 +587,10 @@ std::vector<Rid> SmManager::exist_in_index(const TabMeta& tab_, const std::uniqu
     return rids;
 }
 
-void SmManager::set_output_file(bool enable) { is_output_file_ = enable; }
+void SmManager::set_output_file(bool enable) {
+    is_output_file_ = enable;
+    is_analyze_check_ = false;  // 禁用analyze检查
+}
 
 void SmManager::load_data(char* start_pos, char* end_pos, const std::string& table_name, Transaction* txn) {
     TabMeta& tab_ = db_.get_table(table_name);
