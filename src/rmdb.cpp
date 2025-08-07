@@ -37,7 +37,7 @@
 #include "common/utils/Format.h"
 
 #define SOCK_PORT 8765
-#define MAX_CONN_LIMIT 8
+#define MAX_CONN_LIMIT 16
 
 // 是否开启 std::cout
 constexpr bool ENABLE_COUT = false;
