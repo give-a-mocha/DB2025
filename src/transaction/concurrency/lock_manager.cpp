@@ -71,7 +71,7 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
 
 
 bool LockManager::is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::scoped_lock<std::mutex> lock(latch_);
+    std::unique_lock<std::mutex> lock(latch_);
 
     LockDataId lock_data_id(tab_fd, rid);
 
@@ -123,7 +123,7 @@ bool LockManager::lock_IX_on_table(Transaction* txn, int tab_fd) { return true; 
  * @param {LockDataId} lock_data_id 要释放的锁ID
  */
 bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
-    std::scoped_lock<std::mutex> lock(latch_);
+    std::unique_lock<std::mutex> lock(latch_);
 
     auto lock_table_it = lock_table_.find(lock_data_id);
     if (lock_table_it == lock_table_.end()) {
