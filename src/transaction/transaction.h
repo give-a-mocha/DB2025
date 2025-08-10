@@ -151,8 +151,8 @@ class Transaction {
 
     inline void set_prev_lsn(lsn_t prev_lsn) { prev_lsn_ = prev_lsn; }
 
-    // 返回写集合的共享指针
-    inline std::vector<WriteRecord> get_write_set() { return write_set_; }
+    // 返回写集合的引用
+    inline std::vector<WriteRecord>& get_write_set() { return write_set_; }
 
     // 向写集合添加一个写记录 (接收 unique_ptr)
     inline void append_write_record(WriteRecord write_record) {
@@ -163,11 +163,11 @@ class Transaction {
 
     // inline void append_index_deleted_page(Page *page) { index_deleted_page_set_->push_back(page); }
 
-    inline std::vector<Page*> get_index_latch_page_set() { return index_latch_page_set_; }
+    inline std::vector<Page*>& get_index_latch_page_set() { return index_latch_page_set_; }
 
     inline void append_index_latch_page_set(Page *page) { index_latch_page_set_.push_back(page); }
 
-    inline std::vector<LockDataId> get_lock_set() { return lock_set_; }
+    inline std::vector<LockDataId>& get_lock_set() { return lock_set_; }
 
     // inline std::shared_ptr<std::unordered_set<int>> get_lock_gap_set() { return lock_gap_set_; }
 
@@ -217,9 +217,9 @@ class Transaction {
     }
 
     inline auto clear_lock_set() -> void {
-        // lock_set_->clear();                // 清空事务的锁集合
+        lock_set_.clear();                // 清空事务的锁集合
         // lock_gap_set_->clear();            // 清空事务的间隙锁集合
-        // index_latch_page_set_->clear();    // 清空索引加锁页面集合
+        index_latch_page_set_.clear();    // 清空索引加锁页面集合
         // index_deleted_page_set_->clear();  // 清空索引删除页面集合
     }
 };

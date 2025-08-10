@@ -94,7 +94,7 @@ void TransactionManager::commit(Transaction* txn) {
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
-    auto&& lock_set = txn->get_lock_set();
+    auto& lock_set = txn->get_lock_set();
     while (!lock_set.empty()) {
         // 释放事务持有的所有锁
         LockDataId lock = lock_set.back();
@@ -131,7 +131,7 @@ void TransactionManager::abort(Context* context) {
         return;  // 如果事务已经处于回滚状态，直接返回
     }
 
-    auto&& write_set = txn->get_write_set();
+    auto& write_set = txn->get_write_set();
     for (size_t i = 0; i < write_set.size(); ++i) {
         const auto table_name = write_set[i].GetTableName();
         const auto rid = write_set[i].GetRid();
@@ -161,7 +161,7 @@ void TransactionManager::abort(Context* context) {
     }
     txn->get_write_set().clear();  // 清空写集合
 
-    auto&& lock_set = txn->get_lock_set();
+    auto& lock_set = txn->get_lock_set();
     while (!lock_set.empty()) {
         // 释放事务持有的所有锁
         LockDataId lock = lock_set.back();
