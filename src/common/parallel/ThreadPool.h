@@ -27,7 +27,7 @@ class ThreadPool {
     size_t thread_count() const;
 
    private:
-    ThreadPool(size_t);
+    ThreadPool();
 
     bool stop;
     static size_t thread_num_;
@@ -37,10 +37,10 @@ class ThreadPool {
     std::condition_variable condition;
 };
 
-inline size_t ThreadPool::thread_num_ = std::max(4u, std::thread::hardware_concurrency() / 2);
+inline size_t ThreadPool::thread_num_ = std::max(4u, std::thread::hardware_concurrency() * 2);
 
-inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
-    for (size_t i = 0; i < threads; ++i)
+inline ThreadPool::ThreadPool() : stop(false) {
+    for (size_t i = 0; i < thread_num_; ++i)
         workers.emplace_back([this] {
             for (;;) {
                 std::function<void()> task;
@@ -76,7 +76,7 @@ auto ThreadPool::submit(F&& f, Args&&... args) -> std::future<std::invoke_result
 }
 
 inline ThreadPool& ThreadPool::getInstance() {
-    static ThreadPool instance(thread_num_);
+    static ThreadPool instance;
     return instance;
 }
 

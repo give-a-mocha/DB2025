@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/parallel/ThreadPool.h"
 
 /**
  * @brief 嵌套循环连接执行器，负责实现两个表的连接操作
@@ -22,13 +23,14 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> left_;
     std::unique_ptr<AbstractExecutor> right_;
-    size_t len_;                           // 连接结果记录长度
-    std::vector<ColMeta> cols_;            // 结果集列元数据
-    std::vector<Condition> fed_conds_;     // 连接条件列表
-    bool _is_end;                          // 扫描结束标志
-    std::unique_ptr<RmRecord> left_rec_;   // 左表当前记录
-    std::unique_ptr<RmRecord> right_rec_;  // 右表当前记录
-    std::unique_ptr<RmRecord> rec_;        // 结果当前记录
+    size_t len_;                                  // 连接结果记录长度
+    std::vector<ColMeta> cols_;                   // 结果集列元数据
+    std::vector<Condition> fed_conds_;            // 连接条件列表
+    std::unique_ptr<RmRecord> left_rec_;          // 左表当前记录
+    std::unique_ptr<RmRecord> right_rec_;         // 右表当前记录
+    std::queue<std::unique_ptr<RmRecord>> recs_;  // 结果当前记录
+    ThreadPool &thread_pool_;
+    std::future<std::queue<std::unique_ptr<RmRecord>>> future_;
 
    public:
     /**
@@ -45,7 +47,8 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      * @param conds 连接条件
      */
     NestedLoopJoinExecutor(std::unique_ptr<AbstractExecutor> left, std::unique_ptr<AbstractExecutor> right,
-                           std::vector<Condition> conds) {
+                           std::vector<Condition> conds)
+        : thread_pool_(ThreadPool::getInstance()) {
         TRACE_FUNCTION
         left_ = std::move(left);
         right_ = std::move(right);
@@ -57,7 +60,6 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         }
 
         cols_.insert(cols_.end(), right_cols.begin(), right_cols.end());
-        _is_end = false;
         fed_conds_ = std::move(conds);
     }
 
@@ -72,14 +74,11 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     void beginTuple() override {
         TRACE_FUNCTION
         left_->beginTuple();
-        right_->beginTuple();
-        if (left_->is_end() || right_->is_end()) {
-            _is_end = true;
-            return;
+        if (!left_->is_end()) {
+            auto left_rec = left_->Next();
+            future_ = thread_pool_.submit(
+                [this, rec = std::move(left_rec)]() mutable { return find_record(std::move(rec)); });
         }
-        if (!left_->is_end()) left_rec_ = left_->Next();
-        if (!right_->is_end()) right_rec_ = right_->Next();
-        find_record();
     }
 
     /**
@@ -92,29 +91,20 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     void nextTuple() override {
         TRACE_FUNCTION
-        if (is_end()) return;
-        right_->nextTuple();
-        if (!right_->is_end()) right_rec_ = right_->Next();
-        if (right_->is_end()) {
+        while (recs_.empty() && !left_->is_end()) {
             left_->nextTuple();
-            if (left_->is_end()) {
-                _is_end = true;
-                return;
-            }
-            if (!left_->is_end()) {
-                left_rec_ = left_->Next();
-            }
-            right_->beginTuple();
-            if (!right_->is_end()) right_rec_ = right_->Next();
+            if(left_->is_end()) return;
+            auto left_rec = left_->Next();
+            future_ = thread_pool_.submit(
+                [this, rec = std::move(left_rec)]() mutable { return find_record(std::move(rec)); });
         }
-        find_record();
     }
 
     /**
      * @brief 检查连接操作是否完成
      * @return 如果所有记录都已处理完返回true，否则返回false
      */
-    bool is_end() const override { return _is_end; }
+    bool is_end() const override { return recs_.empty() && !future_.valid() && left_->is_end(); }
 
     /**
      * @brief 获取当前连接结果记录
@@ -128,7 +118,12 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         TRACE_FUNCTION
-        return std::move(rec_);
+        if(recs_.empty()) {
+            recs_ = std::move(future_.get());
+        }
+        auto rec = std::move(recs_.front());
+        recs_.pop();
+        return rec;
     }
 
     /**
@@ -153,39 +148,22 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
     /**
      * @brief 查找下一对满足连接条件的记录
      */
-    void find_record() {
+    std::queue<std::unique_ptr<RmRecord>> find_record(std::unique_ptr<RmRecord> left_rec) {
         TRACE_FUNCTION
-        // 先获取当前记录
-        while (!is_end()) {
-            if (right_->is_end()) {
-                left_->nextTuple();
-                if (left_->is_end()) {
-                    _is_end = true;
-                    return;
-                }
-                if (!left_->is_end()) {
-                    left_rec_ = left_->Next();
-                }
-                right_->beginTuple();
-                if (!right_->is_end()) {
-                    right_rec_ = right_->Next();
-                }
-                continue;
-            }
 
+        std::queue<std::unique_ptr<RmRecord>> temp_recs_;
+
+        for (right_->beginTuple(); !right_->is_end(); right_->nextTuple()) {
+            auto right_rec = right_->Next();
             auto rec = std::make_unique<RmRecord>(len_);
-            memcpy(rec->data, left_rec_->data, left_->tupleLen());
-            memcpy(rec->data + left_->tupleLen(), right_rec_->data, right_->tupleLen());
+            memcpy(rec->data, left_rec->data, left_->tupleLen());
+            memcpy(rec->data + left_->tupleLen(), right_rec->data, right_->tupleLen());
             if (eval_conds(cols_, fed_conds_, rec)) {
-                rec_ = std::move(rec);
-                return;
-            }
-            right_->nextTuple();
-            if (!right_->is_end()) {
-                right_rec_ = right_->Next();
+                temp_recs_.push(std::move(rec));
             }
         }
-        _is_end = true;
+
+        return temp_recs_;
     }
 
     /**
