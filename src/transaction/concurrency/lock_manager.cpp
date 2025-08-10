@@ -37,87 +37,51 @@ bool LockManager::lock_shared_on_record(Transaction* txn, const Rid& rid, int ta
 bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::unique_lock<std::mutex> lock(latch_);
 
-    // 创建锁数据标识符( 行级锁
+    // 创建锁数据标识符（行级锁）
     LockDataId lock_data_id(tab_fd, rid);
 
-    auto queue_it = lock_table_.find(lock_data_id);
-    if (queue_it == lock_table_.end()) {
-        // 如果锁表中没有该锁数据标识符，则创建一个新的锁请求队列
-        queue_it = lock_table_
+    auto lock_it = lock_table_.find(lock_data_id);
+    if (lock_it == lock_table_.end()) {
+        // 如果锁表中没有该锁数据标识符，则创建一个新的锁信息
+        lock_it = lock_table_
                        .emplace(std::piecewise_construct,
                                 std::forward_as_tuple(lock_data_id),  // 构造 key
-                                std::forward_as_tuple()               // 默认构造 value (LockRequestQueue)
+                                std::forward_as_tuple()               // 默认构造 value (LockInfo)
                                 )
                        .first;
     }
-    LockRequestQueue& request_queue = queue_it->second;
+    LockInfo& lock_info = lock_it->second;
 
     // 检查是否已经获得锁
-    if (request_queue.exclusive_holder_ != -1 && request_queue.exclusive_holder_ == txn->get_transaction_id()) {
+    if (lock_info.exclusive_holder_ == txn->get_transaction_id()) {
         return true;
     }
 
-    bool conflict = request_queue.exclusive_holder_ == -1 ? false : true;
-
-    LockRequest current_request(txn->get_transaction_id(), LockManager::LockMode::EXCLUSIVE);
-
-    if (!conflict) {
-        current_request.granted_ = true;
-        request_queue.request_queue_.push_back(current_request);
-        request_queue.exclusive_holder_ = txn->get_transaction_id();
-        request_queue.exclusive_holder_it_ = std::prev(request_queue.request_queue_.end());
-        txn->get_lock_set()->insert(lock_data_id);
-        return true;
-    } else {
-        // no-wait策略
+    // 检查是否有冲突
+    if (lock_info.exclusive_holder_ != -1) {
+        // no-wait策略：如果有冲突直接返回false
         return false;
-
-    //     // wait-die策略
-    //     request_queue.request_queue_.push_back(current_request);
-    //     auto current_request_it = std::prev(request_queue.request_queue_.end());
-
-    //     // 如果优先级更高的事务（较小txn_id）持有锁，当前事务应该死亡
-    //     while (true) {
-    //         request_queue.cv_.wait(lock, [&] {
-    //             if (request_queue.exclusive_holder_ == -1 ||
-    //                 request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-    //                 return true;
-    //             }
-
-    //             return false;
-    //         });
-
-    //         if (request_queue.exclusive_holder_ != -1) {
-    //             if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-    //                 request_queue.request_queue_.erase(current_request_it);
-    //             }
-    //             return false;
-    //         }
-
-    //         if (request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-    //             current_request_it->granted_ = true;
-    //             request_queue.exclusive_holder_ = txn->get_transaction_id();
-    //             request_queue.exclusive_holder_it_ = current_request_it;
-    //             txn->get_lock_set()->insert(lock_data_id);
-    //             return true;
-    //         }
-    //         assert(0);
-    //     }
     }
+
+    // 没有冲突，直接获得锁
+    lock_info.exclusive_holder_ = txn->get_transaction_id();
+    txn->get_lock_set()->insert(lock_data_id);
+    return true;
 }
+
 
 bool LockManager::is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
     std::scoped_lock<std::mutex> lock(latch_);
 
     LockDataId lock_data_id(tab_fd, rid);
 
-    auto queue_it = lock_table_.find(lock_data_id);
-    if (queue_it == lock_table_.end()) {
+    auto lock_it = lock_table_.find(lock_data_id);
+    if (lock_it == lock_table_.end()) {
         return false;
     }
-    LockRequestQueue& request_queue = queue_it->second;
+    LockInfo& lock_info = lock_it->second;
 
-    return request_queue.exclusive_holder_ == -1 || request_queue.exclusive_holder_ == txn->get_transaction_id();
+    return lock_info.exclusive_holder_ == -1 || lock_info.exclusive_holder_ == txn->get_transaction_id();
 }
 
 /**
@@ -167,17 +131,22 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
         return locks_removed_from_txn > 0;
     }
 
-    LockRequestQueue& request_queue = lock_table_it->second;
-
-    request_queue.request_queue_.erase(request_queue.exclusive_holder_it_);
-    request_queue.exclusive_holder_ = -1;
-    request_queue.exclusive_holder_it_ = request_queue.request_queue_.end();
-
-    size_t is_erase = txn->get_lock_set()->erase(lock_data_id);
-    request_queue.cv_.notify_all();
-    if (request_queue.request_queue_.empty()) {
-        lock_table_.erase(lock_table_it);
+    LockInfo& lock_info = lock_table_it->second;
+    
+    // 检查是否是该事务持有的锁
+    if (lock_info.exclusive_holder_ != txn->get_transaction_id()) {
+        return false;
     }
+
+    // 释放锁
+    lock_info.exclusive_holder_ = -1;
+    size_t is_erase = txn->get_lock_set()->erase(lock_data_id);
+    
+    // 通知等待的线程
+    lock_info.cv_.notify_all();
+    
+    // 如果没有持有者，可以删除这个锁条目以节省内存
+    lock_table_.erase(lock_table_it);
 
     return is_erase > 0;
 }
@@ -185,17 +154,17 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 void LockManager::wait_for_lock_release(LockDataId lock_data_id) {
     std::unique_lock<std::mutex> lock(latch_);
 
-    auto queue_it = lock_table_.find(lock_data_id);
-    if (queue_it == lock_table_.end()) {
+    auto lock_it = lock_table_.find(lock_data_id);
+    if (lock_it == lock_table_.end()) {
         return;
     }
 
-    LockRequestQueue& request_queue = queue_it->second;
-    if (request_queue.exclusive_holder_ == -1) {
+    LockInfo& lock_info = lock_it->second;
+    if (lock_info.exclusive_holder_ == -1) {
         return;
     }
 
-    request_queue.cv_.wait(lock, [&] {
+    lock_info.cv_.wait(lock, [&] {
         auto current_it = lock_table_.find(lock_data_id);
         if (current_it == lock_table_.end()) {
             return true;

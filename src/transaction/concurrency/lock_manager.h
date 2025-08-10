@@ -39,21 +39,15 @@ class LockManager {
         LockRequest(txn_id_t txn_id, LockMode lock_mode) : txn_id_(txn_id), lock_mode_(lock_mode), granted_(false) {}
     };
 
-    /* 数据项上的加锁队列 */
-    class LockRequestQueue {
+    /* 简化的锁信息结构 - 针对no-wait策略优化 */
+    class LockInfo {
        public:
-        // 加锁队列
-        std::list<LockRequest> request_queue_;
-        // 条件变量，用于唤醒正在等待加锁的申请，在no-wait策略下无需使用
-        std::condition_variable cv_;
-        // 加锁队列的锁模式
-        GroupLockMode group_lock_mode_ = GroupLockMode::NON_LOCK;
         // 当前持有排他锁的事务ID，如果没有则为-1
         txn_id_t exclusive_holder_ = -1;
-        // 当前持有排他锁的迭代器，如果没有则为end()
-        std::list<LockRequest>::iterator exclusive_holder_it_;
+        // 条件变量，用于等待锁释放
+        std::condition_variable cv_;
 
-        LockRequestQueue() { exclusive_holder_it_ = request_queue_.end(); }
+        LockInfo() = default;
     };
 
     // GapLockRequest is now defined in "transaction/txn_defs.h"
@@ -71,7 +65,7 @@ class LockManager {
     // 用于保护间隙锁表的读写锁
     std::shared_mutex gap_lock_set_latch_;
     // 全局锁表
-    std::unordered_map<LockDataId, LockRequestQueue> lock_table_;
+    std::unordered_map<LockDataId, LockInfo> lock_table_;
     // 全局间隙锁表, key 为 fd_
     std::unordered_map<int, GapLockRequestQueue> gap_lock_table_;
 
