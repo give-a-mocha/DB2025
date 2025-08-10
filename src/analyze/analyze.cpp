@@ -101,11 +101,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             if (x->cols.empty()) {
                 query->cols.reserve(all_cols.size());
                 for (const auto &col : all_cols) {
-                    TabCol sel_col = {col.tab_name, col.name};     // 创建表列引用
+                    TabCol sel_col = {col.tab_name, col.name};  // 创建表列引用
                     if (sm_manager.is_analyze_check_) {
                         convert_tabname(all_cols, sel_col, tab_refs);  // 处理表名和别名
                     }
-                    query->cols.push_back(sel_col);                // 添加到查询列表
+                    query->cols.push_back(sel_col);  // 添加到查询列表
                 }
             } else {
                 query->cols.reserve(x->cols.size());
@@ -147,7 +147,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             get_clause_alias(all_cols, x->conds, query->conds, tab_refs);
             // 处理having条件
             get_clause_alias(all_cols, x->having_conds, query->having_conds, tab_refs);
-            
+
             if (sm_manager.is_analyze_check_) {
                 // 检查WHERE条件的有效性
                 check_clause_with_cols(all_cols, query->tables, query->conds, true);  // 检查WHERE条件的有效性
@@ -155,13 +155,12 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 check_clause_with_cols(all_cols, query->tables, query->having_conds, false);
                 // 检查having条件中是否有不是聚合函数也不是group by的列
                 check_having_conds(query->having_conds, query->group_cols);
-                
+
                 // 如果没有GROUP BY子句但有HAVING条件，则抛出错误
                 if (query->group_cols.empty() && !query->having_conds.empty()) {
                     throw InternalError("HAVING clause without GROUP BY is not allowed");
                 }
             }
-
 
             // 处理JOIN操作及其条件
             if (!x->jointree.empty()) {
@@ -263,7 +262,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 // 检查每个SET子句的有效性和类型兼容性
                 for (auto &set_clause : query->set_clauses) {
                     set_clause.lhs = check_column(all_cols, set_clause.lhs);  // 检查列是否存在
-    
+
                     if (set_clause.rhs_type == SetRhsType::SET_RHS_VALUE) {
                         TabMeta &tab = sm_manager.db_.get_table(set_clause.lhs.tab_name);
                         auto col = tab.get_col(set_clause.lhs.col_name);
@@ -287,7 +286,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                         auto l_col = lhs_tab.get_col(set_clause.lhs.col_name);
                         TabMeta &rhs_tab = sm_manager.db_.get_table(set_clause.rhs_col.tab_name);
                         auto r_col = rhs_tab.get_col(set_clause.rhs_col.col_name);
-    
+
                         bool is_numeric = (l_col->type == ColType::TYPE_INT || l_col->type == ColType::TYPE_FLOAT) &&
                                           (r_col->type == ColType::TYPE_INT || r_col->type == ColType::TYPE_FLOAT);
                         if (l_col->type != r_col->type && !is_numeric) {
@@ -318,7 +317,7 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
             get_all_cols(query->tables, all_cols);                              // 获取所有相关表的列
             std::vector<TabRef> tab_refs = {TabRef(x->tab_name, x->tab_name)};  // 创建表引用
             // 处理WHERE条件
-            get_clause_alias(all_cols, x->conds, query->conds, tab_refs);          // 获取WHERE条件并处理别名
+            get_clause_alias(all_cols, x->conds, query->conds, tab_refs);  // 获取WHERE条件并处理别名
             if (sm_manager.is_analyze_check_) {
                 // 检查WHERE条件的有效性
                 check_clause_with_cols(all_cols, {x->tab_name}, query->conds, false);  // 检查WHERE条件的有效性
@@ -360,7 +359,6 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
         return;
     }
     if (sm_manager.is_analyze_check_) {
-
         // 情况1: 有表名但没有别名 - 尝试找到表名对应的真实表并处理表别名
         if (target.tab_alias.empty() && !target.tab_name.empty()) {
             TabRef res = {target.tab_name, target.tab_alias};  // 初始化结果
@@ -426,7 +424,7 @@ void Analyze::convert_tabname(const std::vector<ColMeta> &all_cols, TabCol &targ
         }
     } else {
         auto it = std::find_if(all_cols.begin(), all_cols.end(),
-                             [&](const ColMeta &col) { return col.name == target.col_name; });
+                               [&](const ColMeta &col) { return col.name == target.col_name; });
         if (it != all_cols.end()) {
             target.tab_name = it->tab_name;  // 设置表名为找到的列
         } else {

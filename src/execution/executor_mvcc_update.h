@@ -29,12 +29,13 @@ extern TransactionManager txn_manager;
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
-    TabMeta &tab_;                                                                 // 表的元数据
-    RmFileHandle *fh_;                                                             // 表的数据文件句柄
-    std::vector<SetClause> set_clauses_;                                           // SET子句列表(新值)
+    TabMeta &tab_;                            // 表的元数据
+    RmFileHandle *fh_;                        // 表的数据文件句柄
+    std::vector<SetClause> set_clauses_;      // SET子句列表(新值)
 
    public:
-    MvccUpdateExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, std::vector<SetClause> set_clauses, Context *context)
+    MvccUpdateExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, std::vector<SetClause> set_clauses,
+                       Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
         prev_ = std::move(prev);
         set_clauses_ = std::move(set_clauses);

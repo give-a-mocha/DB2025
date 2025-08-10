@@ -25,8 +25,8 @@ extern TransactionManager txn_manager;
 class MvccDeleteExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
-    TabMeta &tab_;                                                                 // 表的元数据
-    RmFileHandle *fh_;                                                             // 表的数据文件句柄
+    TabMeta &tab_;                            // 表的元数据
+    RmFileHandle *fh_;                        // 表的数据文件句柄
 
    public:
     MvccDeleteExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, Context *context)
