@@ -64,5 +64,4 @@ static constexpr size_t OFFSET_PAGE_HDR = 4;
 
 static constexpr size_t BATCHSIZE = 1024;
 
-
 static constexpr size_t COL_WIDTH = 16;
