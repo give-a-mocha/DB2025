@@ -93,7 +93,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
         TRACE_FUNCTION
         while (recs_.empty() && !left_->is_end()) {
             left_->nextTuple();
-            if(left_->is_end()) return;
+            if (left_->is_end()) return;
             auto left_rec = left_->Next();
             future_ = thread_pool_.submit(
                 [this, rec = std::move(left_rec)]() mutable { return find_record(std::move(rec)); });
@@ -118,7 +118,7 @@ class NestedLoopJoinExecutor : public AbstractExecutor {
      */
     std::unique_ptr<RmRecord> Next() override {
         TRACE_FUNCTION
-        if(recs_.empty()) {
+        if (recs_.empty()) {
             recs_ = std::move(future_.get());
         }
         auto rec = std::move(recs_.front());
