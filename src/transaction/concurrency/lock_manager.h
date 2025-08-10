@@ -99,9 +99,5 @@ class LockManager {
 
     bool unlock(Transaction* txn, LockDataId lock_data_id);
 
-    bool lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds);
-
-    std::vector<Condition> get_gap_condition(int tab_fd, Transaction* txn);
-
-    bool unlock_gap(Transaction* txn, int tab_fd);
+    void wait_for_lock_release(LockDataId lock_data_id);
 };

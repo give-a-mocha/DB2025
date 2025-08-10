@@ -18,7 +18,7 @@ See the Mulan PSL v2 for more details. */
 
 extern SmManager sm_manager;
 extern TransactionManager txn_manager;
-
+extern LockManager lock_manager;
 /**
  * @brief 删除执行器，负责实现DELETE语句的功能
  */
@@ -46,6 +46,12 @@ class MvccDeleteExecutor : public AbstractExecutor {
             auto old_rec = prev_->Next();
             auto &rid = prev_->rid();
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid);
+
+            if (!lock_manager.lock_exclusive_on_record(context_->txn_, rid, fh_->GetFd())) {
+                txn_manager.abort(context_);
+                lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid));
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
 
             if (IsWriteWriteConflict(context_->txn_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);

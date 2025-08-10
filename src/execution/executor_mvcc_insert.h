@@ -100,6 +100,11 @@ class MvccInsertExecutor : public AbstractExecutor {
         if (!rids.empty()) {
             //! 这里使用back在唯一索引下才是对的
             rid_ = rids.back();
+            if (!lock_manager.lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd())) {
+                txn_manager.abort(context_);
+                lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid_));
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
             if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta_, new_meta, nullptr, rec,
                                                     context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
@@ -107,6 +112,11 @@ class MvccInsertExecutor : public AbstractExecutor {
         } else {
             rid_ = fh_->GetNewRid();
             TupleMeta base_meta(0, true);
+            if (!lock_manager.lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd())) {
+                txn_manager.abort(context_);
+                lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid_));
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
             if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta, new_meta, nullptr, rec,
                                                     context_->txn_)) {
                 fh_->delete_record(rid_);

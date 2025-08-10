@@ -70,39 +70,39 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
         return true;
     } else {
         // no-wait策略
-        // return false;
+        return false;
 
-        // wait-die策略
-        request_queue.request_queue_.push_back(current_request);
-        auto current_request_it = std::prev(request_queue.request_queue_.end());
+    //     // wait-die策略
+    //     request_queue.request_queue_.push_back(current_request);
+    //     auto current_request_it = std::prev(request_queue.request_queue_.end());
 
-        // 如果优先级更高的事务（较小txn_id）持有锁，当前事务应该死亡
-        while (true) {
-            request_queue.cv_.wait(lock, [&] {
-                if (request_queue.exclusive_holder_ == -1 ||
-                    request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-                    return true;
-                }
+    //     // 如果优先级更高的事务（较小txn_id）持有锁，当前事务应该死亡
+    //     while (true) {
+    //         request_queue.cv_.wait(lock, [&] {
+    //             if (request_queue.exclusive_holder_ == -1 ||
+    //                 request_queue.exclusive_holder_ < txn->get_transaction_id()) {
+    //                 return true;
+    //             }
 
-                return false;
-            });
+    //             return false;
+    //         });
 
-            if (request_queue.exclusive_holder_ != -1) {
-                if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
-                    request_queue.request_queue_.erase(current_request_it);
-                }
-                return false;
-            }
+    //         if (request_queue.exclusive_holder_ != -1) {
+    //             if (current_request_it != request_queue.request_queue_.end() && !current_request_it->granted_) {
+    //                 request_queue.request_queue_.erase(current_request_it);
+    //             }
+    //             return false;
+    //         }
 
-            if (request_queue.exclusive_holder_ < txn->get_transaction_id()) {
-                current_request_it->granted_ = true;
-                request_queue.exclusive_holder_ = txn->get_transaction_id();
-                request_queue.exclusive_holder_it_ = current_request_it;
-                txn->get_lock_set()->insert(lock_data_id);
-                return true;
-            }
-            assert(0);
-        }
+    //         if (request_queue.exclusive_holder_ < txn->get_transaction_id()) {
+    //             current_request_it->granted_ = true;
+    //             request_queue.exclusive_holder_ = txn->get_transaction_id();
+    //             request_queue.exclusive_holder_it_ = current_request_it;
+    //             txn->get_lock_set()->insert(lock_data_id);
+    //             return true;
+    //         }
+    //         assert(0);
+    //     }
     }
 }
 
@@ -182,58 +182,24 @@ bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
     return is_erase > 0;
 }
 
-bool LockManager::lock_gap(Transaction* txn, int tab_fd, std::vector<Condition> conds) {
-    std::unique_lock<std::shared_mutex> w_lock(gap_lock_set_latch_);
+void LockManager::wait_for_lock_release(LockDataId lock_data_id) {
+    std::unique_lock<std::mutex> lock(latch_);
 
-    auto queue_it = gap_lock_table_.find(tab_fd);
-    if (queue_it == gap_lock_table_.end()) {
-        queue_it =
-            gap_lock_table_.emplace(std::piecewise_construct, std::forward_as_tuple(tab_fd), std::forward_as_tuple())
-                .first;
+    auto queue_it = lock_table_.find(lock_data_id);
+    if (queue_it == lock_table_.end()) {
+        return;
     }
-    GapLockRequestQueue& request_queue = queue_it->second;
-    request_queue.request_queue_.emplace_back(txn->get_transaction_id(), std::move(conds));
-    txn->get_lock_gap_set()->insert(tab_fd);
-    return true;
-}
 
-std::vector<Condition> LockManager::get_gap_condition(int tab_fd, Transaction* txn) {
-    std::vector<Condition> gap_conditions;
-    auto table_queue_it = gap_lock_table_.find(tab_fd);
-    if (table_queue_it == gap_lock_table_.end()) {
-        return gap_conditions;
+    LockRequestQueue& request_queue = queue_it->second;
+    if (request_queue.exclusive_holder_ == -1) {
+        return;
     }
-    GapLockRequestQueue& request_queue = table_queue_it->second;
-    for (const auto& gap_request : request_queue.request_queue_) {
-        if (gap_request.txn_id_ == txn->get_transaction_id()) {
-            continue;  // 只返回其他事务的间隙锁条件
+
+    request_queue.cv_.wait(lock, [&] {
+        auto current_it = lock_table_.find(lock_data_id);
+        if (current_it == lock_table_.end()) {
+            return true;
         }
-        gap_conditions.insert(gap_conditions.end(), gap_request.conds.begin(), gap_request.conds.end());
-    }
-    return gap_conditions;
-}
-
-bool LockManager::unlock_gap(Transaction* txn, int tab_fd) {
-    std::unique_lock<std::shared_mutex> w_lock(gap_lock_set_latch_);
-
-    auto table_queue_it = gap_lock_table_.find(tab_fd);
-    if (table_queue_it == gap_lock_table_.end()) {
-        txn->get_lock_gap_set()->erase(tab_fd);
-        return false;
-    }
-
-    GapLockRequestQueue& request_queue = table_queue_it->second;
-    for (auto it = request_queue.request_queue_.begin(); it != request_queue.request_queue_.end();) {
-        if (it->txn_id_ == txn->get_transaction_id()) {
-            it = request_queue.request_queue_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    txn->get_lock_gap_set()->erase(tab_fd);
-    if (request_queue.request_queue_.empty()) {
-        gap_lock_table_.erase(table_queue_it);
-    }
-
-    return true;
+        return current_it->second.exclusive_holder_ == -1;
+    });
 }

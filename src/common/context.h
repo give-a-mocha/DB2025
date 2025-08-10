@@ -10,12 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
-#include "recovery/log_manager.h"
-#include "transaction/concurrency/lock_manager.h"
 #include "transaction/transaction.h"
-
-extern LogManager log_manager;
-extern LockManager lock_manager;
 
 // 事务管理器类的前向声明
 
