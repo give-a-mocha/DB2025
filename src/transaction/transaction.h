@@ -98,15 +98,13 @@ class Transaction {
     txn_id_t txn_id_;
 
     // 事务包含的所有写操作
-    std::shared_ptr<std::vector<std::unique_ptr<WriteRecord>>> write_set_;
+    std::vector<WriteRecord> write_set_;
     // 事务申请的所有锁
-    std::shared_ptr<std::unordered_set<LockDataId>> lock_set_;
-
-    std::shared_ptr<std::unordered_set<int>> lock_gap_set_;
+    std::vector<LockDataId> lock_set_;
     // 维护事务执行过程中加锁的索引页面
-    std::shared_ptr<std::deque<Page *>> index_latch_page_set_;
+    std::vector<Page *> index_latch_page_set_;
     // 维护事务执行过程中删除的索引页面
-    std::shared_ptr<std::deque<Page *>> index_deleted_page_set_;
+    // std::shared_ptr<std::deque<Page *>> index_deleted_page_set_;
 
     std::atomic<timestamp_t> read_ts_{0};
     /** 提交时间戳 */
@@ -120,21 +118,13 @@ class Transaction {
     std::vector<std::unique_ptr<UndoLog>> undo_logs_;
 
     /** 用于访问事务级撤销日志的锁。 */
-    std::mutex latch_;
+    std::shared_mutex latch_;
 
    public:
     explicit Transaction(txn_id_t txn_id, IsolationLevel isolation_level = IsolationLevel::SERIALIZABLE)
         : state_(TransactionState::DEFAULT), isolation_level_(isolation_level), txn_id_(txn_id) {
-        /* 初始化事务的写集合（记录所有写操作），使用智能指针 */
-        write_set_ = std::make_shared<std::vector<std::unique_ptr<WriteRecord>>>();
-        /* 初始化事务持有的锁集合 */
-        lock_set_ = std::make_shared<std::unordered_set<LockDataId>>();
-
-        lock_gap_set_ = std::make_shared<std::unordered_set<int>>();
-        /* 初始化事务中使用的索引页面集合（加锁的索引页面） */
-        index_latch_page_set_ = std::make_shared<std::deque<Page *>>();
         /* 初始化事务中删除的索引页面集合 */
-        index_deleted_page_set_ = std::make_shared<std::deque<Page *>>();
+        // index_deleted_page_set_ = std::make_shared<std::deque<Page *>>();
         /* 初始化日志序列号为无效值 */
         prev_lsn_ = INVALID_LSN;
         /* 记录当前线程ID，用于标识哪个线程在执行此事务 */
@@ -162,24 +152,24 @@ class Transaction {
     inline void set_prev_lsn(lsn_t prev_lsn) { prev_lsn_ = prev_lsn; }
 
     // 返回写集合的共享指针
-    inline std::shared_ptr<std::vector<std::unique_ptr<WriteRecord>>> get_write_set() { return write_set_; }
+    inline std::vector<WriteRecord> get_write_set() { return write_set_; }
 
     // 向写集合添加一个写记录 (接收 unique_ptr)
-    inline void append_write_record(std::unique_ptr<WriteRecord> write_record) {
-        write_set_->push_back(std::move(write_record));
+    inline void append_write_record(WriteRecord write_record) {
+        write_set_.push_back(std::move(write_record));
     }
 
-    inline std::shared_ptr<std::deque<Page *>> get_index_deleted_page_set() { return index_deleted_page_set_; }
+    // inline std::shared_ptr<std::deque<Page *>> get_index_deleted_page_set() { return index_deleted_page_set_; }
 
-    inline void append_index_deleted_page(Page *page) { index_deleted_page_set_->push_back(page); }
+    // inline void append_index_deleted_page(Page *page) { index_deleted_page_set_->push_back(page); }
 
-    inline std::shared_ptr<std::deque<Page *>> get_index_latch_page_set() { return index_latch_page_set_; }
+    inline std::vector<Page*> get_index_latch_page_set() { return index_latch_page_set_; }
 
-    inline void append_index_latch_page_set(Page *page) { index_latch_page_set_->push_back(page); }
+    inline void append_index_latch_page_set(Page *page) { index_latch_page_set_.push_back(page); }
 
-    inline std::shared_ptr<std::unordered_set<LockDataId>> get_lock_set() { return lock_set_; }
+    inline std::vector<LockDataId> get_lock_set() { return lock_set_; }
 
-    inline std::shared_ptr<std::unordered_set<int>> get_lock_gap_set() { return lock_gap_set_; }
+    // inline std::shared_ptr<std::unordered_set<int>> get_lock_gap_set() { return lock_gap_set_; }
 
     inline timestamp_t get_read_ts() const { return read_ts_; }
 
@@ -190,25 +180,25 @@ class Transaction {
     inline void set_commit_ts(timestamp_t commit_ts) { commit_ts_.store(commit_ts); }
     /** 修改现有的撤销日志 */
     inline auto ModifyUndoLog(int log_idx, std::unique_ptr<UndoLog> new_log) {
-        std::scoped_lock<std::mutex> lck(latch_);
+        std::unique_lock<std::shared_mutex> lck(latch_);
         undo_logs_[log_idx] = std::move(new_log);
     }
 
     /** @return 此事务中撤销日志的索引 */
     inline auto AppendUndoLog(std::unique_ptr<UndoLog> log) -> UndoLink {
-        std::scoped_lock<std::mutex> lck(latch_);
+        std::unique_lock<std::shared_mutex> lck(latch_);
         undo_logs_.emplace_back(std::move(log));
         return {txn_id_, static_cast<int>(undo_logs_.size() - 1)};
     }
 
     inline auto GetUndoLog(size_t log_id) -> const UndoLog * {
-        std::scoped_lock<std::mutex> lck(latch_);
+        std::shared_lock<std::shared_mutex> lck(latch_);
         // 注意：如果 log_id 无效，这里可能抛出 std::out_of_range 异常
         return undo_logs_[log_id].get();
     }
 
     inline auto CommitUndoLogs() -> void {
-        std::scoped_lock<std::mutex> lck(latch_);
+        std::unique_lock<std::shared_mutex> lck(latch_);
         // 提交事务的撤销日志
         for (auto &log : undo_logs_) {
             log->ts_ = commit_ts_.load();  // 设置撤销日志的时间戳为提交时间戳
@@ -216,20 +206,20 @@ class Transaction {
     }
 
     inline auto ClearUndoLogs() -> void {
-        std::scoped_lock<std::mutex> lck(latch_);
+        std::unique_lock<std::shared_mutex> lck(latch_);
         undo_logs_.clear();  // 清空事务的撤销日志
     }
 
     /** @return 撤销日志的数量 */
     inline auto GetUndoLogNum() -> size_t {
-        std::scoped_lock<std::mutex> lck(latch_);
+        std::shared_lock<std::shared_mutex> lck(latch_);
         return undo_logs_.size();
     }
 
     inline auto clear_lock_set() -> void {
-        lock_set_->clear();                // 清空事务的锁集合
-        lock_gap_set_->clear();            // 清空事务的间隙锁集合
-        index_latch_page_set_->clear();    // 清空索引加锁页面集合
-        index_deleted_page_set_->clear();  // 清空索引删除页面集合
+        // lock_set_->clear();                // 清空事务的锁集合
+        // lock_gap_set_->clear();            // 清空事务的间隙锁集合
+        // index_latch_page_set_->clear();    // 清空索引加锁页面集合
+        // index_deleted_page_set_->clear();  // 清空索引删除页面集合
     }
 };

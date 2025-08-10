@@ -65,23 +65,8 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
 
     // 没有冲突，直接获得锁
     lock_info.exclusive_holder_ = txn->get_transaction_id();
-    txn->get_lock_set()->insert(lock_data_id);
+    txn->get_lock_set().emplace_back(lock_data_id);  // 将锁添加到事务的锁集合中
     return true;
-}
-
-
-bool LockManager::is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd) {
-    std::unique_lock<std::mutex> lock(latch_);
-
-    LockDataId lock_data_id(tab_fd, rid);
-
-    auto lock_it = lock_table_.find(lock_data_id);
-    if (lock_it == lock_table_.end()) {
-        return false;
-    }
-    LockInfo& lock_info = lock_it->second;
-
-    return lock_info.exclusive_holder_ == -1 || lock_info.exclusive_holder_ == txn->get_transaction_id();
 }
 
 /**
@@ -122,33 +107,20 @@ bool LockManager::lock_IX_on_table(Transaction* txn, int tab_fd) { return true; 
  * @param {Transaction*} txn 要释放锁的事务对象指针
  * @param {LockDataId} lock_data_id 要释放的锁ID
  */
-bool LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
+void LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
     std::unique_lock<std::mutex> lock(latch_);
 
     auto lock_table_it = lock_table_.find(lock_data_id);
     if (lock_table_it == lock_table_.end()) {
-        size_t locks_removed_from_txn = txn->get_lock_set()->erase(lock_data_id);
-        return locks_removed_from_txn > 0;
+        return ;
     }
-
     LockInfo& lock_info = lock_table_it->second;
-    
-    // 检查是否是该事务持有的锁
-    if (lock_info.exclusive_holder_ != txn->get_transaction_id()) {
-        return false;
-    }
-
     // 释放锁
     lock_info.exclusive_holder_ = -1;
-    size_t is_erase = txn->get_lock_set()->erase(lock_data_id);
-    
     // 通知等待的线程
     lock_info.cv_.notify_all();
-    
-    // 如果没有持有者，可以删除这个锁条目以节省内存
     lock_table_.erase(lock_table_it);
-
-    return is_erase > 0;
+    return ;
 }
 
 void LockManager::wait_for_lock_release(LockDataId lock_data_id) {

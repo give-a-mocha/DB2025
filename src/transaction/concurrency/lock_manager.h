@@ -85,13 +85,11 @@ class LockManager {
 
     bool lock_exclusive_on_table(Transaction* txn, int tab_fd);
 
-    bool is_lock_on_record(Transaction* txn, const Rid& rid, int tab_fd);
-
     bool lock_IS_on_table(Transaction* txn, int tab_fd);
 
     bool lock_IX_on_table(Transaction* txn, int tab_fd);
 
-    bool unlock(Transaction* txn, LockDataId lock_data_id);
+    void unlock(Transaction* txn, LockDataId lock_data_id);
 
     void wait_for_lock_release(LockDataId lock_data_id);
 };

@@ -1153,8 +1153,8 @@ bool IxIndexHandle::is_page_safe(IxNodeHandle *node, Operation operation) {
 }
 
 void IxIndexHandle::UnlockAncestors(Transaction *transaction) {
-    auto pages = transaction->get_index_latch_page_set();
-    for (auto &page : *pages) {
+    auto&& pages = transaction->get_index_latch_page_set();
+    for (auto &page : pages) {
         if (page == nullptr) {
             root_latch_.unlock();
         } else {
@@ -1162,7 +1162,7 @@ void IxIndexHandle::UnlockAncestors(Transaction *transaction) {
             buffer_pool_manager.unpin_page(page->get_page_id(), false);
         }
     }
-    pages->clear();  // 清空已解锁的页面集合
+    pages.clear();  // 清空已解锁的页面集合
 }
 
 /**

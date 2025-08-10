@@ -94,18 +94,13 @@ void TransactionManager::commit(Transaction* txn) {
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
-    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-
-    auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
-    for (const LockDataId& lock : lock_set_copy) {
+    auto&& lock_set = txn->get_lock_set();
+    while (!lock_set.empty()) {
+        // 释放事务持有的所有锁
+        LockDataId lock = lock_set.back();
+        lock_set.pop_back();
         lock_manager.unlock(txn, lock);
     }
-
-    // auto lock_gap_set = txn->get_lock_gap_set();
-    // auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
-    // for (const int& tab_fd : lock_gap_set_copy) {
-    //     lock_manager_->unlock_gap(txn, tab_fd);
-    // }
 
     // 清空事务相关的集合
     txn->clear_lock_set();
@@ -136,10 +131,10 @@ void TransactionManager::abort(Context* context) {
         return;  // 如果事务已经处于回滚状态，直接返回
     }
 
-    auto write_set = txn->get_write_set();
-    for (size_t i = 0; i < write_set->size(); ++i) {
-        const auto table_name = (*write_set)[i]->GetTableName();
-        const auto rid = (*write_set)[i]->GetRid();
+    auto&& write_set = txn->get_write_set();
+    for (size_t i = 0; i < write_set.size(); ++i) {
+        const auto table_name = write_set[i].GetTableName();
+        const auto rid = write_set[i].GetRid();
         const UndoLog* undolog = txn->GetUndoLog(i);
         std::unique_ptr<RmFileHandle>& fh_ = sm_manager.fhs_.at(table_name);
 
@@ -164,11 +159,13 @@ void TransactionManager::abort(Context* context) {
             // table_name);
         }
     }
-    txn->get_write_set()->clear();  // 清空写集合
+    txn->get_write_set().clear();  // 清空写集合
 
-    std::shared_ptr<std::unordered_set<LockDataId>> lock_set = txn->get_lock_set();
-    auto lock_set_copy = *lock_set;  // 复制锁集合以避免迭代时修改
-    for (const LockDataId& lock : lock_set_copy) {
+    auto&& lock_set = txn->get_lock_set();
+    while (!lock_set.empty()) {
+        // 释放事务持有的所有锁
+        LockDataId lock = lock_set.back();
+        lock_set.pop_back();
         lock_manager.unlock(txn, lock);
     }
 
@@ -495,7 +492,7 @@ auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, Rm
     if (meta.ts_ != txn->get_transaction_id()) {
         // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
         GenerateNewUndoLog(fh_->GetFd(), rid, old_rec, meta, txn);
-        txn->append_write_record(std::make_unique<WriteRecord>(tab_name_, rid));
+        txn->append_write_record(WriteRecord(tab_name_, rid));
     }
     return true;  // 更新成功
 }
@@ -517,7 +514,7 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
     if (meta.ts_ != txn->get_transaction_id()) {
         // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
         GenerateNewUndoLog(fh_->GetFd(), delete_rid, delete_rec, meta, txn);
-        txn->append_write_record(std::make_unique<WriteRecord>(tab_name, delete_rid));
+        txn->append_write_record(WriteRecord(tab_name, delete_rid));
     }
 
     if (insert_rid == delete_rid) {
@@ -536,7 +533,7 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
         if (meta.ts_ != txn->get_transaction_id()) {
             // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
             GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
-            txn->append_write_record(std::make_unique<WriteRecord>(tab_name, insert_rid));
+            txn->append_write_record(WriteRecord(tab_name, insert_rid));
         }
     } else {
         meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
@@ -548,7 +545,7 @@ auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle*
         if (meta.ts_ != txn->get_transaction_id()) {
             // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
             GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
-            txn->append_write_record(std::make_unique<WriteRecord>(tab_name, insert_rid));
+            txn->append_write_record(WriteRecord(tab_name, insert_rid));
         }
     }
 
