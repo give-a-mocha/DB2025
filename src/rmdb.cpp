@@ -35,12 +35,15 @@
 #include "portal.h"
 #include "recovery/log_recovery.h"
 #include "common/utils/Format.h"
+#include "common/getFunctionTime.h"
 
 #define SOCK_PORT 8765
 #define MAX_CONN_LIMIT 8
 
 // 是否开启 std::cout
 constexpr bool ENABLE_COUT = false;
+// 是否输出函数计时结果
+constexpr bool ENABLE_TIMER = true;
 
 // #define ENABLE_SERIALIZE
 
@@ -92,6 +95,9 @@ void sigint_handler(int signo) {
     should_exit = true;
     // log_manager->flush_log_to_disk();
     Print("The Server receive Crtl+C, will been closed\n");
+    if constexpr (ENABLE_TIMER) {
+        PrintFunctionTime
+    }
     longjmp(jmpbuf, 1);
 }
 

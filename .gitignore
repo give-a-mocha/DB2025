@@ -78,4 +78,4 @@ performance_testing/*.folded
 
 .cunzhi-memory/
 
-make.sh
+*.sh
