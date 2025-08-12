@@ -68,8 +68,9 @@ void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t 
     // !3 重置page的data，更新page id
 
     // 如果是脏页,写回磁盘
-    if (page->is_dirty_) {
+    if (page->is_dirty_.load()) {
         disk_manager.write_page(page->id_.fd, page->id_.page_no, page->data_, PAGE_SIZE);
+        page->is_dirty_.store(false);  // 重置脏页标志
     }
 
     // 从页表中删除旧映射
@@ -80,8 +81,7 @@ void BufferPoolInstance::update_page(Page* page, PageId new_page_id, frame_id_t 
     page_table_.emplace(new_page_id, new_frame_id);
 
     // 重置页面数据
-    page->pin_count_ = 0;     // 重置pin_count
-    page->is_dirty_ = false;  // 重置脏页标志
+    page->pin_count_.store(0);  // 重置pin_count
     page->reset_memory();
 }
 
@@ -105,25 +105,32 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
     //  !4.     固定目标页，更新pin_count_
     //  !5.     返回目标页
 
-    std::scoped_lock lock{latch_};
-
+    std::shared_lock read_lock{latch_};
     // 在页表中查找目标页
     auto iter = page_table_.find(page_id);
     if (iter != page_table_.end()) {
         // 页面在缓冲池中,增加pin_count并返回
         frame_id_t frame_id = iter->second;
         Page* page = &pages_[frame_id];
-        if (page->pin_count_ == 0) {
-            // 如果pin_count为0说明是新取出的页
-            // 需要在replacer中固定该页
-            replacer_->pin(frame_id);
+        if (page->pin_count_.load() != 0) {
+            page->pin_count_.fetch_add(1);
+            return page;  // 页面已经被固定，直接返回
         }
-        // replacer_->pin(frame_id);  // 固定该页
-        page->pin_count_++;
-        // INFO("fetch page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
-        return page;
     }
+    read_lock.unlock();  // 释放共享锁
+    std::unique_lock write_lock{latch_};  // 获取独占锁以修改缓冲池
 
+    iter = page_table_.find(page_id);
+    if (iter != page_table_.end()) {
+        // 页面在缓冲池中,增加pin_count并返回
+        frame_id_t frame_id = iter->second;
+        Page* page = &pages_[frame_id];
+        if (page->pin_count_.load() == 0) {
+            replacer_->pin(frame_id);  // 固定该页
+        }
+        page->pin_count_.fetch_add(1);
+        return page;  // 页面已经被固定，直接返回
+    }
     // 页面不在缓冲池中,寻找可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
@@ -135,10 +142,9 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
     Page* page = &pages_[frame_id];
     update_page(page, page_id, frame_id);
     disk_manager.read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
-    page->pin_count_ = 1;  // 固定该页
+    page->pin_count_.store(1);  // 设置pin_count为1
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
-    // INFO("fetch page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     return page;
 }
 
@@ -167,7 +173,7 @@ bool BufferPoolInstance::unpin_page(PageId page_id, bool is_dirty) {
     // !2.2 若pin_count_大于0，则pin_count_自减一
     // !2.2.1 若自减后等于0，则调用replacer_的Unpin
     // !3 根据参数is_dirty，更改P的is_dirty_
-    std::scoped_lock lock{latch_};
+    std::shared_lock read_lock{latch_};
 
     // 在页表中查找目标页
     auto iter = page_table_.find(page_id);
@@ -180,23 +186,23 @@ bool BufferPoolInstance::unpin_page(PageId page_id, bool is_dirty) {
     Page* page = &pages_[frame_id];
 
     // 检查pin_count
-    if (page->pin_count_ == 0) {
+    if (page->pin_count_.load() == 0) {
         return false;  // pin_count已经为0
     }
-
-    // 减少pin_count
-    page->pin_count_--;
-    // INFO("Unpinning page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
-    // 如果pin_count降为0,在replacer中取消固定
-    if (page->pin_count_ == 0) {
-        replacer_->unpin(frame_id);
+    if (page->pin_count_.load() != 1) {
+        page->pin_count_.fetch_sub(1);
+        if (is_dirty) {
+            page->is_dirty_.store(true);  // 如果是脏页，设置脏页标志
+        }
+        return true;  // 成功解除固定
     }
-
-    // 更新dirty标记
+    read_lock.unlock();  // 释放共享锁
+    std::unique_lock write_lock{latch_};  // 获取独占锁以
+    page->pin_count_.fetch_sub(1);
+    replacer_->unpin(frame_id);  // 在替换器中标记为可替换
     if (is_dirty) {
-        page->is_dirty_ = true;
+        page->is_dirty_.store(true);  // 如果是脏页，设置脏页标志
     }
-
     return true;
 }
 
@@ -213,7 +219,7 @@ bool BufferPoolInstance::flush_page(PageId page_id) {
     // !2. 无论P是否为脏都将其写回磁盘。
     // !3. 更新P的is_dirty_
 
-    std::scoped_lock lock{latch_};
+    std::unique_lock lock{latch_};
 
     // 在页表中查找目标页
     auto iter = page_table_.find(page_id);
@@ -229,7 +235,7 @@ bool BufferPoolInstance::flush_page(PageId page_id) {
     disk_manager.write_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
 
     // 更新dirty标记
-    page->is_dirty_ = false;
+    page->is_dirty_.store(false);
 
     return true;
 }
@@ -249,7 +255,7 @@ Page* BufferPoolInstance::new_page(PageId* page_id) {
     // !4.   固定frame，更新pin_count_
     // !5.   返回获得的page
 
-    std::scoped_lock lock{latch_};
+    std::unique_lock lock{latch_};
 
     // 找一个可用frame
     frame_id_t frame_id;
@@ -261,8 +267,7 @@ Page* BufferPoolInstance::new_page(PageId* page_id) {
     // 获取frame对应的页面
     Page* page = &pages_[frame_id];
     update_page(page, *page_id, frame_id);
-    page->pin_count_ = 1;  // 固定该页
-    // INFO("new page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
+    page->pin_count_.store(1);
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
 
@@ -281,7 +286,7 @@ bool BufferPoolInstance::delete_page(PageId page_id) {
     // 3.
     // 将目标页数据写回磁盘，从页表中删除目标页，重置其元数据，将其加入free_list_，返回true
 
-    std::scoped_lock lock{latch_};
+    std::unique_lock lock{latch_};
 
     // 在页表中查找目标页
     auto iter = page_table_.find(page_id);
@@ -305,8 +310,8 @@ bool BufferPoolInstance::delete_page(PageId page_id) {
 
     // 重置页面元数据
     page->id_.page_no = INVALID_PAGE_ID;
-    page->pin_count_ = 0;
-    page->is_dirty_ = false;
+    page->pin_count_.store(0);
+    page->is_dirty_.store(false);
     page->reset_memory();
 
     // 从页表中删除
@@ -330,7 +335,7 @@ bool BufferPoolInstance::delete_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolInstance::flush_all_pages(int fd) {
-    std::scoped_lock lock{latch_};
+    std::unique_lock lock{latch_};
 
     // 遍历页表
     for (const auto& pair : page_table_) {
@@ -341,7 +346,7 @@ void BufferPoolInstance::flush_all_pages(int fd) {
         // 获取页面并写回磁盘
         Page* page = &pages_[frame_id];
         disk_manager.write_page(fd, page_id.page_no, page->data_, PAGE_SIZE);
-        page->is_dirty_ = false;
+        page->is_dirty_.store(false);
     }
 }
 
@@ -351,7 +356,7 @@ void BufferPoolInstance::flush_all_pages(int fd) {
  * @note 该函数使用互斥锁保护并发访问
  */
 void BufferPoolInstance::delete_all_pages(int fd) {
-    std::scoped_lock lock{latch_};
+    std::unique_lock lock{latch_};
 
     for (auto it = page_table_.begin(); it != page_table_.end();) {
         if (it->first.fd == fd) {
@@ -366,8 +371,8 @@ void BufferPoolInstance::delete_all_pages(int fd) {
 
             // 重置页面元数据
             page->id_.page_no = INVALID_PAGE_ID;
-            page->pin_count_ = 0;
-            page->is_dirty_ = false;
+            page->pin_count_.store(0);
+            page->is_dirty_.store(false);
             page->reset_memory();
 
             // 从页表中删除
@@ -382,7 +387,7 @@ void BufferPoolInstance::delete_all_pages(int fd) {
 }
 
 auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
-    std::scoped_lock lock{latch_};
+    std::unique_lock lock{latch_};
     // 找一个可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
@@ -393,42 +398,53 @@ auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     // 获取frame对应的页面
     Page* page = &pages_[frame_id];
     update_page(page, *page_id, frame_id);
-    page->pin_count_ = 1;
+    page->pin_count_.store(1);
     replacer_->pin(frame_id);
 
     return {this, page};
 }
 
 auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
-    std::scoped_lock lock{latch_};
-
+    std::shared_lock read_lock{latch_};
     // 在页表中查找目标页
     auto iter = page_table_.find(page_id);
     if (iter != page_table_.end()) {
         // 页面在缓冲池中,增加pin_count并返回
         frame_id_t frame_id = iter->second;
         Page* page = &pages_[frame_id];
-        if (page->pin_count_ == 0) {
-            replacer_->pin(frame_id);
+        if (page->pin_count_.load() != 0) {
+            page->pin_count_.fetch_add(1);
+            return {this, page};  // 页面已经被固定，直接返回
         }
-        page->pin_count_++;
-        return {this, page};
     }
+    read_lock.unlock();  // 释放共享锁
+    std::unique_lock write_lock{latch_};  // 获取独占锁以修改缓冲池
 
+    iter = page_table_.find(page_id);
+    if (iter != page_table_.end()) {
+        // 页面在缓冲池中,增加pin_count并返回
+        frame_id_t frame_id = iter->second;
+        Page* page = &pages_[frame_id];
+        if (page->pin_count_.load() == 0) {
+            replacer_->pin(frame_id);  // 固定该页
+        }
+        page->pin_count_.fetch_add(1);
+        return {this, page};  // 页面已经被固定，直接返回
+    }
     // 页面不在缓冲池中,寻找可用frame
     frame_id_t frame_id;
     if (!find_victim_page(&frame_id)) {
-        throw InternalError("BufferPoolInstance::fetch_basic_page: No available frame found.");
-        // return {this, nullptr};  // 没有可用frame
+        throw InternalError("BufferPoolInstance::fetch_page: No available frame found.");
+        // return nullptr;  // 没有可用frame
     }
 
     // 获取victim frame对应的页面
     Page* page = &pages_[frame_id];
     update_page(page, page_id, frame_id);
     disk_manager.read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
-    page->pin_count_ = 1;  // 固定该页
+    page->pin_count_.store(1);  // 设置pin_count为1
+    //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
     replacer_->pin(frame_id);
-
     return {this, page};
 }
 

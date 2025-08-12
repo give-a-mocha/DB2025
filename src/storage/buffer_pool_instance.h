@@ -14,6 +14,8 @@ See the Mulan PSL v2 for more details. */
 
 #include <cassert>
 #include <list>
+#include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 #include <deque>
@@ -36,7 +38,7 @@ class BufferPoolInstance {
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
     std::list<frame_id_t> free_list_;                    // 空闲帧链表
     Replacer* replacer_;                                 // 页面替换策略实现
-    std::mutex latch_;                                   // 并发控制锁
+    std::shared_mutex latch_;                                   // 并发控制锁
 
    public:
     BufferPoolInstance() {

@@ -10,6 +10,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <atomic>
 #include <shared_mutex>
 #include "common/config.h"
 #include "common/debug_shared_mutex.h"
@@ -92,10 +93,10 @@ class Page {
     char *data_;
 
     /** 脏页判断 */
-    bool is_dirty_ = false;
+    std::atomic<bool> is_dirty_{false};
 
     /** The pin count of this page. */
-    int pin_count_ = 0;
+    std::atomic<int> pin_count_{0};
 
     /** The read-write latch of this page. */
     ReaderWriterLatch rwlatch_;
