@@ -27,7 +27,7 @@ class TotTime {
     TotTime() = default;
 };
 
-}
+}  // namespace timedetail
 
 class GetTime {
    private:
