@@ -38,12 +38,12 @@ class BufferPoolInstance {
     static constexpr size_t pool_size_ = BUFFER_POOL_SIZE / BUFFER_POOL_INSTANCE_SIZE;  // 缓冲池大小（帧数）
     Page pages_[pool_size_];                             // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
-    std::vector<frame_id_t> free_list_;                    // 空闲帧链表
+    std::vector<frame_id_t> free_list_;                  // 空闲帧链表
     ReplacerType replacer_;                              // 页面替换策略实现
     std::mutex latch_;                                   // 并发控制锁
 
    public:
-    BufferPoolInstance(): free_list_(pool_size_){
+    BufferPoolInstance() : free_list_(pool_size_) {
         std::iota(free_list_.begin(), free_list_.end(), 0);
         page_table_.reserve(pool_size_ * 4);  // 预留空间，避免频繁扩容
     }

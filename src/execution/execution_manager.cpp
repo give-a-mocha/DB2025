@@ -236,7 +236,8 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
                     offset += size;
                     break;
                 case ColType::TYPE_FLOAT:
-                    size = snprintf(buffer + offset, BUFFER_SIZE - offset, "%.6f", *(float *)rec_buf);  // 更简洁的浮点表示
+                    size =
+                        snprintf(buffer + offset, BUFFER_SIZE - offset, "%.6f", *(float *)rec_buf);  // 更简洁的浮点表示
                     columns.emplace_back(buffer + offset, size);
                     offset += size;
                     break;
