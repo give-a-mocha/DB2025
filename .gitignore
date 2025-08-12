@@ -77,3 +77,5 @@ performance_testing/*.data
 performance_testing/*.folded
 
 .cunzhi-memory/
+
+make.sh

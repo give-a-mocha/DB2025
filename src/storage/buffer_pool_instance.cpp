@@ -33,8 +33,8 @@ bool BufferPoolInstance::find_victim_page(frame_id_t* frame_id) {
     // 如果有空闲帧,直接使用
     // Caller must hold the latch_ if free_list_ access needs protection.
     if (!free_list_.empty()) {
-        *frame_id = free_list_.front();
-        free_list_.pop_front();
+        *frame_id = free_list_.back();
+        free_list_.pop_back();
         return true;
     }
 

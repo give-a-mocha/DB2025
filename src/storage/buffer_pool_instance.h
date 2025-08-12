@@ -24,6 +24,7 @@ See the Mulan PSL v2 for more details. */
 #include "replacer/lru_replacer.h"
 #include "replacer/replacer.h"
 #include "page_guard.h"
+#include <numeric>
 
 extern DiskManager disk_manager;
 
@@ -37,17 +38,14 @@ class BufferPoolInstance {
     static constexpr size_t pool_size_ = BUFFER_POOL_SIZE / BUFFER_POOL_INSTANCE_SIZE;  // 缓冲池大小（帧数）
     Page pages_[pool_size_];                             // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
-    std::list<frame_id_t> free_list_;                    // 空闲帧链表
+    std::vector<frame_id_t> free_list_;                    // 空闲帧链表
     ReplacerType replacer_;                              // 页面替换策略实现
     std::mutex latch_;                                   // 并发控制锁
 
    public:
-    BufferPoolInstance() {
-        // 初始化时，所有的page都在free_list_中
-        for (size_t i = 0; i < pool_size_; ++i) {
-            free_list_.emplace_back(static_cast<frame_id_t>(i));  // static_cast转换数据类型
-        }
-        page_table_.reserve(pool_size_);  // 预留空间，避免频繁扩容
+    BufferPoolInstance(): free_list_(pool_size_){
+        std::iota(free_list_.begin(), free_list_.end(), 0);
+        page_table_.reserve(pool_size_ * 4);  // 预留空间，避免频繁扩容
     }
 
     ~BufferPoolInstance() = default;

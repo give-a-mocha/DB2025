@@ -218,34 +218,33 @@ void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, 
     // Print records
     size_t num_rec = 0;
     // 执行query_plan
-    char buffer[BUFFER_LENGTH];
-    int offset = 0;
-    int size;
+    constexpr int BUFFER_SIZE = BUFFER_LENGTH;
+    char buffer[BUFFER_SIZE];
     for (executorTreeRoot->beginTuple(); !executorTreeRoot->is_end(); executorTreeRoot->nextTuple()) {
         auto Tuple = executorTreeRoot->Next();
         const auto &cols = executorTreeRoot->cols();
         std::vector<std::string_view> columns;
         columns.reserve(cols.size());
+        size_t offset = 0;
+        size_t size;
         for (auto &col : cols) {
             char *rec_buf = Tuple->data + col.offset;
             switch (col.type) {
                 case ColType::TYPE_INT:
-                    size = sprintf(buffer + offset, "%d", *(int *)rec_buf);
+                    size = snprintf(buffer + offset, BUFFER_SIZE - offset, "%d", *(int *)rec_buf);
                     columns.emplace_back(buffer + offset, size);
                     offset += size;
                     break;
                 case ColType::TYPE_FLOAT:
-                    size = sprintf(buffer + offset, "%.6f", *(float *)rec_buf);  // 更简洁的浮点表示
+                    size = snprintf(buffer + offset, BUFFER_SIZE - offset, "%.6f", *(float *)rec_buf);  // 更简洁的浮点表示
                     columns.emplace_back(buffer + offset, size);
                     offset += size;
                     break;
                 case ColType::TYPE_STRING:
-                    size_t actual_len = strnlen(rec_buf, col.len);
-                    columns.emplace_back(rec_buf, actual_len);
+                    columns.emplace_back(rec_buf, strnlen(rec_buf, col.len));
                     break;
             }
         }
-    NXT:;
         // print record into buffer
         rec_printer.print_record(columns, context);
         // print record into file

@@ -64,7 +64,7 @@ class RecordPrinter {
             strcpy(buffer, "| ");
             if (col.size() > COL_WIDTH) {
                 memcpy(buffer + 2, col.data(), COL_WIDTH - 3);
-                strcpy(buffer, "... ");
+                strcpy(buffer + COL_WIDTH - 1, "... ");
             } else {
                 memset(buffer + 2, ' ', COL_WIDTH - col.size());
                 memcpy(buffer + 2 + COL_WIDTH - col.size(), col.data(), col.size());
