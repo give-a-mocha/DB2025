@@ -13,9 +13,7 @@ See the Mulan PSL v2 for more details. */
 extern DiskManager disk_manager;
 
 size_t BufferPoolManager::get_instance_no(const PageId& page_id) const {
-    // return hasher_(page_id) % BUFFER_POOL_INSTANCE_SIZE;
-    //! 八个缓冲区的
-    return hasher_(page_id) & 0x7;
+    return std::hash<PageId>{}(page_id) % BUFFER_POOL_INSTANCE_SIZE;
 }
 
 /**

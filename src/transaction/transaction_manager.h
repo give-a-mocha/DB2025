@@ -42,13 +42,6 @@ class TransactionManager {
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
-    struct PageIdHash {
-        size_t operator()(const PageId &pid) const {
-            return static_cast<size_t>(pid.fd) * 131 + static_cast<size_t>(pid.page_no);
-        }
-    };
-    PageIdHash hasher_;  // 哈希函数，用于计算PageId的哈希值
-
     // std::mutex commit_mutex_;  // 用于提交事务时的互斥锁
 
     /**

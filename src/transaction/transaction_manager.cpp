@@ -177,9 +177,7 @@ void TransactionManager::abort(Context* context) {
 }
 
 auto TransactionManager::GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard& {
-    // return version_info_shards_[hasher_(page_id) % VERSION_INFO_SHARDS];
-    // 256个分片，使用哈希函数计算页ID的哈希值并取模
-    return version_info_shards_[hasher_(page_id) & 0xFF];
+    return version_info_shards_[std::hash<PageId>{}(page_id) % VERSION_INFO_SHARDS];
 }
 
 /**

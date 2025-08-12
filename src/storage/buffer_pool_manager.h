@@ -33,13 +33,6 @@ class BufferPoolManager {
     size_t pool_size_;                                                      // 缓冲池大小（帧数）
     BufferPoolInstance* buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
 
-    struct PageIdHash {
-        size_t operator()(const PageId& pid) const {
-            return static_cast<size_t>(pid.fd) * 131 + static_cast<size_t>(pid.page_no);
-        }
-    };
-    PageIdHash hasher_;  // 哈希函数，用于计算PageId的哈希值
-
    public:
     BufferPoolManager(size_t pool_size) : pool_size_(pool_size) {
         // 为buffer pool分配一块连续的内存空间
