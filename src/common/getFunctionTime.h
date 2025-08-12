@@ -16,7 +16,7 @@ class TotTime {
 
     void add(int64_t time) { tot_time.fetch_add(time); }
 
-    int64_t get() { return tot_time; }
+    int64_t get() { return tot_time.load(std::memory_order_relaxed); }
 
     void print() {
         std::clog << "\033[0m\033[1;31m" << "Total time: " << tot_time.load() / 1e6 << " ms" << "\033[0m" << std::endl;
@@ -42,7 +42,7 @@ class GetTime {
     }
 };
 #ifndef AcquisitionTime
-#define AcquisitionTime GetTime();
+#define AcquisitionTime GetTime GetTimeTEMP;
 #endif
 
 #ifndef PrintFunctionTime
