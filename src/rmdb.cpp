@@ -48,7 +48,7 @@ static bool should_exit = false;
 
 // 构建全局所需的管理器对象
 DiskManager disk_manager;
-BufferPoolManager buffer_pool_manager(BUFFER_POOL_SIZE);
+BufferPoolManager buffer_pool_manager;
 RmManager rm_manager;
 IxManager ix_manager;
 SmManager sm_manager;

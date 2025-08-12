@@ -31,8 +31,7 @@ extern DiskManager disk_manager;
  * @brief 缓冲池管理器类
  */
 class BufferPoolInstance {
-   private:
-    size_t pool_size_;                                   // 缓冲池大小（帧数）
+   private:                                 // 缓冲池大小（帧数）
     Page* pages_;                                        // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
     std::list<frame_id_t> free_list_;                    // 空闲帧链表
@@ -40,16 +39,16 @@ class BufferPoolInstance {
     std::mutex latch_;                                   // 并发控制锁
 
    public:
-    BufferPoolInstance(size_t pool_size) : pool_size_(pool_size) {
+    BufferPoolInstance() {
         // 为buffer pool分配一块连续的内存空间
-        pages_ = new Page[pool_size_];
+        pages_ = new Page[BUFFER_POOL_SIZE];
         // 可以被Replacer改变
-        replacer_ = new LRUReplacer(pool_size_);  // 使用LRU替换策略
+        replacer_ = new LRUReplacer(BUFFER_POOL_SIZE);  // 使用LRU替换策略
         // 初始化时，所有的page都在free_list_中
-        for (size_t i = 0; i < pool_size_; ++i) {
+        for (size_t i = 0; i < BUFFER_POOL_SIZE; ++i) {
             free_list_.emplace_back(static_cast<frame_id_t>(i));  // static_cast转换数据类型
         }
-        page_table_.reserve(pool_size_);  // 预留空间，避免频繁扩容
+        page_table_.reserve(BUFFER_POOL_SIZE);  // 预留空间，避免频繁扩容
     }
 
     ~BufferPoolInstance() {
