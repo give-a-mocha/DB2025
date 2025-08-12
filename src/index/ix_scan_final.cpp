@@ -18,7 +18,7 @@ IxScanFinal::IxScanFinal(const IxIndexHandle *ih, const Iid &lower, const Iid &u
     Page *page = buffer_pool_manager.fetch_page({ih_->fd_, iid.page_no});
     page->RLatch();
     while (true) {
-        auto node = IxNodeHandle(ih_->file_hdr_, page);
+        IxNodeHandle node(ih_->file_hdr_, page);
 
         while (iid != upper) {
             rids_.push_back(ih_->get_rid(iid));

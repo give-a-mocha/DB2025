@@ -11,22 +11,21 @@ See the Mulan PSL v2 for more details. */
 #include "ix_scan.h"
 
 void IxScan::next() {
-    auto node = new IxNodeHandle(ih_->file_hdr_, now);
-    assert(node->is_leaf_page());
-    assert(iid_.slot_no < node->get_size());
+    IxNodeHandle node(ih_->file_hdr_, now);
+    assert(node.is_leaf_page());
+    assert(iid_.slot_no < node.get_size());
 
     // increment slot no
     iid_.slot_no++;
-    if (iid_.page_no != ih_->file_hdr_->last_leaf_ && iid_.slot_no == node->get_size()) {
+    if (iid_.page_no != ih_->file_hdr_->last_leaf_ && iid_.slot_no == node.get_size()) {
         // go to next leaf
         iid_.slot_no = 0;
-        iid_.page_no = node->get_next_leaf();
+        iid_.page_no = node.get_next_leaf();
         Page* next_page = buffer_pool_manager.fetch_page({ih_->fd_, iid_.page_no});
         next_page->RLatch();
         unlatch();        // 释放当前页面
         now = next_page;  // 更新当前页面为下一个叶节点
     }
-    delete node;  // 释放内存
 }
 
 /**
