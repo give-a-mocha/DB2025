@@ -94,13 +94,13 @@ void TransactionManager::commit(Transaction* txn) {
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
-    auto& lock_set = txn->get_lock_set();
-    while (!lock_set.empty()) {
-        // 释放事务持有的所有锁
-        LockDataId lock = lock_set.back();
-        lock_set.pop_back();
-        lock_manager.unlock(txn, lock);
-    }
+    // auto& lock_set = txn->get_lock_set();
+    // while (!lock_set.empty()) {
+    //     // 释放事务持有的所有锁
+    //     LockDataId lock = lock_set.back();
+    //     lock_set.pop_back();
+    //     lock_manager.unlock(txn, lock);
+    // }
 
     // 清空事务相关的集合
     txn->clear_lock_set();
@@ -161,18 +161,12 @@ void TransactionManager::abort(Context* context) {
     }
     txn->get_write_set().clear();  // 清空写集合
 
-    auto& lock_set = txn->get_lock_set();
-    while (!lock_set.empty()) {
-        // 释放事务持有的所有锁
-        LockDataId lock = lock_set.back();
-        lock_set.pop_back();
-        lock_manager.unlock(txn, lock);
-    }
-
-    // auto lock_gap_set = txn->get_lock_gap_set();
-    // auto lock_gap_set_copy = *lock_gap_set;  // 复制间隙锁集合以避免迭代时修改
-    // for (const int& tab_fd : lock_gap_set_copy) {
-    //     lock_manager.unlock_gap(txn, tab_fd);
+    // auto& lock_set = txn->get_lock_set();
+    // while (!lock_set.empty()) {
+    //     // 释放事务持有的所有锁
+    //     LockDataId lock = lock_set.back();
+    //     lock_set.pop_back();
+    //     lock_manager.unlock(txn, lock);
     // }
 
     txn->clear_lock_set();
@@ -431,8 +425,6 @@ auto TransactionManager::GenerateNewUndoLog(int fd, Rid rid, const std::unique_p
         log->is_deleted_ = false;  // 如果是插入或更新操作
         log->record_ = RmRecord(*value);
     }
-    INFO("Generate new undo log for rid: {}", rid);
-    INFO("Undo log ts: {}", txn->get_transaction_id());
     log->ts_ = txn->get_transaction_id();       // 设置时间戳为当前事务ID
     log->prev_version_ = GetUndoLink(fd, rid);  //
     auto link = txn->AppendUndoLog(std::move(log));
@@ -471,11 +463,32 @@ auto TransactionManager::GetTupleAndUndoLink(RmFileHandle* fh_, const Rid& rid)
     return std::make_tuple(base_meta, std::move(rec), link);
 }
 
-auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
-                                                TupleMeta& base_meta, TupleMeta& new_meta,
-                                                const std::unique_ptr<RmRecord>& old_rec,
-                                                const std::unique_ptr<RmRecord>& new_rec, Transaction* txn) -> bool {
+auto TransactionManager::GetTupleMetaAndUndoLink(RmFileHandle* fh_, const Rid& rid)
+    -> std::pair<TupleMeta, UndoLink> {
+    auto page_guard = fh_->AcquirePageReadLock(rid);
+    auto base_meta = fh_->GetTupleMetaWithLockAcquired(rid, page_guard.GetData());
+    auto link = GetUndoLink(fh_->GetFd(), rid);
+    return {base_meta, link};
+}
+
+auto TransactionManager::UpdateTupleAndUndoLink(
+    const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
+    TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec,
+    TupleMeta& new_meta, const std::unique_ptr<RmRecord>& new_rec,
+     Transaction* txn
+) -> bool {
     auto page_guard = fh_->AcquirePageWriteLock(rid);
+    return UpdateTupleAndUndoLinkWithWritePage(
+        tab_name_, fh_, rid, base_meta, old_rec, new_meta, new_rec, txn, page_guard
+    );
+}
+
+auto TransactionManager::UpdateTupleAndUndoLinkWithWritePage(
+    const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
+    TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec, 
+    TupleMeta& new_meta,  const std::unique_ptr<RmRecord>& new_rec,
+    Transaction* txn, WritePageGuard &page_guard
+) -> bool {
     auto meta = fh_->GetTupleMetaWithLockAcquired(rid, page_guard.GetData());
     if (meta != base_meta) {
         return false;  // 如果元数据不匹配，返回 false
@@ -485,7 +498,7 @@ auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, Rm
     if (new_meta.is_deleted_) {
         fh_->UpdateTupleMetaWithLockAcquired(rid, new_meta, page_guard.GetDataMut());
     } else {
-        fh_->UpdateTupleWithLockAcquired(rid, new_meta, new_rec, page_guard.GetDataMut());
+        fh_->UpdateTupleWithLockAcquired(rid, new_meta, new_rec->data, page_guard.GetDataMut());
     }
 
     // 添加撤销日志
@@ -497,56 +510,56 @@ auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, Rm
     return true;  // 更新成功
 }
 
-auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle* fh_, Rid& delete_rid,
-                                      TupleMeta& delete_base_meta, const std::unique_ptr<RmRecord>& delete_rec,
-                                      Rid& insert_rid, TupleMeta& insert_base_meta,
-                                      const std::unique_ptr<RmRecord>& insert_old_rec,
-                                      const std::unique_ptr<RmRecord>& insert_new_rec, Transaction* txn) -> bool {
-    auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
-    auto meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
-    if (meta != delete_base_meta) {
-        return false;  // 如果元数据不匹配，返回 false
-    }
-    // 先delete
-    TupleMeta delete_new_meta(txn->get_transaction_id(), true);
-    fh_->UpdateTupleMetaWithLockAcquired(delete_rid, delete_new_meta, page_guard.GetDataMut());
-
-    if (meta.ts_ != txn->get_transaction_id()) {
-        // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
-        GenerateNewUndoLog(fh_->GetFd(), delete_rid, delete_rec, meta, txn);
-        txn->append_write_record(WriteRecord(tab_name, delete_rid));
+auto TransactionManager::AtomicUpdate(
+    const std::string& tab_name, RmFileHandle* fh_,
+    Rid& delete_rid, TupleMeta& delete_meta, const std::unique_ptr<RmRecord>& delete_rec,
+    Rid& insert_rid,
+    TupleMeta& insert_old_meta, const std::unique_ptr<RmRecord>& insert_old_rec,
+    TupleMeta& insert_new_meta, const std::unique_ptr<RmRecord>& insert_new_rec,
+    Transaction* txn
+) -> bool {
+    if (delete_rid == insert_rid) {
+        // 如果删除和插入的RID相同，直接更新元数据
+        return UpdateTupleAndUndoLink(tab_name, fh_, delete_rid, delete_meta, delete_rec, insert_new_meta, insert_new_rec, txn);
     }
 
-    if (insert_rid == delete_rid) {
-        insert_base_meta = delete_new_meta;  // 如果插入和删除的RID相同，使用删除的元数据
-    }
-
-    // 然后这里的rid 是index中的rid
-    if (delete_rid.page_no != insert_rid.page_no) {
-        auto new_page_guard = fh_->AcquirePageWriteLock(insert_rid);
-        meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, new_page_guard.GetData());
-        if (meta != insert_base_meta) {
-            return false;  // 如果新元数据不匹配，返回 false
+    // 同一页的删除和插入操作   
+    if (delete_rid.page_no == insert_rid.page_no) {
+        auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
+        auto delete_base_meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
+        auto insert_base_meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
+        if (delete_base_meta != delete_meta || insert_base_meta != insert_old_meta) {
+            return false;  // 如果元数据不匹配，返回 false
         }
-        TupleMeta insert_new_meta(txn->get_transaction_id(), false);
-        fh_->UpdateTupleWithLockAcquired(insert_rid, insert_new_meta, insert_new_rec, new_page_guard.GetDataMut());
-        if (meta.ts_ != txn->get_transaction_id()) {
-            // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
-            GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
-            txn->append_write_record(WriteRecord(tab_name, insert_rid));
-        }
+        // 先delete
+        TupleMeta delete_new_meta(txn->get_transaction_id(), true);
+        UpdateTupleAndUndoLinkWithWritePage(
+            tab_name, fh_, delete_rid, delete_meta, delete_rec, delete_new_meta, nullptr, txn, page_guard
+        );
+        UpdateTupleAndUndoLinkWithWritePage(
+            tab_name, fh_, insert_rid, insert_old_meta, insert_old_rec, insert_new_meta, insert_new_rec, txn, page_guard
+        );
     } else {
-        meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, page_guard.GetData());
-        if (meta != insert_base_meta) {
-            return false;  // 如果新元数据不匹配，返回 false
+        // 不同页的删除和插入操作
+        auto delete_page_guard = fh_->AcquirePageWriteLock(delete_rid);
+        auto insert_page_guard = fh_->AcquirePageWriteLock(insert_rid);
+
+        auto delete_base_meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, delete_page_guard.GetData());
+        auto insert_base_meta = fh_->GetTupleMetaWithLockAcquired(insert_rid, insert_page_guard.GetData());
+
+        if (delete_base_meta != delete_meta || insert_base_meta != insert_old_meta) {
+            return false;  // 如果元数据不匹配，返回 false
         }
-        TupleMeta insert_new_meta(txn->get_transaction_id(), false);
-        fh_->UpdateTupleWithLockAcquired(insert_rid, insert_new_meta, insert_new_rec, page_guard.GetDataMut());
-        if (meta.ts_ != txn->get_transaction_id()) {
-            // 如果元数据的时间戳不是当前事务的时间戳，生成新的撤销日志
-            GenerateNewUndoLog(fh_->GetFd(), insert_rid, insert_old_rec, meta, txn);
-            txn->append_write_record(WriteRecord(tab_name, insert_rid));
-        }
+
+        // 先delete
+        TupleMeta delete_new_meta(txn->get_transaction_id(), true);
+        UpdateTupleAndUndoLinkWithWritePage(
+            tab_name, fh_, delete_rid, delete_meta, delete_rec, delete_new_meta, nullptr, txn, delete_page_guard
+        );
+        UpdateTupleAndUndoLinkWithWritePage(
+            tab_name, fh_, insert_rid, insert_old_meta, insert_old_rec, insert_new_meta, insert_new_rec, txn,
+            insert_page_guard
+        );
     }
 
     return true;

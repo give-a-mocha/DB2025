@@ -83,10 +83,11 @@ class MvccInsertExecutor : public AbstractExecutor {
         std::vector<Rid> rids = sm_manager.exist_in_index(tab_, rec, context_->txn_);
 
         // 唯一性检查
-        TupleMeta base_meta_(0, true);
+        TupleMeta old_meta(0, true);
+        TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         for (const auto &rid : rids) {
-            auto [base_meta, old_rec, link] = txn_manager.GetTupleAndUndoLink(fh_, rid);
-            base_meta_ = base_meta;
+            auto [base_meta, link] = txn_manager.GetTupleMetaAndUndoLink(fh_, rid);
+            old_meta = base_meta;
             if (IsWriteWriteConflict(context_->txn_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
@@ -96,7 +97,6 @@ class MvccInsertExecutor : public AbstractExecutor {
                 throw InternalError("Primary key conflict, duplicate insert");
             }
         }
-        TupleMeta new_meta(context_->txn_->get_transaction_id(), false);
         if (!rids.empty()) {
             //! 这里使用back在唯一索引下才是对的
             rid_ = rids.back();
@@ -105,19 +105,18 @@ class MvccInsertExecutor : public AbstractExecutor {
             //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid_));
             //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             // }
-            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta_, new_meta, nullptr, rec,
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, old_meta, nullptr, new_meta, rec,
                                                     context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
         } else {
             rid_ = fh_->GetNewRid();
-            TupleMeta base_meta(0, true);
             // if (!lock_manager.lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd())) {
             //     txn_manager.abort(context_);
             //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid_));
             //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             // }
-            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, base_meta, new_meta, nullptr, rec,
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid_, old_meta, nullptr, new_meta, rec,
                                                     context_->txn_)) {
                 fh_->delete_record(rid_);
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);

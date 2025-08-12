@@ -57,7 +57,7 @@ class MvccDeleteExecutor : public AbstractExecutor {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }
             TupleMeta new_meta(context_->txn_->get_transaction_id(), true);
-            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid, base_meta, new_meta, old_rec, nullptr,
+            if (!txn_manager.UpdateTupleAndUndoLink(tab_.name, fh_, rid, base_meta, old_rec, new_meta, nullptr,
                                                     context_->txn_)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
             }

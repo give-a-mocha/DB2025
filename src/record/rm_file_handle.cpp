@@ -25,40 +25,40 @@ auto RmFileHandle::AcquirePageWriteLock(const Rid& rid) -> WritePageGuard {
 }
 
 auto RmFileHandle::GetTupleWithLockAcquired(const Rid& rid,
-                                            const char* data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>> {
-    RmPageHandle page_handle(&file_hdr_, const_cast<char*>(data));
+                                            const char* page_data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>> {
+    RmPageHandle page_handle(&file_hdr_, const_cast<char*>(page_data));
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
     return page_handle.get_tuple(rid.slot_no);
 }
 
-auto RmFileHandle::GetTupleMetaWithLockAcquired(const Rid& rid, const char* data) const -> TupleMeta {
-    RmPageHandle page_handle(&file_hdr_, const_cast<char*>(data));
+auto RmFileHandle::GetTupleMetaWithLockAcquired(const Rid& rid, const char* page_data) const -> TupleMeta {
+    RmPageHandle page_handle(&file_hdr_, const_cast<char*>(page_data));
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
     }
     return page_handle.get_tuple_meta(rid.slot_no);
 }
 
-auto RmFileHandle::UpdateTupleWithLockAcquired(const Rid& rid, TupleMeta& meta, const std::unique_ptr<RmRecord>& rec,
-                                               char* data) -> void {
-    RmPageHandle page_handle(&file_hdr_, data);
+auto RmFileHandle::UpdateTupleWithLockAcquired(const Rid& rid, TupleMeta& meta, char* buf,
+                                               char* page_data) -> void {
+    RmPageHandle page_handle(&file_hdr_, page_data);
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         Bitmap::set(page_handle.bitmap, rid.slot_no);
         page_handle.page_hdr->num_records++;
         file_hdr_.record_num++;
     }
     char* slot_data = page_handle.get_slot(rid.slot_no);
-    memcpy(slot_data, &meta, sizeof(TupleMeta));
+    memcpy(slot_data, &meta, TUPLE_META_SIZE);
     char* record_data = slot_data + TUPLE_META_SIZE;
-    memcpy(record_data, rec->data, rec->size);
+    memcpy(record_data, buf, file_hdr_.record_size);
 }
 
-auto RmFileHandle::UpdateTupleMetaWithLockAcquired(const Rid& rid, const TupleMeta& new_meta, char* data_) -> void {
-    RmPageHandle page_handle(&file_hdr_, data_);
+auto RmFileHandle::UpdateTupleMetaWithLockAcquired(const Rid& rid, const TupleMeta& new_meta, char* page_data) -> void {
+    RmPageHandle page_handle(&file_hdr_, page_data);
     char* slot_data = page_handle.get_slot(rid.slot_no);
-    memcpy(slot_data, &new_meta, sizeof(TupleMeta));
+    memcpy(slot_data, &new_meta, TUPLE_META_SIZE);
 }
 
 std::pair<TupleMeta, std::unique_ptr<RmRecord>> RmFileHandle::get_record(const Rid& rid) const {
@@ -167,14 +167,7 @@ void RmFileHandle::delete_record(const Rid& rid) {
 
 void RmFileHandle::update_record(const Rid& rid, TupleMeta& new_meta, char* buf) {
     auto page_guard = AcquirePageWriteLock(rid);
-    RmPageHandle page_handle = RmPageHandle(&file_hdr_, page_guard.GetDataMut());
-    if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
-        throw RecordNotFoundError(rid.page_no, rid.slot_no);
-    }
-    char* slot_data = page_handle.get_slot(rid.slot_no);
-    memcpy(slot_data, &new_meta, sizeof(TupleMeta));
-    char* record_data = slot_data + TUPLE_META_SIZE;
-    memcpy(record_data, buf, file_hdr_.record_size);
+    UpdateTupleWithLockAcquired(rid, new_meta, buf, page_guard.GetDataMut());
 }
 
 void RmFileHandle::update_tuple_meta(const Rid& rid, const TupleMeta& new_meta) {

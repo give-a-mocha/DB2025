@@ -211,12 +211,12 @@ class RmFileHandle {
     auto GetNewRid() -> Rid;
 
     auto GetTupleWithLockAcquired(const Rid &rid,
-                                  const char *data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>>;
+                                  const char* page_data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>>;
 
-    auto GetTupleMetaWithLockAcquired(const Rid &rid, const char *data) const -> TupleMeta;
+    auto GetTupleMetaWithLockAcquired(const Rid &rid, const char* page_data) const -> TupleMeta;
 
-    auto UpdateTupleWithLockAcquired(const Rid &rid, TupleMeta &meta, const std::unique_ptr<RmRecord> &rec,
-                                     char *data) -> void;
+    auto UpdateTupleWithLockAcquired(const Rid &rid, TupleMeta &meta, char* buf,
+                                     char* page_data) -> void;
 
-    auto UpdateTupleMetaWithLockAcquired(const Rid &rid, const TupleMeta &new_meta, char *data_) -> void;
+    auto UpdateTupleMetaWithLockAcquired(const Rid &rid, const TupleMeta &new_meta, char* page_data) -> void;
 };
