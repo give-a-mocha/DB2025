@@ -37,17 +37,12 @@
 #include "common/utils/Format.h"
 #include "common/getFunctionTime.h"
 
-#define SOCK_PORT 8765
-#define MAX_CONN_LIMIT 8
-
-// 是否开启 std::cout
+constexpr int SOCK_PORT = 8765;
+constexpr int MAX_CONN_LIMIT = 8;
 constexpr bool ENABLE_COUT = false;
-// 是否输出函数计时结果
-constexpr bool ENABLE_TIMER = true;
-
-// #define ENABLE_SERIALIZE
-
+constexpr bool ENABLE_TIMER = false;
 static bool should_exit = false;
+// #define ENABLE_SERIALIZE
 
 // 构建全局所需的管理器对象
 DiskManager disk_manager;
@@ -408,6 +403,11 @@ int main(int argc, char **argv) {
     }
 
     signal(SIGINT, sigint_handler);
+    signal(SIGTERM, sigint_handler);
+    signal(SIGQUIT, sigint_handler);
+    signal(SIGHUP, sigint_handler);
+    signal(SIGUSR1, sigint_handler);
+    signal(SIGUSR2, sigint_handler);
     try {
         Print(
             "\n"
