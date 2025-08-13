@@ -293,6 +293,16 @@ class IxNodeHandle {
         }
         return key_value;
     }
+
+    void* operator new (size_t size) {
+        return static_cast<void *>(MemoryPool<IxNodeHandle>::getInstance()->allocate(size));
+        // return ::std::malloc(size);
+    }
+
+    void operator delete (void *ptr) {
+        MemoryPool<IxNodeHandle>::getInstance()->deallocate(static_cast<IxNodeHandle *>(ptr));
+        // ::std::free(ptr);
+    }
 };
 
 /**

@@ -29,6 +29,8 @@
 
 #include "defs.h"
 #include "storage/buffer_pool_manager.h"
+#include "common/MemoryPool/MemoryPool.hpp"
+#include "common/getFunctionTime.h"
 
 /** @brief 表示无效的页面号 */
 constexpr int RM_NO_PAGE = -1;
@@ -247,5 +249,15 @@ struct RmRecord {
         }
         allocated_ = false;
         data = nullptr;
+    }
+
+    void* operator new (size_t size) {
+        return static_cast<void *>(MemoryPool<RmRecord>::getInstance()->allocate(size));
+        // return ::std::malloc(size);
+    }
+
+    void operator delete (void *ptr) {
+        MemoryPool<RmRecord>::getInstance()->deallocate(static_cast<RmRecord *>(ptr));
+        // ::std::free(ptr);
     }
 };
