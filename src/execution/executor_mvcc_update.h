@@ -55,11 +55,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
             auto &rid_ = prev_->rid();
             auto link = txn_manager.GetUndoLink(fh_->GetFd(), rid_);
 
-            // if (!lock_manager.lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd())) {
-            //     txn_manager.abort(context_);
-            //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid_));
-            //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-            // }
+            if (!lock_manager.lock_exclusive_on_record(context_->txn_, rid_, fh_->GetFd())) {
+                txn_manager.abort(context_);
+                lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), rid_));
+                throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+            }
 
             if (IsWriteWriteConflict(context_->txn_, link)) {
                 throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
@@ -138,11 +138,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 //! 这里使用back在唯一索引下才是对的
                 insert_rid = rids.back();
 
-                // if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
-                //     txn_manager.abort(context_);
-                //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
-                //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-                // }
+                if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
+                    txn_manager.abort(context_);
+                    lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                }
 
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta, nullptr,
                                               insert_new_meta, new_rec, context_->txn_)) {
@@ -151,11 +151,11 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 }
             } else {
                 insert_rid = fh_->GetNewRid();
-                // if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
-                //     txn_manager.abort(context_);
-                //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
-                //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
-                // }
+                if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
+                    txn_manager.abort(context_);
+                    lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                }
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta,
                                               nullptr, insert_new_meta, new_rec, context_->txn_)) {
                     fh_->delete_record(insert_rid);
