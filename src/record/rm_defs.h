@@ -251,13 +251,13 @@ struct RmRecord {
         data = nullptr;
     }
 
-    void* operator new (size_t size) {
-        return static_cast<void *>(MemoryPool<RmRecord>::getInstance()->allocate(size));
+    void* operator new(size_t size) {
+        return static_cast<void*>(MemoryPool<RmRecord>::getInstance()->allocate(size));
         // return ::std::malloc(size);
     }
 
-    void operator delete (void *ptr) {
-        MemoryPool<RmRecord>::getInstance()->deallocate(static_cast<RmRecord *>(ptr));
+    void operator delete(void* ptr) {
+        MemoryPool<RmRecord>::getInstance()->deallocate(static_cast<RmRecord*>(ptr));
         // ::std::free(ptr);
     }
 };

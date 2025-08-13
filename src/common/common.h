@@ -349,12 +349,12 @@ struct Value {
         }
     }
 
-    void* operator new (size_t size) {
+    void *operator new(size_t size) {
         return static_cast<void *>(MemoryPool<Value>::getInstance()->allocate(size));
         // return ::std::malloc(size);
     }
 
-    void operator delete (void *ptr) {
+    void operator delete(void *ptr) {
         MemoryPool<Value>::getInstance()->deallocate(static_cast<Value *>(ptr));
         // ::std::free(ptr);
     }
