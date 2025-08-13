@@ -95,7 +95,8 @@ class Portal {
 
                 case PlanTag::T_Update: {
                     std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context);
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(std::move(scan), x->tab_name_, std::move(x->set_clauses_), context);
+                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccUpdateExecutor>(
+                        std::move(scan), x->tab_name_, std::move(x->set_clauses_), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);
@@ -103,7 +104,8 @@ class Portal {
                 case PlanTag::T_Delete: {
                     std::unique_ptr<AbstractExecutor> scan = convert_plan_executor(x->subplan_, context);
 
-                    std::unique_ptr<AbstractExecutor> root = std::make_unique<MvccDeleteExecutor>(std::move(scan), std::move(x->tab_name_), context);
+                    std::unique_ptr<AbstractExecutor> root =
+                        std::make_unique<MvccDeleteExecutor>(std::move(scan), std::move(x->tab_name_), context);
 
                     return std::make_shared<PortalStmt>(PORTAL_DML_WITHOUT_SELECT, std::vector<TabCol>(),
                                                         std::move(root), plan);

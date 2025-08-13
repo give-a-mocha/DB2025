@@ -24,8 +24,8 @@ auto RmFileHandle::AcquirePageWriteLock(const Rid& rid) -> WritePageGuard {
     return buffer_pool_manager.fetch_write_page(PageId{fd_, rid.page_no});
 }
 
-auto RmFileHandle::GetTupleWithLockAcquired(const Rid& rid,
-                                            const char* page_data) const -> std::pair<TupleMeta, std::unique_ptr<RmRecord>> {
+auto RmFileHandle::GetTupleWithLockAcquired(const Rid& rid, const char* page_data) const
+    -> std::pair<TupleMeta, std::unique_ptr<RmRecord>> {
     RmPageHandle page_handle(&file_hdr_, const_cast<char*>(page_data));
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         throw RecordNotFoundError(rid.page_no, rid.slot_no);
@@ -41,8 +41,7 @@ auto RmFileHandle::GetTupleMetaWithLockAcquired(const Rid& rid, const char* page
     return page_handle.get_tuple_meta(rid.slot_no);
 }
 
-auto RmFileHandle::UpdateTupleWithLockAcquired(const Rid& rid, TupleMeta& meta, char* buf,
-                                               char* page_data) -> void {
+auto RmFileHandle::UpdateTupleWithLockAcquired(const Rid& rid, TupleMeta& meta, char* buf, char* page_data) -> void {
     RmPageHandle page_handle(&file_hdr_, page_data);
     if (!Bitmap::is_set(page_handle.bitmap, rid.slot_no)) {
         Bitmap::set(page_handle.bitmap, rid.slot_no);

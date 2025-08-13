@@ -44,11 +44,11 @@ bool LockManager::lock_exclusive_on_record(Transaction* txn, const Rid& rid, int
     if (lock_it == lock_table_.end()) {
         // 如果锁表中没有该锁数据标识符，则创建一个新的锁信息
         lock_it = lock_table_
-                       .emplace(std::piecewise_construct,
-                                std::forward_as_tuple(lock_data_id),  // 构造 key
-                                std::forward_as_tuple()               // 默认构造 value (LockInfo)
-                                )
-                       .first;
+                      .emplace(std::piecewise_construct,
+                               std::forward_as_tuple(lock_data_id),  // 构造 key
+                               std::forward_as_tuple()               // 默认构造 value (LockInfo)
+                               )
+                      .first;
     }
     LockInfo& lock_info = lock_it->second;
 
@@ -112,7 +112,7 @@ void LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
 
     auto lock_table_it = lock_table_.find(lock_data_id);
     if (lock_table_it == lock_table_.end()) {
-        return ;
+        return;
     }
     LockInfo& lock_info = lock_table_it->second;
     // 释放锁
@@ -120,7 +120,7 @@ void LockManager::unlock(Transaction* txn, LockDataId lock_data_id) {
     // 通知等待的线程
     lock_info.cv_.notify_all();
     lock_table_.erase(lock_table_it);
-    return ;
+    return;
 }
 
 void LockManager::wait_for_lock_release(LockDataId lock_data_id) {

@@ -29,12 +29,13 @@ extern TransactionManager txn_manager;
 class MvccUpdateExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;  // 前序执行器
-    TabMeta &tab_;                                                                 // 表的元数据
-    RmFileHandle *fh_;                                                             // 表的数据文件句柄
-    std::vector<SetClause> set_clauses_;                                           // SET子句列表(新值)
+    TabMeta &tab_;                            // 表的元数据
+    RmFileHandle *fh_;                        // 表的数据文件句柄
+    std::vector<SetClause> set_clauses_;      // SET子句列表(新值)
 
    public:
-    MvccUpdateExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, std::vector<SetClause> set_clauses, Context *context)
+    MvccUpdateExecutor(std::unique_ptr<AbstractExecutor> prev, std::string tab_name, std::vector<SetClause> set_clauses,
+                       Context *context)
         : tab_(sm_manager.db_.get_table(tab_name)) {
         prev_ = std::move(prev);
         set_clauses_ = std::move(set_clauses);
@@ -141,11 +142,12 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
                     txn_manager.abort(context_);
                     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
-                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
 
-                if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta, nullptr,
-                                              insert_new_meta, new_rec, context_->txn_)) {
+                if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta,
+                                              nullptr, insert_new_meta, new_rec, context_->txn_)) {
                     throw TransactionAbortException(context_->txn_->get_transaction_id(),
                                                     AbortReason::UPGRADE_CONFLICT);
                 }
@@ -154,7 +156,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
                     txn_manager.abort(context_);
                     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
-                    throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                    throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                                                    AbortReason::UPGRADE_CONFLICT);
                 }
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta,
                                               nullptr, insert_new_meta, new_rec, context_->txn_)) {

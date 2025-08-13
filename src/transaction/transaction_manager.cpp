@@ -461,32 +461,28 @@ auto TransactionManager::GetTupleAndUndoLink(RmFileHandle* fh_, const Rid& rid)
     return std::make_tuple(base_meta, std::move(rec), link);
 }
 
-auto TransactionManager::GetTupleMetaAndUndoLink(RmFileHandle* fh_, const Rid& rid)
-    -> std::pair<TupleMeta, UndoLink> {
+auto TransactionManager::GetTupleMetaAndUndoLink(RmFileHandle* fh_, const Rid& rid) -> std::pair<TupleMeta, UndoLink> {
     auto page_guard = fh_->AcquirePageReadLock(rid);
     auto base_meta = fh_->GetTupleMetaWithLockAcquired(rid, page_guard.GetData());
     auto link = GetUndoLink(fh_->GetFd(), rid);
     return {base_meta, link};
 }
 
-auto TransactionManager::UpdateTupleAndUndoLink(
-    const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
-    TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec,
-    TupleMeta& new_meta, const std::unique_ptr<RmRecord>& new_rec,
-     Transaction* txn
-) -> bool {
+auto TransactionManager::UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
+                                                TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec,
+                                                TupleMeta& new_meta, const std::unique_ptr<RmRecord>& new_rec,
+                                                Transaction* txn) -> bool {
     auto page_guard = fh_->AcquirePageWriteLock(rid);
-    return UpdateTupleAndUndoLinkWithWritePage(
-        tab_name_, fh_, rid, base_meta, old_rec, new_meta, new_rec, txn, page_guard
-    );
+    return UpdateTupleAndUndoLinkWithWritePage(tab_name_, fh_, rid, base_meta, old_rec, new_meta, new_rec, txn,
+                                               page_guard);
 }
 
-auto TransactionManager::UpdateTupleAndUndoLinkWithWritePage(
-    const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
-    TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec, 
-    TupleMeta& new_meta,  const std::unique_ptr<RmRecord>& new_rec,
-    Transaction* txn, WritePageGuard &page_guard
-) -> bool {
+auto TransactionManager::UpdateTupleAndUndoLinkWithWritePage(const std::string& tab_name_, RmFileHandle* fh_,
+                                                             const Rid& rid, TupleMeta& base_meta,
+                                                             const std::unique_ptr<RmRecord>& old_rec,
+                                                             TupleMeta& new_meta,
+                                                             const std::unique_ptr<RmRecord>& new_rec, Transaction* txn,
+                                                             WritePageGuard& page_guard) -> bool {
     auto meta = fh_->GetTupleMetaWithLockAcquired(rid, page_guard.GetData());
     if (meta != base_meta) {
         return false;  // 如果元数据不匹配，返回 false
@@ -508,20 +504,18 @@ auto TransactionManager::UpdateTupleAndUndoLinkWithWritePage(
     return true;  // 更新成功
 }
 
-auto TransactionManager::AtomicUpdate(
-    const std::string& tab_name, RmFileHandle* fh_,
-    Rid& delete_rid, TupleMeta& delete_meta, const std::unique_ptr<RmRecord>& delete_rec,
-    Rid& insert_rid,
-    TupleMeta& insert_old_meta, const std::unique_ptr<RmRecord>& insert_old_rec,
-    TupleMeta& insert_new_meta, const std::unique_ptr<RmRecord>& insert_new_rec,
-    Transaction* txn
-) -> bool {
+auto TransactionManager::AtomicUpdate(const std::string& tab_name, RmFileHandle* fh_, Rid& delete_rid,
+                                      TupleMeta& delete_meta, const std::unique_ptr<RmRecord>& delete_rec,
+                                      Rid& insert_rid, TupleMeta& insert_old_meta,
+                                      const std::unique_ptr<RmRecord>& insert_old_rec, TupleMeta& insert_new_meta,
+                                      const std::unique_ptr<RmRecord>& insert_new_rec, Transaction* txn) -> bool {
     if (delete_rid == insert_rid) {
         // 如果删除和插入的RID相同，直接更新元数据
-        return UpdateTupleAndUndoLink(tab_name, fh_, delete_rid, delete_meta, delete_rec, insert_new_meta, insert_new_rec, txn);
+        return UpdateTupleAndUndoLink(tab_name, fh_, delete_rid, delete_meta, delete_rec, insert_new_meta,
+                                      insert_new_rec, txn);
     }
 
-    // 同一页的删除和插入操作   
+    // 同一页的删除和插入操作
     if (delete_rid.page_no == insert_rid.page_no) {
         auto page_guard = fh_->AcquirePageWriteLock(delete_rid);
         auto delete_base_meta = fh_->GetTupleMetaWithLockAcquired(delete_rid, page_guard.GetData());
@@ -531,12 +525,10 @@ auto TransactionManager::AtomicUpdate(
         }
         // 先delete
         TupleMeta delete_new_meta(txn->get_transaction_id(), true);
-        UpdateTupleAndUndoLinkWithWritePage(
-            tab_name, fh_, delete_rid, delete_meta, delete_rec, delete_new_meta, nullptr, txn, page_guard
-        );
-        UpdateTupleAndUndoLinkWithWritePage(
-            tab_name, fh_, insert_rid, insert_old_meta, insert_old_rec, insert_new_meta, insert_new_rec, txn, page_guard
-        );
+        UpdateTupleAndUndoLinkWithWritePage(tab_name, fh_, delete_rid, delete_meta, delete_rec, delete_new_meta,
+                                            nullptr, txn, page_guard);
+        UpdateTupleAndUndoLinkWithWritePage(tab_name, fh_, insert_rid, insert_old_meta, insert_old_rec, insert_new_meta,
+                                            insert_new_rec, txn, page_guard);
     } else {
         // 不同页的删除和插入操作
         auto delete_page_guard = fh_->AcquirePageWriteLock(delete_rid);
@@ -551,13 +543,10 @@ auto TransactionManager::AtomicUpdate(
 
         // 先delete
         TupleMeta delete_new_meta(txn->get_transaction_id(), true);
-        UpdateTupleAndUndoLinkWithWritePage(
-            tab_name, fh_, delete_rid, delete_meta, delete_rec, delete_new_meta, nullptr, txn, delete_page_guard
-        );
-        UpdateTupleAndUndoLinkWithWritePage(
-            tab_name, fh_, insert_rid, insert_old_meta, insert_old_rec, insert_new_meta, insert_new_rec, txn,
-            insert_page_guard
-        );
+        UpdateTupleAndUndoLinkWithWritePage(tab_name, fh_, delete_rid, delete_meta, delete_rec, delete_new_meta,
+                                            nullptr, txn, delete_page_guard);
+        UpdateTupleAndUndoLinkWithWritePage(tab_name, fh_, insert_rid, insert_old_meta, insert_old_rec, insert_new_meta,
+                                            insert_new_rec, txn, insert_page_guard);
     }
 
     return true;

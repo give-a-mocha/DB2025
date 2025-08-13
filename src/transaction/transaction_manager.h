@@ -38,7 +38,7 @@ enum class ConcurrencyMode {
 class TransactionManager {
    public:
     // 全局事务表，存放事务ID与事务对象的映射关系
-    static std::unordered_map<txn_id_t, Transaction *> txn_map;
+    static std::unordered_map<txn_id_t, Transaction*> txn_map;
     // 保护事务表的读写锁
     std::shared_mutex txn_map_mutex_;
 
@@ -92,17 +92,17 @@ class TransactionManager {
 
     ~TransactionManager() = default;
 
-    Transaction *begin(Transaction *txn);
+    Transaction* begin(Transaction* txn);
 
-    void commit(Transaction *txn);
+    void commit(Transaction* txn);
 
-    void abort(Context *context);
+    void abort(Context* context);
 
     ConcurrencyMode get_concurrency_mode() { return concurrency_mode_; }
 
     void set_concurrency_mode(ConcurrencyMode concurrency_mode) { concurrency_mode_ = concurrency_mode; }
 
-    LockManager *get_lock_manager() { return &lock_manager; }
+    LockManager* get_lock_manager() { return &lock_manager; }
 
     timestamp_t get_next_txn_id() { return next_txn_id_.fetch_add(1); }
 
@@ -113,12 +113,12 @@ class TransactionManager {
      * @return {Transaction*} 事务对象的指针
      * @param {txn_id_t} txn_id 事务ID
      */
-    Transaction *get_transaction(txn_id_t txn_id) {
+    Transaction* get_transaction(txn_id_t txn_id) {
         if (txn_id == INVALID_TXN_ID) return nullptr;
         std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
         auto it = TransactionManager::txn_map.find(txn_id);
         assert(it != TransactionManager::txn_map.end());
-        Transaction *txn = it->second;
+        Transaction* txn = it->second;
         assert(txn->get_thread_id() == std::this_thread::get_id());
         return txn;
     }
@@ -135,24 +135,24 @@ class TransactionManager {
      * @brief 更新一个撤销链接，该链接将表堆元组与第一个撤销日志连接起来。
      * 在更新之前，将调用 `check` 函数以确保有效性。
      */
-    bool UpdateUndoLink(const int &fd, Rid rid, UndoLink link);
+    bool UpdateUndoLink(const int& fd, Rid rid, UndoLink link);
 
     /**
      * @brief 删除txn的撤销链接
      */
-    void DeleteUndoLink(const int &fd, Rid rid, Transaction *txn);
+    void DeleteUndoLink(const int& fd, Rid rid, Transaction* txn);
     /** @brief 获取表堆元组的第一个撤销日志。 */
-    UndoLink GetUndoLink(const int &fd, Rid rid);
+    UndoLink GetUndoLink(const int& fd, Rid rid);
 
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。如果事务不存在，返回 nullptr。
      * 如果索引超出范围仍然会抛出异常。 */
-    const UndoLog *GetUndoLogOptional(UndoLink link);
+    const UndoLog* GetUndoLogOptional(UndoLink link);
 
     /** @brief 访问事务撤销日志缓冲区并获取撤销日志。除非访问当前事务缓冲区，
      * 否则应该始终调用此函数以获取撤销日志，而不是手动检索事务 shared_ptr 并访问缓冲区。 */
-    const UndoLog *GetUndoLog(UndoLink link);
+    const UndoLog* GetUndoLog(UndoLink link);
 
-    const UndoLog *GetUndoLogWithoutLock(UndoLink link);
+    const UndoLog* GetUndoLogWithoutLock(UndoLink link);
 
     /** @brief 获取系统中的最低读时间戳。 */
     timestamp_t GetWatermark();
@@ -163,46 +163,37 @@ class TransactionManager {
     /** @brief 检查是否需要执行垃圾回收 */
     bool should_perform_gc();
 
-    auto GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord> &value, const TupleMeta &base_meta,
-                            Transaction *txn) -> bool;
+    auto GenerateNewUndoLog(int fd, Rid rid, const std::unique_ptr<RmRecord>& value, const TupleMeta& base_meta,
+                            Transaction* txn) -> bool;
 
-    auto UpdateTupleAndUndoLink(
-        const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
-        TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec,
-        TupleMeta& new_meta, const std::unique_ptr<RmRecord>& new_rec,
-        Transaction* txn
-    ) -> bool;
+    auto UpdateTupleAndUndoLink(const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid, TupleMeta& base_meta,
+                                const std::unique_ptr<RmRecord>& old_rec, TupleMeta& new_meta,
+                                const std::unique_ptr<RmRecord>& new_rec, Transaction* txn) -> bool;
 
-    auto UpdateTupleAndUndoLinkWithWritePage(
-        const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
-        TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec, 
-        TupleMeta& new_meta,  const std::unique_ptr<RmRecord>& new_rec,
-        Transaction* txn, WritePageGuard &page_guard
-    ) -> bool;
+    auto UpdateTupleAndUndoLinkWithWritePage(const std::string& tab_name_, RmFileHandle* fh_, const Rid& rid,
+                                             TupleMeta& base_meta, const std::unique_ptr<RmRecord>& old_rec,
+                                             TupleMeta& new_meta, const std::unique_ptr<RmRecord>& new_rec,
+                                             Transaction* txn, WritePageGuard& page_guard) -> bool;
 
-    auto GetTupleAndUndoLink(RmFileHandle *fh_,
-                             const Rid &rid) -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink>;
-    
+    auto GetTupleAndUndoLink(RmFileHandle* fh_,
+                             const Rid& rid) -> std::tuple<TupleMeta, std::unique_ptr<RmRecord>, UndoLink>;
+
     auto GetTupleMetaAndUndoLink(RmFileHandle* fh_, const Rid& rid) -> std::pair<TupleMeta, UndoLink>;
 
-    void do_delete(Transaction *txn);
+    void do_delete(Transaction* txn);
 
-    auto CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction *txn) -> std::vector<const UndoLog *>;
+    auto CollectUndoLogs(Rid rid, UndoLink undo_link, Transaction* txn) -> std::vector<const UndoLog*>;
 
-    auto AtomicUpdate(
-        const std::string& tab_name, RmFileHandle* fh_,
-        Rid& delete_rid, TupleMeta& delete_meta, const std::unique_ptr<RmRecord>& delete_rec,
-        Rid& insert_rid,
-        TupleMeta& insert_old_meta, const std::unique_ptr<RmRecord>& insert_old_rec,
-        TupleMeta& insert_new_meta, const std::unique_ptr<RmRecord>& insert_new_rec,
-        Transaction* txn
-    ) -> bool;
+    auto AtomicUpdate(const std::string& tab_name, RmFileHandle* fh_, Rid& delete_rid, TupleMeta& delete_meta,
+                      const std::unique_ptr<RmRecord>& delete_rec, Rid& insert_rid, TupleMeta& insert_old_meta,
+                      const std::unique_ptr<RmRecord>& insert_old_rec, TupleMeta& insert_new_meta,
+                      const std::unique_ptr<RmRecord>& insert_new_rec, Transaction* txn) -> bool;
 
    private:
-    auto GetVersionInfoShard(const PageId &page_id) -> PageVersionInfoShard &;
+    auto GetVersionInfoShard(const PageId& page_id) -> PageVersionInfoShard&;
 
     /** @brief 检查事务是否可以被垃圾回收 */
-    bool is_transaction_expired(Transaction *txn, timestamp_t watermark) const;
+    bool is_transaction_expired(Transaction* txn, timestamp_t watermark) const;
 
     /** @brief 批量清理过期的版本链接 */
     void cleanup_expired_versions(timestamp_t watermark);

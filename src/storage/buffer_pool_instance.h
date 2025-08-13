@@ -31,7 +31,7 @@ extern DiskManager disk_manager;
  * @brief 缓冲池管理器类
  */
 class BufferPoolInstance {
-   private:                                 // 缓冲池大小（帧数）
+   private:                                              // 缓冲池大小（帧数）
     Page* pages_;                                        // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
     std::list<frame_id_t> free_list_;                    // 空闲帧链表
