@@ -36,7 +36,7 @@ using ReplacerType = LRUReplacer;
 class BufferPoolInstance {
    private:
     static constexpr size_t pool_size_ = BUFFER_POOL_SIZE / BUFFER_POOL_INSTANCE_SIZE;  // 缓冲池大小（帧数）
-    Page *pages_;                             // 缓冲池中的页面数组，连续分配
+    Page* pages_;                                        // 缓冲池中的页面数组，连续分配
     std::unordered_map<PageId, frame_id_t> page_table_;  // 页面到帧的映射表
     std::vector<frame_id_t> free_list_;                  // 空闲帧链表
     ReplacerType replacer_;                              // 页面替换策略实现
@@ -49,9 +49,7 @@ class BufferPoolInstance {
         page_table_.reserve(pool_size_ * 3);  // 预留空间，避免频繁扩容
     }
 
-    ~BufferPoolInstance() {
-        delete[] pages_;
-    }
+    ~BufferPoolInstance() { delete[] pages_; }
 
     /**
      * @description: 将目标页面标记为脏页
