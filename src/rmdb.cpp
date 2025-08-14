@@ -155,7 +155,7 @@ void *client_handler(void *sock_fd) {
     while (true) {
         Print<true>("Waiting for request...\n");
 
-        i_recvBytes = recv(fd, data_recv, BUFFER_LENGTH, 0);
+        i_recvBytes = read(fd, data_recv, BUFFER_LENGTH);
         data_recv[i_recvBytes] = '\0';
 
         if (i_recvBytes == 0) {
@@ -195,7 +195,7 @@ void *client_handler(void *sock_fd) {
         if (yyparse(scanner) == 0) {
             if (ast::parse_tree != nullptr) {
                 try {
-                    std::shared_ptr<Query> query = analyze.do_analyze(ast::parse_tree);
+                    std::shared_ptr<Query> query = analyze.do_analyze(std::move(ast::parse_tree));
                     yy_delete_buffer(buf, scanner);
                     finish_analyze = true;
                     std::shared_ptr<Plan> plan = optimizer.plan_query(query, context.get());
@@ -315,7 +315,7 @@ void start_server() {
 
     int sockfd_server;
     int fd_temp;
-    struct sockaddr_in s_addr_in {};
+    struct sockaddr_in s_addr_in{};
 
     // 初始化连接
     sockfd_server = socket(AF_INET, SOCK_STREAM, 0);  // ipv4,TCP
@@ -344,7 +344,7 @@ void start_server() {
         Print<true>("Waiting for new connection...\n");
         pthread_t thread_id;
 
-        struct sockaddr_in s_addr_client {};
+        struct sockaddr_in s_addr_client{};
         int client_length = sizeof(s_addr_client);
         if (setjmp(jmpbuf)) {
             Print("Break from Server Listen Loop\n");
