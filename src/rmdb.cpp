@@ -207,6 +207,8 @@ void *client_handler(void *sock_fd) {
                     data_send[6] = '\0';
                     offset = 6;
 
+                    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+
                     // 回滚事务
                     txn_manager.abort(context.get());
                     // if (txn_manager->should_perform_gc()) {
