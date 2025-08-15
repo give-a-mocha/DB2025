@@ -34,18 +34,8 @@ class BufferPoolManager {
     BufferPoolInstance* buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
 
    public:
-    BufferPoolManager() {
-        // 为buffer pool分配一块连续的内存空间
-        for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            buffer_pool_instances_[i] = new BufferPoolInstance();
-        }
-    }
-
-    ~BufferPoolManager() {
-        for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-            delete buffer_pool_instances_[i];
-        }
-    }
+    BufferPoolManager() = default;
+    ~BufferPoolManager() = default;
 
     /**
      * @description: 将目标页面标记为脏页

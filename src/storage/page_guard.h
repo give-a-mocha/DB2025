@@ -51,7 +51,7 @@ class BasicPageGuard {
     friend class WritePageGuard;
     friend class BufferPoolInstance;
 
-    [[maybe_unused]] BufferPoolInstance *bpi_{nullptr};
+    BufferPoolInstance *bpi_{nullptr};
     Page *page_{nullptr};
     bool is_dirty_{false};
 };

@@ -24,7 +24,7 @@ size_t BufferPoolManager::get_instance_no(const PageId& page_id) const {
  * @note 该函数使用互斥锁保护并发访问
  */
 Page* BufferPoolManager::fetch_page(PageId page_id) {
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_page(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)].fetch_page(page_id);
 }
 
 /**
@@ -43,7 +43,7 @@ Page* BufferPoolManager::fetch_page(PageId page_id) {
  * @note 该函数使用互斥锁保护并发访问
  */
 bool BufferPoolManager::unpin_page(PageId page_id, bool is_dirty) {
-    return buffer_pool_instances_[get_instance_no(page_id)]->unpin_page(page_id, is_dirty);
+    return buffer_pool_instances_[get_instance_no(page_id)].unpin_page(page_id, is_dirty);
 }
 
 /**
@@ -52,7 +52,7 @@ bool BufferPoolManager::unpin_page(PageId page_id, bool is_dirty) {
  * @param {PageId} page_id 目标页的page_id，不能为INVALID_PAGE_ID
  */
 bool BufferPoolManager::flush_page(PageId page_id) {
-    return buffer_pool_instances_[get_instance_no(page_id)]->flush_page(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)].flush_page(page_id);
 }
 
 /**
@@ -64,7 +64,7 @@ bool BufferPoolManager::flush_page(PageId page_id) {
  */
 Page* BufferPoolManager::new_page(PageId* page_id) {
     page_id->page_no = disk_manager.allocate_page(page_id->fd);
-    return buffer_pool_instances_[get_instance_no(*page_id)]->new_page(page_id);
+    return buffer_pool_instances_[get_instance_no(*page_id)].new_page(page_id);
 }
 
 /**
@@ -74,7 +74,7 @@ Page* BufferPoolManager::new_page(PageId* page_id) {
  * @param {PageId} page_id 目标页
  */
 bool BufferPoolManager::delete_page(PageId page_id) {
-    return buffer_pool_instances_[get_instance_no(page_id)]->delete_page(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)].delete_page(page_id);
 }
 
 /**
@@ -90,7 +90,7 @@ bool BufferPoolManager::delete_page(PageId page_id) {
  */
 void BufferPoolManager::flush_all_pages(int fd) {
     for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-        buffer_pool_instances_[i]->flush_all_pages(fd);
+        buffer_pool_instances_[i].flush_all_pages(fd);
     }
 }
 
@@ -101,23 +101,23 @@ void BufferPoolManager::flush_all_pages(int fd) {
  */
 void BufferPoolManager::delete_all_pages(int fd) {
     for (size_t i = 0; i < BUFFER_POOL_INSTANCE_SIZE; ++i) {
-        buffer_pool_instances_[i]->delete_all_pages(fd);
+        buffer_pool_instances_[i].delete_all_pages(fd);
     }
 }
 
 auto BufferPoolManager::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     page_id->page_no = disk_manager.allocate_page(page_id->fd);
-    return buffer_pool_instances_[get_instance_no(*page_id)]->new_page_guarded(page_id);
+    return buffer_pool_instances_[get_instance_no(*page_id)].new_page_guarded(page_id);
 }
 
 auto BufferPoolManager::fetch_basic_page(PageId page_id) -> BasicPageGuard {
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_basic_page(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)].fetch_basic_page(page_id);
 }
 
 auto BufferPoolManager::fetch_read_page(PageId page_id) -> ReadPageGuard {
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_read_page(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)].fetch_read_page(page_id);
 }
 
 auto BufferPoolManager::fetch_write_page(PageId page_id) -> WritePageGuard {
-    return buffer_pool_instances_[get_instance_no(page_id)]->fetch_write_page(page_id);
+    return buffer_pool_instances_[get_instance_no(page_id)].fetch_write_page(page_id);
 }

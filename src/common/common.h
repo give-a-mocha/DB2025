@@ -224,8 +224,8 @@ struct Value {
                 memcpy(data, &float_val, len);
                 break;
             case ColType::TYPE_STRING:
-                memset(data, 0, len);  // 清空数据
                 memcpy(data, str_val.c_str(), std::min(len, str_val.size()));
+                data[std::min(len, str_val.size())] = '\0';
                 break;
             default:
                 throw InternalError("Unsupported Value type for set_record_data");

@@ -54,9 +54,9 @@ class Page {
     friend class RmFileHandle;
 
    public:
-    Page() { data_ = static_cast<char *>(calloc(PAGE_SIZE, sizeof(char))); }
+    Page() = default;
 
-    ~Page() { delete[] data_; }
+    ~Page() = default;
 
     PageId get_page_id() const { return id_; }
 
@@ -89,7 +89,7 @@ class Page {
     /** The actual data that is stored within a page.
      *  该页面在bufferPool中的偏移地址
      */
-    char *data_;
+    char data_[PAGE_SIZE];
 
     /** 脏页判断 */
     bool is_dirty_ = false;

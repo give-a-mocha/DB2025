@@ -37,7 +37,7 @@ class ThreadPool {
     std::condition_variable condition;
 };
 
-inline size_t ThreadPool::thread_num_ = std::max(4u, std::thread::hardware_concurrency() / 2);
+inline size_t ThreadPool::thread_num_ = std::max(4u, std::thread::hardware_concurrency());
 
 inline ThreadPool::ThreadPool(size_t threads) : stop(false) {
     for (size_t i = 0; i < threads; ++i)

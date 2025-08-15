@@ -33,13 +33,13 @@ bool BufferPoolInstance::find_victim_page(frame_id_t* frame_id) {
     // 如果有空闲帧,直接使用
     // Caller must hold the latch_ if free_list_ access needs protection.
     if (!free_list_.empty()) {
-        *frame_id = free_list_.front();
-        free_list_.pop_front();
+        *frame_id = free_list_.back();
+        free_list_.pop_back();
         return true;
     }
 
     // 没有空闲帧,使用LRU策略淘汰一个页面
-    return replacer_->victim(frame_id);
+    return replacer_.victim(frame_id);
 }
 
 /**
@@ -116,7 +116,7 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
         if (page->pin_count_ == 0) {
             // 如果pin_count为0说明是新取出的页
             // 需要在replacer中固定该页
-            replacer_->pin(frame_id);
+            replacer_.pin(frame_id);
         }
         // replacer_->pin(frame_id);  // 固定该页
         page->pin_count_++;
@@ -137,7 +137,7 @@ Page* BufferPoolInstance::fetch_page(PageId page_id) {
     disk_manager.read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
-    replacer_->pin(frame_id);
+    replacer_.pin(frame_id);
     // INFO("fetch page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     return page;
 }
@@ -189,7 +189,7 @@ bool BufferPoolInstance::unpin_page(PageId page_id, bool is_dirty) {
     // INFO("Unpinning page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     // 如果pin_count降为0,在replacer中取消固定
     if (page->pin_count_ == 0) {
-        replacer_->unpin(frame_id);
+        replacer_.unpin(frame_id);
     }
 
     // 更新dirty标记
@@ -264,7 +264,7 @@ Page* BufferPoolInstance::new_page(PageId* page_id) {
     page->pin_count_ = 1;  // 固定该页
     // INFO("new page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
     //! 本来就是新页不在缓存中，test中可以调用replacer_->unpin(frame_id)来固定该页，不保证
-    replacer_->pin(frame_id);
+    replacer_.pin(frame_id);
 
     return page;
 }
@@ -394,7 +394,7 @@ auto BufferPoolInstance::new_page_guarded(PageId* page_id) -> BasicPageGuard {
     Page* page = &pages_[frame_id];
     update_page(page, *page_id, frame_id);
     page->pin_count_ = 1;
-    replacer_->pin(frame_id);
+    replacer_.pin(frame_id);
 
     return {this, page};
 }
@@ -409,7 +409,7 @@ auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
         frame_id_t frame_id = iter->second;
         Page* page = &pages_[frame_id];
         if (page->pin_count_ == 0) {
-            replacer_->pin(frame_id);
+            replacer_.pin(frame_id);
         }
         page->pin_count_++;
         return {this, page};
@@ -427,7 +427,7 @@ auto BufferPoolInstance::fetch_basic_page(PageId page_id) -> BasicPageGuard {
     update_page(page, page_id, frame_id);
     disk_manager.read_page(page_id.fd, page_id.page_no, page->data_, PAGE_SIZE);
     page->pin_count_ = 1;  // 固定该页
-    replacer_->pin(frame_id);
+    replacer_.pin(frame_id);
 
     return {this, page};
 }

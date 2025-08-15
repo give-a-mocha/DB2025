@@ -289,7 +289,7 @@ void SmManager::show_index(std::string tab_name, Context* context) {
 void SmManager::desc_table(std::string tab_name, Context* context) {
     TabMeta& tab = db_.get_table(tab_name);
 
-    std::vector<std::string> captions = {"Field", "Type", "Index"};
+    std::vector<std::string_view> captions = {"Field", "Type", "Index"};
     RecordPrinter printer(captions.size());
     // Print header
     printer.print_separator(context);
@@ -297,7 +297,7 @@ void SmManager::desc_table(std::string tab_name, Context* context) {
     printer.print_separator(context);
     // Print fields
     for (auto& col : tab.cols) {
-        std::vector<std::string> field_info = {col.name, coltype2str(col.type), col.index ? "YES" : "NO"};
+        std::vector<std::string_view> field_info = {col.name, coltype2str(col.type), col.index ? "YES" : "NO"};
         printer.print_record(field_info, context);
     }
     // Print footer

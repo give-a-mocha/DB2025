@@ -75,21 +75,17 @@ inline std::string SvAggregateType2Str(SvAggregateType agg_type) {
     return agg_type_str[static_cast<int>(agg_type)];
 }
 
-inline std::string generate_alias(std::string tab_name, std::string col_name, SvAggregateType agg_type) {
+inline std::string generate_alias(const std::string &tab_name, const std::string &col_name, SvAggregateType agg_type) {
     if (agg_type == SvAggregateType::NONE) {
         if (!tab_name.empty()) {
-            tab_name += ".";
-            tab_name += col_name;
-            return tab_name;
+            return util::format("{}.{}", tab_name, col_name);
         } else {
             return col_name;
         }
     }
     if (!tab_name.empty()) {
-        tab_name += ".";
-        tab_name += col_name;
         // 防止列名与聚合类型冲突
-        return util::format("{}_{}", SvAggregateType2Str(agg_type), tab_name);
+        return util::format("{}_{}.{}", SvAggregateType2Str(agg_type), tab_name, col_name);
     } else {
         return util::format("{}_{}", SvAggregateType2Str(agg_type), col_name);
     }

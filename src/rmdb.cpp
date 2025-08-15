@@ -35,16 +35,14 @@
 #include "portal.h"
 #include "recovery/log_recovery.h"
 #include "common/utils/Format.h"
+#include "common/getFunctionTime.h"
 
-#define SOCK_PORT 8765
-#define MAX_CONN_LIMIT 16
-
-// 是否开启 std::cout
+constexpr int SOCK_PORT = 8765;
+constexpr int MAX_CONN_LIMIT = 16;
 constexpr bool ENABLE_COUT = false;
-
-// #define ENABLE_SERIALIZE
-
+constexpr bool ENABLE_TIMER = false;
 static bool should_exit = false;
+// #define ENABLE_SERIALIZE
 
 // 构建全局所需的管理器对象
 DiskManager disk_manager;
@@ -92,6 +90,9 @@ void sigint_handler(int signo) {
     should_exit = true;
     // log_manager->flush_log_to_disk();
     Print("The Server receive Crtl+C, will been closed\n");
+    if constexpr (ENABLE_TIMER) {
+        PrintFunctionTime
+    }
     longjmp(jmpbuf, 1);
 }
 
@@ -140,7 +141,7 @@ void *client_handler(void *sock_fd) {
     // 接收客户端发送的请求
     char data_recv[BUFFER_LENGTH];
     // 需要返回给客户端的结果
-    char *data_send = new char[BUFFER_LENGTH];
+    char data_send[BUFFER_LENGTH];
     // 需要返回给客户端的结果的长度
     int offset = 0;
     // 记录客户端当前正在执行的事务ID
@@ -154,9 +155,8 @@ void *client_handler(void *sock_fd) {
     while (true) {
         Print<true>("Waiting for request...\n");
 
-        memset(data_recv, 0, BUFFER_LENGTH);
-
         i_recvBytes = recv(fd, data_recv, BUFFER_LENGTH, 0);
+        data_recv[i_recvBytes] = '\0';
 
         if (i_recvBytes == 0) {
             Print<true>("Maybe the client has closed\n");
@@ -183,7 +183,6 @@ void *client_handler(void *sock_fd) {
 #ifdef ENABLE_SERIALIZE
         pthread_mutex_lock(sql_mutex);
 #endif
-        memset(data_send, '\0', BUFFER_LENGTH);
         offset = 0;
 
         // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
@@ -204,10 +203,9 @@ void *client_handler(void *sock_fd) {
                     portal.run(portalStmt, &txn_id, context.get());
                     portal.drop();
                 } catch (TransactionAbortException &e) {
-                    std::string str = "abort\n";
-                    memcpy(data_send, str.c_str(), str.length());
-                    data_send[str.length()] = '\0';
-                    offset = str.length();
+                    memcpy(data_send, "abort\n", 6);
+                    data_send[6] = '\0';
+                    offset = 6;
 
                     // 回滚事务
                     txn_manager.abort(context.get());
@@ -220,7 +218,7 @@ void *client_handler(void *sock_fd) {
                     if (sm_manager.is_output_file_) {
                         std::fstream outfile;
                         outfile.open("output.txt", std::ios::out | std::ios::app);
-                        outfile << str;
+                        outfile << "abort\n";
                         outfile.close();
                     }
                 } catch (RMDBError &e) {
@@ -283,8 +281,6 @@ void *client_handler(void *sock_fd) {
         pthread_mutex_unlock(sql_mutex);
 #endif
     }
-
-    delete[] data_send;  // 释放动态分配的内存
 
     yylex_destroy(scanner);  // 销毁扫描器
 
@@ -401,6 +397,11 @@ int main(int argc, char **argv) {
     }
 
     signal(SIGINT, sigint_handler);
+    signal(SIGTERM, sigint_handler);
+    signal(SIGQUIT, sigint_handler);
+    signal(SIGHUP, sigint_handler);
+    signal(SIGUSR1, sigint_handler);
+    signal(SIGUSR2, sigint_handler);
     try {
         Print(
             "\n"

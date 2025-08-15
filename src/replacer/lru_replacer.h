@@ -27,7 +27,7 @@ class LRUReplacer : public Replacer {
      * @description: 创建一个新的LRUReplacer
      * @param {size_t} num_pages LRUReplacer最多需要存储的page数量
      */
-    explicit LRUReplacer(size_t num_pages);
+    explicit LRUReplacer();
 
     ~LRUReplacer();
 
@@ -57,6 +57,7 @@ class LRUReplacer : public Replacer {
      * 2. 支持快速的页面状态更新
      * 3. 避免在链表中的线性查找
      */
-    std::vector<std::list<frame_id_t>::iterator> LRUhash_;  // 哈希表，存储frame_id到链表节点的映射
-    std::vector<bool> is_pinned_;                           // 哈希表的使用标记，避免重复插入
+    static constexpr size_t max_size_ = BUFFER_POOL_SIZE;  // 最大容量，与缓冲池容量相同
+    std::list<frame_id_t>::iterator LRUhash_[max_size_];  // 哈希表，存储frame_id到链表节点的映射
+    bool is_pinned_[max_size_];                           // 哈希表的使用标记，避免重复插入
 };
