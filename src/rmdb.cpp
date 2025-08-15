@@ -207,6 +207,8 @@ void *client_handler(void *sock_fd) {
                     data_send[6] = '\0';
                     offset = 6;
 
+                    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+
                     // 回滚事务
                     txn_manager.abort(context.get());
                     // if (txn_manager->should_perform_gc()) {
@@ -313,7 +315,7 @@ void start_server() {
 
     int sockfd_server;
     int fd_temp;
-    struct sockaddr_in s_addr_in {};
+    struct sockaddr_in s_addr_in{};
 
     // 初始化连接
     sockfd_server = socket(AF_INET, SOCK_STREAM, 0);  // ipv4,TCP
@@ -342,7 +344,7 @@ void start_server() {
         Print<true>("Waiting for new connection...\n");
         pthread_t thread_id;
 
-        struct sockaddr_in s_addr_client {};
+        struct sockaddr_in s_addr_client{};
         int client_length = sizeof(s_addr_client);
         if (setjmp(jmpbuf)) {
             Print("Break from Server Listen Loop\n");
