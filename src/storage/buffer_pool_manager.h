@@ -30,7 +30,7 @@ extern DiskManager disk_manager;
  */
 class BufferPoolManager {
    private:
-    size_t pool_size_;                                                      // 缓冲池大小（帧数）
+    size_t pool_size_;                                                     // 缓冲池大小（帧数）
     BufferPoolInstance buffer_pool_instances_[BUFFER_POOL_INSTANCE_SIZE];  // 缓冲池实例数组
 
    public:

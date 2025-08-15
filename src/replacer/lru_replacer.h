@@ -58,6 +58,6 @@ class LRUReplacer : public Replacer {
      * 3. 避免在链表中的线性查找
      */
     static constexpr size_t max_size_ = BUFFER_POOL_SIZE;  // 最大容量，与缓冲池容量相同
-    std::list<frame_id_t>::iterator LRUhash_[max_size_];  // 哈希表，存储frame_id到链表节点的映射
-    bool is_pinned_[max_size_];                           // 哈希表的使用标记，避免重复插入
+    std::list<frame_id_t>::iterator LRUhash_[max_size_];   // 哈希表，存储frame_id到链表节点的映射
+    bool is_pinned_[max_size_];                            // 哈希表的使用标记，避免重复插入
 };
