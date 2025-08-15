@@ -94,13 +94,13 @@ void TransactionManager::commit(Transaction* txn) {
     txn->CommitUndoLogs();                                                          // 提交事务的撤销日志
     last_commit_ts_.store(std::max(last_commit_ts_.load(), txn->get_commit_ts()));  // 更新最后提交时间戳
 
-    auto& lock_set = txn->get_lock_set();
-    while (!lock_set.empty()) {
-        // 释放事务持有的所有锁
-        LockDataId lock = lock_set.back();
-        lock_set.pop_back();
-        lock_manager.unlock(txn, lock);
-    }
+    // auto& lock_set = txn->get_lock_set();
+    // while (!lock_set.empty()) {
+    //     // 释放事务持有的所有锁
+    //     LockDataId lock = lock_set.back();
+    //     lock_set.pop_back();
+    //     lock_manager.unlock(txn, lock);
+    // }
 
     // 清空事务相关的集合
     txn->clear_lock_set();
@@ -161,13 +161,13 @@ void TransactionManager::abort(Context* context) {
     }
     txn->get_write_set().clear();  // 清空写集合
 
-    auto& lock_set = txn->get_lock_set();
-    while (!lock_set.empty()) {
-        // 释放事务持有的所有锁
-        LockDataId lock = lock_set.back();
-        lock_set.pop_back();
-        lock_manager.unlock(txn, lock);
-    }
+    // auto& lock_set = txn->get_lock_set();
+    // while (!lock_set.empty()) {
+    //     // 释放事务持有的所有锁
+    //     LockDataId lock = lock_set.back();
+    //     lock_set.pop_back();
+    //     lock_manager.unlock(txn, lock);
+    // }
 
     txn->clear_lock_set();
     txn->set_state(TransactionState::ABORTED);
