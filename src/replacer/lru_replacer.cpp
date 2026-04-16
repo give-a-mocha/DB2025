@@ -1,7 +1,7 @@
 /* Copyright (c) 2023 Renmin University of China
 RMDB is licensed under Mulan PSL v2.
-You can use this software according to the terms and conditions of the Mulan PSL
-v2. You may obtain a copy of Mulan PSL v2 at:
+You can use this software according to the terms and conditions of the Mulan PSL v2.
+You may obtain a copy of Mulan PSL v2 at:
         http://license.coscl.org.cn/MulanPSL2
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
 EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
@@ -9,77 +9,81 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "lru_replacer.h"
-#include <cstring>
 
-LRUReplacer::LRUReplacer() { std::fill(std::begin(is_pinned_), std::end(is_pinned_), true); }
+#include "storage/page.h"
+
+LRUReplacer::LRUReplacer() : pages_(nullptr) {
+    std::fill(std::begin(is_pinned_), std::end(is_pinned_), true);
+    std::fill(std::begin(in_dirty_), std::end(in_dirty_), false);
+}
 
 LRUReplacer::~LRUReplacer() = default;
 
+void LRUReplacer::set_pages(Page *pages) { pages_ = pages; }
+
 /**
- * @brief 根据LRU策略选择并移除一个受害帧
+ * @brief 根据 LRU-C 策略选择并移除一个受害帧（O(1)）
  *
- * @param frame_id 被选中移除的帧ID的指针
- * @return true 成功找到并移除了一个帧
- * @return false 没有可移除的帧
- * @thread_safety 线程安全
+ * 优先从 clean_list_ 尾部取干净页（无需写回磁盘）；
+ * 若无干净页，则从 dirty_list_ 尾部取最久未使用的脏页。
  */
-bool LRUReplacer::victim(frame_id_t* frame_id) {
-    // Todo:
-    // !利用lru_replacer中的LRUlist_,LRUHash_实现LRU策略
-    // !选择合适的frame指定为淘汰页面,赋值给*frame_id
-
-    // std::scoped_lock lock{latch_};
-    if (LRUlist_.empty()) {
-        return false;
+bool LRUReplacer::victim(frame_id_t *frame_id) {
+    // 优先淘汰干净页
+    if (!clean_list_.empty()) {
+        *frame_id = clean_list_.back();
+        is_pinned_[*frame_id] = true;
+        clean_list_.pop_back();
+        return true;
     }
-
-    *frame_id = LRUlist_.back();   // 选择最久未使用的页面(链表尾部)
-    is_pinned_[*frame_id] = true;  // 标记为使用
-    LRUlist_.pop_back();           // 从链表中删除
-
-    return true;
+    // 无干净页，退化为标准 LRU 淘汰脏页
+    if (!dirty_list_.empty()) {
+        *frame_id = dirty_list_.back();
+        is_pinned_[*frame_id] = true;
+        dirty_list_.pop_back();
+        return true;
+    }
+    return false;
 }
 
 /**
- * @brief 固定指定的帧，防止其被淘汰
- *
- * @param frame_id 要固定的帧ID
- * @thread_safety 线程安全
+ * @brief 固定指定帧，将其从所在链表中移除（O(1)）
  */
 void LRUReplacer::pin(frame_id_t frame_id) {
-    // Todo:
-    // !固定指定id的frame
-    // !在数据结构中移除该frame
-
-    // std::scoped_lock lock{latch_};
     if (is_pinned_[frame_id]) {
-        return;  // 如果已经被固定，则不做任何操作
+        return;
     }
-    is_pinned_[frame_id] = true;         // 标记为已使用
-    LRUlist_.erase(LRUhash_[frame_id]);  // 从链表中删除
+    is_pinned_[frame_id] = true;
+    // 根据记录的位置，从对应链表中删除
+    if (in_dirty_[frame_id]) {
+        dirty_list_.erase(LRUhash_[frame_id]);
+    } else {
+        clean_list_.erase(LRUhash_[frame_id]);
+    }
 }
 
 /**
- * @brief 取消固定帧，使其可以被淘汰
+ * @brief 解除固定，将帧插入对应链表头部（O(1)）
  *
- * @param frame_id 要取消固定的帧ID
- * @thread_safety 线程安全
+ * 依据 pages_[frame_id].is_dirty() 决定放入 clean_list_ 还是 dirty_list_。
+ * 调用前须确保脏页标记已更新（buffer_pool_instance 中先 mark_dirty 再 unpin）。
  */
 void LRUReplacer::unpin(frame_id_t frame_id) {
-    // 支持并发锁
-    // std::scoped_lock lock{latch_};
-    if (is_pinned_[frame_id]) {
-        is_pinned_[frame_id] = false;           // 标记为未使用
-        LRUlist_.push_front(frame_id);          // 加入链表头部(最近使用)
-        LRUhash_[frame_id] = LRUlist_.begin();  // 将frame_id映射到链表头部
+    if (!is_pinned_[frame_id]) {
+        return;
     }
-    return;
+    is_pinned_[frame_id] = false;
+
+    // 查询当前脏页状态，决定放入哪条链表
+    bool dirty = (pages_ != nullptr) && pages_[frame_id].is_dirty();
+    in_dirty_[frame_id] = dirty;
+
+    if (dirty) {
+        dirty_list_.push_front(frame_id);
+        LRUhash_[frame_id] = dirty_list_.begin();
+    } else {
+        clean_list_.push_front(frame_id);
+        LRUhash_[frame_id] = clean_list_.begin();
+    }
 }
 
-/**
- * @brief 获取当前可被淘汰的页面数量
- *
- * @return size_t 可淘汰页面的数量
- * @thread_safety 依赖STL容器的线程安全性
- */
-size_t LRUReplacer::Size() { return LRUlist_.size(); }
+size_t LRUReplacer::Size() { return clean_list_.size() + dirty_list_.size(); }

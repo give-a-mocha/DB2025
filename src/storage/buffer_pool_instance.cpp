@@ -187,14 +187,16 @@ bool BufferPoolInstance::unpin_page(PageId page_id, bool is_dirty) {
     // 减少pin_count
     page->pin_count_--;
     // INFO("Unpinning page: {}, pin_count: {}", page->get_page_id().page_no, page->pin_count_);
-    // 如果pin_count降为0,在replacer中取消固定
-    if (page->pin_count_ == 0) {
-        replacer_.unpin(frame_id);
-    }
 
-    // 更新dirty标记
+    // 先更新脏页标记，再通知 replacer：
+    // LRU-C 在 unpin 时读取 is_dirty_ 决定放入哪条链表，必须先于 replacer_.unpin 设置
     if (is_dirty) {
         page->is_dirty_ = true;
+    }
+
+    // 如果pin_count降为0，在replacer中取消固定
+    if (page->pin_count_ == 0) {
+        replacer_.unpin(frame_id);
     }
 
     return true;
