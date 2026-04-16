@@ -75,6 +75,6 @@ class LRUReplacer : public Replacer {
      */
     std::list<frame_id_t>::iterator LRUhash_[max_size_];
 
-    bool is_pinned_[max_size_];   // true = 已固定，不在任何链表中
-    bool in_dirty_[max_size_];    // true = 位于 dirty_list_（仅 !is_pinned_ 时有意义）
+    bool is_pinned_[max_size_];  // true = 已固定，不在任何链表中
+    bool in_dirty_[max_size_];   // true = 位于 dirty_list_（仅 !is_pinned_ 时有意义）
 };

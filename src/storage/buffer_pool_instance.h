@@ -44,7 +44,7 @@ class BufferPoolInstance {
    public:
     BufferPoolInstance() : free_list_(BUFFER_POOL_SIZE) {
         pages_ = new Page[BUFFER_POOL_SIZE];
-        replacer_.set_pages(pages_);            // 注入 pages 指针，供 LRU-C 分类干净/脏页
+        replacer_.set_pages(pages_);  // 注入 pages 指针，供 LRU-C 分类干净/脏页
         std::iota(free_list_.begin(), free_list_.end(), 0);
         page_table_.reserve(BUFFER_POOL_SIZE);  // 预留空间，避免频繁扩容
     }
