@@ -436,7 +436,10 @@ void SmManager::create_index(std::string tab_name, std::vector<std::string> col_
     // 6. 扫描表中所有记录，构建B+树索引
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
-        auto record = fh_->get_record(rmScan.rid()).second;
+        auto [tuple_meta, record] = fh_->get_record(rmScan.rid());
+        if (tuple_meta.is_deleted_) {
+            continue;  // 跳过已删除的记录
+        }
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -451,7 +454,8 @@ void SmManager::create_index(std::string tab_name, std::vector<std::string> col_
         auto res = ih_->insert_entry_without_lock(key, rmScan.rid());
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (!res) {
-            drop_index(tab_name, col_names, context);
+            ix_manager.close_index_without_flush(ih_.get());       // 关闭索引文件
+            ix_manager.destroy_index_with_index_name(index_name);  // 删除索引文件
             return;
         }
     }
