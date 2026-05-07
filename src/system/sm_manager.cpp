@@ -254,9 +254,9 @@ void SmManager::show_index(std::string tab_name, Context* context) {
     std::fstream outfile;
     outfile.open("output.txt", std::ios::out | std::ios::app);
 
-    RecordPrinter printer(1);
+    RecordPrinter printer(3);
     printer.print_separator(context);
-    printer.print_record(std::vector<std::string_view>{"index"}, context);
+    printer.print_record(std::vector<std::string_view>{"table name", "unique", "index"}, context);
     printer.print_separator(context);
 
     // 遍历表的所有索引
@@ -268,6 +268,7 @@ void SmManager::show_index(std::string tab_name, Context* context) {
         }
         col_names += ")";
         outfile << "| " << tab_name << " | " << "unique" << " | " << col_names << " |\n";
+        printer.print_record(std::vector<std::string_view>{tab_name, "unique", col_names}, context);
     }
     printer.print_separator(context);
     outfile.close();

@@ -39,7 +39,7 @@
 
 constexpr int SOCK_PORT = 8765;
 constexpr int MAX_CONN_LIMIT = 16;
-constexpr bool ENABLE_COUT = false;
+constexpr bool ENABLE_COUT = true;
 constexpr bool ENABLE_TIMER = false;
 static bool should_exit = false;
 // #define ENABLE_SERIALIZE
