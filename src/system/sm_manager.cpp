@@ -452,7 +452,9 @@ void SmManager::create_index(std::string tab_name, std::vector<std::string> col_
         auto res = ih_->insert_entry_without_lock(key, rmScan.rid());
         // 如果插入失败（可能是违反唯一性约束），回滚索引创建
         if (!res) {
-            drop_index(tab_name, col_names, context);
+            // drop_index(tab_name, col_names, context);
+            ix_manager.close_index_without_flush(ih_.get());
+            ix_manager.destroy_index_with_index_name(index_name);
             return;
         }
     }
