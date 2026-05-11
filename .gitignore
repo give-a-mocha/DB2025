@@ -12,6 +12,7 @@ Desktop.ini
 .settings/
 .roo/
 memory-bank/
+sql/
 
 # Node.js
 node_modules/
