@@ -129,6 +129,23 @@ class TransactionManager {
         return TransactionManager::txn_map.find(txn_id) != TransactionManager::txn_map.end();
     }
 
+    /**
+     * @brief 判断除 self 外是否还有处于 DEFAULT/GROWING/SHRINKING 状态的活跃事务。
+     *        已 COMMITTED / ABORTED 的事务虽然还留在 txn_map（等待 GC），不计入活跃。
+     * @param self 调用者自身的事务ID（会被排除在外）。传 INVALID_TXN_ID 表示不排除任何事务。
+     */
+    bool has_other_active_transactions(txn_id_t self) {
+        std::shared_lock<std::shared_mutex> lock(txn_map_mutex_);
+        for (const auto& [tid, txn] : TransactionManager::txn_map) {
+            if (tid == self) continue;
+            auto state = txn->get_state();
+            if (state != TransactionState::COMMITTED && state != TransactionState::ABORTED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** ------------------------以下为MVCC相关接口------------------------------------------*/
 
     /**

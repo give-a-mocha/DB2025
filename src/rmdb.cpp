@@ -184,7 +184,7 @@ void *client_handler(void *sock_fd) {
         pthread_mutex_lock(sql_mutex);
 #endif
         offset = 0;
-
+        data_send[0] = '\0';
         // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
         auto context = std::make_unique<Context>(nullptr, data_send, &offset);
         SetTransaction(&txn_id, context.get());

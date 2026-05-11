@@ -37,11 +37,13 @@
 #include "record/rm.h"
 #include "record_printer.h"
 #include "record/rm_file_handle.h"
+#include "transaction/transaction_manager.h"
 
 extern DiskManager disk_manager;
 extern BufferPoolManager buffer_pool_manager;
 extern RmManager rm_manager;
 extern IxManager ix_manager;
+extern TransactionManager txn_manager;
 
 /**
  * @brief 判断指定路径是否为一个文件夹
@@ -406,6 +408,13 @@ void SmManager::drop_table(std::string tab_name, Context* context) {
  * @warning 应该在并发前建好
  */
 void SmManager::create_index(std::string tab_name, std::vector<std::string> col_names, Context* context) {
+    txn_id_t self_txn_id = (context != nullptr && context->txn_ != nullptr)
+                                ? context->txn_->get_transaction_id()
+                                : INVALID_TXN_ID;
+    if (txn_manager.has_other_active_transactions(self_txn_id)) {
+        throw InternalError("Cannot create index while other transactions are active");
+    }
+
     // 1. 获取表的元数据并验证
     TabMeta& tab = db_.get_table(tab_name);
 
@@ -437,7 +446,10 @@ void SmManager::create_index(std::string tab_name, std::vector<std::string> col_
     // 6. 扫描表中所有记录，构建B+树索引
     for (RmScan rmScan(fh_); !rmScan.is_end(); rmScan.next()) {
         // 获取记录数据
-        auto record = fh_->get_record(rmScan.rid()).second;
+        auto [tuple_meta, record] = fh_->get_record(rmScan.rid());
+        if (tuple_meta.is_deleted_) {
+            continue;
+        }
         // 构建组合索引键
         int offset = 0;
         for (auto& col : cols) {
@@ -455,7 +467,7 @@ void SmManager::create_index(std::string tab_name, std::vector<std::string> col_
             // drop_index(tab_name, col_names, context);
             ix_manager.close_index_without_flush(ih_.get());
             ix_manager.destroy_index_with_index_name(index_name);
-            return;
+            throw InternalError("Primary key conflict");
         }
     }
 
