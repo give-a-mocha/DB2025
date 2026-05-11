@@ -46,7 +46,7 @@ new_line "\r"|"\n"|"\r\n"
 identifier {alpha}(_|{alpha}|{digit})*
 value_int {digit}+
 value_float {digit}+\.({digit}+)?
-value_string '[^']*'
+value_string ('[^']*')|(\"[^\"]*\")
 value_path [\.|\/][^ \t]+\.csv
 single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."|"+"|"-"|"/"
 
