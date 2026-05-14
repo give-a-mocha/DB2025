@@ -62,7 +62,7 @@ constexpr const char *help_info =
     "  {= | <> | < | > | <= | >=}\n"
     "selector:\n"
     "  {* | column [, column ...]}\n";
-constexpr int help_info_len = strlen(help_info);
+constexpr int help_info_len = sizeof(help_info);
 
 /**
  * @brief 执行DDL(数据定义语言)语句
