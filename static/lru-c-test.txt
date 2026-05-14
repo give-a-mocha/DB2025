@@ -1,0 +1,102 @@
+============================================================
+  基准测试结果汇总
+============================================================
+  [SELECT 点查询(PK)]
+    请求数=200  错误数=0
+    avg=3.65ms  min=1.22ms  max=10.25ms
+    P50=3.22ms  P90=5.87ms  P99=9.89ms
+    吞吐量 ≈ 273.6 QPS
+
+  [SELECT 范围扫描(age)]
+    请求数=200  错误数=0
+    avg=4.32ms  min=1.03ms  max=21.28ms
+    P50=3.69ms  P90=6.26ms  P99=18.32ms
+    吞吐量 ≈ 231.7 QPS
+
+  [SELECT ORDER BY+LIMIT]
+    请求数=200  错误数=0
+    avg=17.44ms  min=1.55ms  max=337.60ms
+    P50=3.88ms  P90=7.98ms  P99=337.29ms
+    吞吐量 ≈ 57.3 QPS
+
+  [SELECT COUNT(*)]
+    请求数=200  错误数=0
+    avg=3.92ms  min=1.42ms  max=11.54ms
+    P50=3.63ms  P90=6.14ms  P99=9.29ms
+    吞吐量 ≈ 255.0 QPS
+
+  [SELECT SUM(amount)]
+    请求数=200  错误数=0
+    avg=4.17ms  min=1.57ms  max=9.24ms
+    P50=3.85ms  P90=6.10ms  P99=9.18ms
+    吞吐量 ≈ 239.6 QPS
+
+  [SELECT AVG(amount)]
+    请求数=200  错误数=0
+    avg=3.99ms  min=1.30ms  max=10.50ms
+    P50=3.58ms  P90=6.46ms  P99=10.37ms
+    吞吐量 ≈ 250.7 QPS
+
+  [SELECT GROUP BY]
+    请求数=200  错误数=0
+    avg=4.23ms  min=1.49ms  max=10.23ms
+    P50=3.95ms  P90=6.44ms  P99=9.36ms
+    吞吐量 ≈ 236.6 QPS
+
+  [JOIN 两表(orders+users)]
+    请求数=200  错误数=0
+    avg=4.31ms  min=1.49ms  max=9.13ms
+    P50=3.96ms  P90=6.83ms  P99=8.87ms
+    吞吐量 ≈ 232.3 QPS
+
+  [JOIN 三表(items+orders+products)]
+    请求数=200  错误数=0
+    avg=313.10ms  min=169.81ms  max=369.94ms
+    P50=314.52ms  P90=336.46ms  P99=360.43ms
+    吞吐量 ≈ 3.2 QPS
+
+  [JOIN+GROUP BY+HAVING]
+    请求数=200  错误数=0
+    avg=343.31ms  min=0.04ms  max=443.75ms
+    P50=364.12ms  P90=403.52ms  P99=439.29ms
+    吞吐量 ≈ 2.9 QPS
+
+  [INSERT(users_insert)]
+    请求数=200  错误数=0
+    avg=4.91ms  min=1.07ms  max=14.28ms
+    P50=4.29ms  P90=8.54ms  P99=13.32ms
+    吞吐量 ≈ 203.6 QPS
+
+  [UPDATE(score by id)]
+    请求数=200  错误数=0
+    avg=4.66ms  min=0.91ms  max=11.77ms
+    P50=4.14ms  P90=7.70ms  P99=11.19ms
+    吞吐量 ≈ 214.4 QPS
+
+  [读写混合(join+range_update)]
+    请求数=200  错误数=0
+    avg=8.29ms  min=3.85ms  max=17.55ms
+    P50=7.87ms  P90=12.29ms  P99=16.10ms
+    吞吐量 ≈ 120.6 QPS
+
+============================================================
+  场景                               P50(ms)   P90(ms)   P99(ms)      QPS
+------------------------------------------------------------
+  SELECT 点查询(PK)                      3.22      5.87      9.89    273.6
+  SELECT 范围扫描(age)                    3.69      6.26     18.32    231.7
+  SELECT ORDER BY+LIMIT               3.88      7.98    337.29     57.3
+  SELECT COUNT(*)                     3.63      6.14      9.29    255.0
+  SELECT SUM(amount)                  3.85      6.10      9.18    239.6
+  SELECT AVG(amount)                  3.58      6.46     10.37    250.7
+  SELECT GROUP BY                     3.95      6.44      9.36    236.6
+  JOIN 两表(orders+users)               3.96      6.83      8.87    232.3
+  JOIN 三表(items+orders+products)    314.52    336.46    360.43      3.2
+  JOIN+GROUP BY+HAVING              364.12    403.52    439.29      2.9
+  INSERT(users_insert)                4.29      8.54     13.32    203.6
+  UPDATE(score by id)                 4.14      7.70     11.19    214.4
+  读写混合(join+range_update)             7.87     12.29     16.10    120.6
+============================================================
+
+总用时: 18.6s
+
+备注：lru-c与普通lru相比，数据仅有误差范围，分析replacer模块对于该系统，所占用的时间较少。重点性能瓶颈主要在磁盘io以及上层执行优化引擎。

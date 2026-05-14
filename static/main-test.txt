@@ -1,0 +1,101 @@
+============================================================
+  基准测试结果汇总
+============================================================
+  [SELECT 点查询(PK)]
+    请求数=200  错误数=0
+    avg=4.49ms  min=1.21ms  max=14.03ms
+    P50=4.14ms  P90=7.31ms  P99=11.61ms
+    吞吐量 ≈ 222.8 QPS
+
+  [SELECT 范围扫描(age)]
+    请求数=200  错误数=0
+    avg=5.10ms  min=1.45ms  max=12.34ms
+    P50=4.67ms  P90=8.37ms  P99=11.21ms
+    吞吐量 ≈ 196.2 QPS
+
+  [SELECT ORDER BY+LIMIT]
+    请求数=200  错误数=0
+    avg=4.65ms  min=1.33ms  max=14.23ms
+    P50=4.27ms  P90=7.17ms  P99=10.64ms
+    吞吐量 ≈ 215.1 QPS
+
+  [SELECT COUNT(*)]
+    请求数=200  错误数=0
+    avg=4.77ms  min=1.59ms  max=15.99ms
+    P50=4.35ms  P90=7.27ms  P99=13.68ms
+    吞吐量 ≈ 209.5 QPS
+
+  [SELECT SUM(amount)]
+    请求数=200  错误数=0
+    avg=4.65ms  min=1.81ms  max=9.13ms
+    P50=4.41ms  P90=7.01ms  P99=8.85ms
+    吞吐量 ≈ 215.0 QPS
+
+  [SELECT AVG(amount)]
+    请求数=200  错误数=0
+    avg=4.59ms  min=1.64ms  max=10.05ms
+    P50=4.07ms  P90=7.28ms  P99=9.38ms
+    吞吐量 ≈ 218.0 QPS
+
+  [SELECT GROUP BY]
+    请求数=200  错误数=0
+    avg=4.81ms  min=1.71ms  max=11.24ms
+    P50=4.45ms  P90=7.03ms  P99=9.61ms
+    吞吐量 ≈ 208.1 QPS
+
+  [JOIN 两表(orders+users)]
+    请求数=200  错误数=0
+    avg=4.71ms  min=1.78ms  max=11.23ms
+    P50=4.34ms  P90=7.46ms  P99=10.15ms
+    吞吐量 ≈ 212.3 QPS
+
+  [JOIN 三表(items+orders+products)]
+    请求数=200  错误数=0
+    avg=345.63ms  min=244.17ms  max=443.41ms
+    P50=347.68ms  P90=378.69ms  P99=436.97ms
+    吞吐量 ≈ 2.9 QPS
+
+  [JOIN+GROUP BY+HAVING]
+    请求数=200  错误数=0
+    avg=370.27ms  min=0.05ms  max=486.93ms
+    P50=419.39ms  P90=453.80ms  P99=475.23ms
+    吞吐量 ≈ 2.7 QPS
+
+  [INSERT(users_insert)]
+    请求数=200  错误数=0
+    avg=4.84ms  min=1.11ms  max=12.75ms
+    P50=4.17ms  P90=8.47ms  P99=11.91ms
+    吞吐量 ≈ 206.6 QPS
+
+  [UPDATE(score by id)]
+    请求数=200  错误数=0
+    avg=3.49ms  min=0.95ms  max=12.09ms
+    P50=3.17ms  P90=5.64ms  P99=10.12ms
+    吞吐量 ≈ 286.8 QPS
+
+  [读写混合(join+range_update)]
+    请求数=200  错误数=0
+    avg=8.13ms  min=3.34ms  max=17.27ms
+    P50=7.79ms  P90=11.21ms  P99=15.09ms
+    吞吐量 ≈ 123.1 QPS
+
+============================================================
+  场景                               P50(ms)   P90(ms)   P99(ms)      QPS
+------------------------------------------------------------
+  SELECT 点查询(PK)                      4.14      7.31     11.61    222.8
+  SELECT 范围扫描(age)                    4.67      8.37     11.21    196.2
+  SELECT ORDER BY+LIMIT               4.27      7.17     10.64    215.1
+  SELECT COUNT(*)                     4.35      7.27     13.68    209.5
+  SELECT SUM(amount)                  4.41      7.01      8.85    215.0
+  SELECT AVG(amount)                  4.07      7.28      9.38    218.0
+  SELECT GROUP BY                     4.45      7.03      9.61    208.1
+  JOIN 两表(orders+users)               4.34      7.46     10.15    212.3
+  JOIN 三表(items+orders+products)     347.68    378.69    436.97      2.9
+  JOIN+GROUP BY+HAVING              419.39    453.80    475.23      2.7
+  INSERT(users_insert)                4.17      8.47     11.91    206.6
+  UPDATE(score by id)                 3.17      5.64     10.12    286.8
+  读写混合(join+range_update)             7.79     11.21     15.09    123.1
+============================================================
+
+总用时: 19.9s
+

@@ -1,0 +1,102 @@
+============================================================
+  基准测试结果汇总
+============================================================
+  [SELECT 点查询(PK)]
+    请求数=200  错误数=0
+    avg=4.04ms  min=1.23ms  max=13.72ms
+    P50=3.66ms  P90=6.58ms  P99=9.50ms
+    吞吐量 ≈ 247.6 QPS
+
+  [SELECT 范围扫描(age)]
+    请求数=200  错误数=0
+    avg=4.53ms  min=1.15ms  max=13.77ms
+    P50=4.12ms  P90=7.39ms  P99=12.91ms
+    吞吐量 ≈ 220.6 QPS
+
+  [SELECT ORDER BY+LIMIT]
+    请求数=200  错误数=0
+    avg=3.96ms  min=1.45ms  max=10.23ms
+    P50=3.59ms  P90=6.22ms  P99=9.22ms
+    吞吐量 ≈ 252.4 QPS
+
+  [SELECT COUNT(*)]
+    请求数=200  错误数=0
+    avg=7.74ms  min=2.38ms  max=12.83ms
+    P50=7.87ms  P90=10.55ms  P99=12.78ms
+    吞吐量 ≈ 129.1 QPS
+
+  [SELECT SUM(amount)]
+    请求数=200  错误数=0
+    avg=8.50ms  min=2.55ms  max=23.94ms
+    P50=8.17ms  P90=11.13ms  P99=22.09ms
+    吞吐量 ≈ 117.7 QPS
+
+  [SELECT AVG(amount)]
+    请求数=200  错误数=0
+    avg=7.99ms  min=2.74ms  max=12.40ms
+    P50=8.23ms  P90=10.43ms  P99=12.24ms
+    吞吐量 ≈ 125.2 QPS
+
+  [SELECT GROUP BY]
+    请求数=200  错误数=0
+    avg=9.32ms  min=2.26ms  max=17.00ms
+    P50=9.27ms  P90=11.65ms  P99=15.27ms
+    吞吐量 ≈ 107.3 QPS
+
+  [JOIN 两表(orders+users)]
+    请求数=200  错误数=0
+    avg=8.88ms  min=1.75ms  max=13.89ms
+    P50=9.05ms  P90=11.76ms  P99=13.46ms
+    吞吐量 ≈ 112.5 QPS
+
+  [JOIN 三表(items+orders+products)]
+    请求数=200  错误数=0
+    avg=1529.21ms  min=406.77ms  max=1858.29ms
+    P50=1545.96ms  P90=1714.14ms  P99=1829.00ms
+    吞吐量 ≈ 0.7 QPS
+
+  [JOIN+GROUP BY+HAVING]
+    请求数=200  错误数=0
+    avg=1434.47ms  min=0.05ms  max=1815.07ms
+    P50=1560.04ms  P90=1719.72ms  P99=1806.56ms
+    吞吐量 ≈ 0.7 QPS
+
+  [INSERT(users_insert)]
+    请求数=200  错误数=0
+    avg=4.96ms  min=1.45ms  max=15.66ms
+    P50=4.55ms  P90=8.31ms  P99=14.33ms
+    吞吐量 ≈ 201.6 QPS
+
+  [UPDATE(score by id)]
+    请求数=200  错误数=0
+    avg=4.82ms  min=1.34ms  max=10.55ms
+    P50=4.21ms  P90=7.86ms  P99=10.17ms
+    吞吐量 ≈ 207.5 QPS
+
+  [读写混合(join+range_update)]
+    请求数=200  错误数=0
+    avg=26.69ms  min=6.06ms  max=84.70ms
+    P50=19.23ms  P90=59.00ms  P99=83.58ms
+    吞吐量 ≈ 37.5 QPS
+
+============================================================
+  场景                               P50(ms)   P90(ms)   P99(ms)      QPS
+------------------------------------------------------------
+  SELECT 点查询(PK)                      3.66      6.58      9.50    247.6
+  SELECT 范围扫描(age)                    4.12      7.39     12.91    220.6
+  SELECT ORDER BY+LIMIT               3.59      6.22      9.22    252.4
+  SELECT COUNT(*)                     7.87     10.55     12.78    129.1
+  SELECT SUM(amount)                  8.17     11.13     22.09    117.7
+  SELECT AVG(amount)                  8.23     10.43     12.24    125.2
+  SELECT GROUP BY                     9.27     11.65     15.27    107.3
+  JOIN 两表(orders+users)               9.05     11.76     13.46    112.5
+  JOIN 三表(items+orders+products)    1545.96   1714.14   1829.00      0.7
+  JOIN+GROUP BY+HAVING             1560.04   1719.72   1806.56      0.7
+  INSERT(users_insert)                4.55      8.31     14.33    201.6
+  UPDATE(score by id)                 4.21      7.86     10.17    207.5
+  读写混合(join+range_update)            19.23     59.00     83.58     37.5
+============================================================
+
+总用时: 77.4s
+
+备注：200表规模benchmark，4kb-page，在缓冲池占用相同总内存的情况下，单例缓冲池比多实例模式（16）慢了约4倍，主要体现在多表联查和聚合查询上。分析原因可能是单实例模式在处理并发慢请求时，锁竞争较为激烈，导致响应时间增加。此外，单实例模式可能无法充分利用多核CPU的优势，从而限制了性能的提升。

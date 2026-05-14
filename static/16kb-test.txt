@@ -1,0 +1,102 @@
+============================================================
+  基准测试结果汇总
+============================================================
+  [SELECT 点查询(PK)]
+    请求数=200  错误数=0
+    avg=5.20ms  min=1.33ms  max=14.20ms
+    P50=4.59ms  P90=8.66ms  P99=11.28ms
+    吞吐量 ≈ 192.4 QPS
+
+  [SELECT 范围扫描(age)]
+    请求数=200  错误数=0
+    avg=5.05ms  min=1.64ms  max=15.21ms
+    P50=4.77ms  P90=8.25ms  P99=13.58ms
+    吞吐量 ≈ 198.2 QPS
+
+  [SELECT ORDER BY+LIMIT]
+    请求数=200  错误数=0
+    avg=4.49ms  min=1.54ms  max=13.75ms
+    P50=4.25ms  P90=6.94ms  P99=9.79ms
+    吞吐量 ≈ 222.8 QPS
+
+  [SELECT COUNT(*)]
+    请求数=200  错误数=0
+    avg=4.83ms  min=1.68ms  max=13.20ms
+    P50=4.59ms  P90=6.89ms  P99=12.22ms
+    吞吐量 ≈ 207.0 QPS
+
+  [SELECT SUM(amount)]
+    请求数=200  错误数=0
+    avg=4.72ms  min=1.65ms  max=11.09ms
+    P50=4.53ms  P90=6.50ms  P99=10.24ms
+    吞吐量 ≈ 212.0 QPS
+
+  [SELECT AVG(amount)]
+    请求数=200  错误数=0
+    avg=4.76ms  min=1.59ms  max=13.98ms
+    P50=4.37ms  P90=7.31ms  P99=11.19ms
+    吞吐量 ≈ 210.0 QPS
+
+  [SELECT GROUP BY]
+    请求数=200  错误数=0
+    avg=5.40ms  min=1.84ms  max=12.66ms
+    P50=5.16ms  P90=7.93ms  P99=12.03ms
+    吞吐量 ≈ 185.3 QPS
+
+  [JOIN 两表(orders+users)]
+    请求数=200  错误数=0
+    avg=5.32ms  min=1.51ms  max=11.38ms
+    P50=5.19ms  P90=7.43ms  P99=10.16ms
+    吞吐量 ≈ 187.9 QPS
+
+  [JOIN 三表(items+orders+products)]
+    请求数=200  错误数=0
+    avg=650.38ms  min=420.59ms  max=748.82ms
+    P50=658.54ms  P90=694.99ms  P99=742.30ms
+    吞吐量 ≈ 1.5 QPS
+
+  [JOIN+GROUP BY+HAVING]
+    请求数=200  错误数=0
+    avg=843.46ms  min=0.05ms  max=1052.81ms
+    P50=887.98ms  P90=942.87ms  P99=1029.62ms
+    吞吐量 ≈ 1.2 QPS
+
+  [INSERT(users_insert)]
+    请求数=200  错误数=0
+    avg=4.66ms  min=1.04ms  max=12.99ms
+    P50=4.23ms  P90=7.78ms  P99=12.51ms
+    吞吐量 ≈ 214.6 QPS
+
+  [UPDATE(score by id)]
+    请求数=200  错误数=0
+    avg=4.47ms  min=1.20ms  max=12.14ms
+    P50=4.14ms  P90=7.01ms  P99=10.86ms
+    吞吐量 ≈ 223.6 QPS
+
+  [读写混合(join+range_update)]
+    请求数=200  错误数=0
+    avg=11.46ms  min=3.92ms  max=29.72ms
+    P50=9.44ms  P90=20.64ms  P99=25.17ms
+    吞吐量 ≈ 87.3 QPS
+
+============================================================
+  场景                               P50(ms)   P90(ms)   P99(ms)      QPS
+------------------------------------------------------------
+  SELECT 点查询(PK)                      4.59      8.66     11.28    192.4
+  SELECT 范围扫描(age)                    4.77      8.25     13.58    198.2
+  SELECT ORDER BY+LIMIT               4.25      6.94      9.79    222.8
+  SELECT COUNT(*)                     4.59      6.89     12.22    207.0
+  SELECT SUM(amount)                  4.53      6.50     10.24    212.0
+  SELECT AVG(amount)                  4.37      7.31     11.19    210.0
+  SELECT GROUP BY                     5.16      7.93     12.03    185.3
+  JOIN 两表(orders+users)               5.19      7.43     10.16    187.9
+  JOIN 三表(items+orders+products)     658.54    694.99    742.30      1.5
+  JOIN+GROUP BY+HAVING              887.98    942.87   1029.62      1.2
+  INSERT(users_insert)                4.23      7.78     12.51    214.6
+  UPDATE(score by id)                 4.14      7.01     10.86    223.6
+  读写混合(join+range_update)             9.44     20.64     25.17     87.3
+============================================================
+
+总用时: 39.5s
+
+备注：200表规模benchmark，在缓冲池占用相同总内存的情况下，16kb-page比4kb-page慢了1倍，主要体现在多表联查上。分析原因可能是16kb-page缓冲池在读取大量数据时，单次I/O操作的数据量较大，导致更长的等待时间，尤其对于多表联查这种设计大量数据页读取的操作。此外，在总内存量不变的情况下，16kb-page可能会导致更频繁的页替换，从而增加了I/O开销，进一步影响性能。
