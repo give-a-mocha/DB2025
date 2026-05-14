@@ -22,6 +22,7 @@
 #include <unordered_set>
 
 #include "common/TraceStack.hpp"
+#include "common/config.h"
 #include "execution/executor_nestedloop_join.h"
 #include "execution/executor_projection.h"
 #include "index/ix.h"
@@ -483,7 +484,15 @@ std::shared_ptr<Plan> Planner::make_one_rel_optimized(std::shared_ptr<Query> que
     // 谓词下推
     std::vector<std::pair<std::shared_ptr<Plan>, size_t>> table_plans_with_cardinality(tables.size());
 
-    std::unordered_map<std::string_view, std::vector<Condition>> table_conds = pop_conds(query->conds, tables);
+    std::unordered_map<std::string_view, std::vector<Condition>> table_conds;
+    if (enable_predicate_pushdown) {
+        table_conds = pop_conds(query->conds, tables);
+    } else {
+        // 关闭谓词下推：所有条件留作连接条件
+        for (const auto &tab_name : tables) {
+            table_conds[tab_name] = {};
+        }
+    }
     for (size_t i = 0; i < tables.size(); i++) {
         auto curr_conds = std::move(table_conds[tables[i]]);
         std::vector<std::string> index_col_names;
@@ -554,7 +563,7 @@ std::shared_ptr<Plan> Planner::build_left_deep_join_tree(std::list<std::shared_p
     }
 
     // 处理剩余的连接条件（理论来说不会有,但是保留处理）
-    if (!join_conditions.empty()) {
+    if (!join_conditions.empty() && enable_predicate_pushdown) {
         // 将剩余条件下推到结果计划中
         for (auto &cond : join_conditions) {
             push_conds(&cond, result);
