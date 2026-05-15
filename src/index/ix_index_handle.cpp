@@ -330,7 +330,7 @@ bool IxIndexHandle::get_value(const char *key, Rid &result, Transaction *transac
     // 2. 在叶子节点中查找目标key值的位置，并读取key对应的rid
     // 3. 把rid存入result参数中
     // 提示：使用完buffer_pool提供的page之后，记得unpin page；记得处理并发的上锁
-
+#ifdef IX_USE_CRAB_LATCH
     root_latch_.lock();
     if (is_empty()) {
         root_latch_.unlock();
@@ -344,6 +344,9 @@ bool IxIndexHandle::get_value(const char *key, Rid &result, Transaction *transac
     buffer_pool_manager.unpin_page(leaf_node->get_page_id(), false);
     delete leaf_node;  // 释放叶子结点内存
     return ok;
+#else
+    return get_value_with_root_lock(key, result);
+#endif
 }
 
 bool IxIndexHandle::get_value_without_lock(const char *key, Rid &result) {
@@ -513,7 +516,7 @@ bool IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction 
     // 2. 在该叶子节点中插入键值对
     // 3. 如果结点已满，分裂结点，并把新结点的相关信息插入父节点
     // 提示：记得unpin page；若当前叶子节点是最右叶子节点，则需要更新file_hdr_.last_leaf；记得处理并发的上锁
-
+#ifdef IX_USE_CRAB_LATCH
     root_latch_.lock();
     if (is_empty()) {
         create_new_root(key, value);
@@ -530,6 +533,9 @@ bool IxIndexHandle::insert_entry(const char *key, const Rid &value, Transaction 
         // 返回插入到的叶结点的page_no
         return ok;
     }
+#else
+    return insert_entry_with_root_lock(key, value);
+#endif
 }
 
 bool IxIndexHandle::insert_entry_without_lock(const char *key, const Rid &value) {
@@ -571,6 +577,7 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
     // 2. 在该叶子结点中删除键值对
     // 3. 如果删除成功需要调用CoalesceOrRedistribute来进行合并或重分配操作，并根据函数返回结果判断是否有结点需要删除
     // 4. 如果需要并发，并且需要删除叶子结点，则需要在事务的delete_page_set中添加删除结点的对应页面；记得处理并发的上锁
+#ifdef IX_USE_CRAB_LATCH
     root_latch_.lock();
     if (is_empty()) {
         root_latch_.unlock();
@@ -601,6 +608,9 @@ bool IxIndexHandle::delete_entry(const char *key, Transaction *transaction) {
     buffer_pool_manager.unpin_page(leaf_node->get_page_id(), true);
     delete leaf_node;
     return true;
+#else
+    return delete_entry_with_root_lock(key);
+#endif
 }
 
 bool IxIndexHandle::delete_entry_without_lock(const char *key) {
@@ -891,6 +901,7 @@ Rid IxIndexHandle::get_rid(const Iid &iid) const {
  * - 需要及时释放节点资源
  */
 Iid IxIndexHandle::lower_bound(const char *key) {
+#ifdef IX_USE_CRAB_LATCH
     //! DO
     if (is_empty()) {
         return {-1, -1};
@@ -912,6 +923,9 @@ Iid IxIndexHandle::lower_bound(const char *key) {
     buffer_pool_manager.unpin_page(leaf_page->get_page_id(), false);
     delete leaf_node;  // 释放叶子结点内存
     return res;
+#else
+    return lower_bound_with_root_lock(key);
+#endif
 }
 
 Iid IxIndexHandle::lower_bound_with_root_lock(const char *key) {
@@ -945,6 +959,7 @@ Iid IxIndexHandle::lower_bound_with_root_lock(const char *key) {
  * @return Iid 找到的索引项ID
  */
 Iid IxIndexHandle::upper_bound(const char *key) {
+#ifdef IX_USE_CRAB_LATCH
     //! DO
     if (is_empty()) {
         return {-1, -1};
@@ -966,6 +981,9 @@ Iid IxIndexHandle::upper_bound(const char *key) {
     buffer_pool_manager.unpin_page(leaf_page->get_page_id(), false);
     delete leaf_node;  // 释放叶子结点内存
     return res;
+#else
+    return upper_bound_with_root_lock(key);
+#endif
 }
 
 Iid IxIndexHandle::upper_bound_with_root_lock(const char *key) {

@@ -39,6 +39,18 @@ extern DiskManager disk_manager;
 extern BufferPoolManager buffer_pool_manager;
 
 /**
+ * @brief 蟹型协议(Crab Latching)总开关 —— 用于并发性能对比
+ *
+ * - 定义 IX_USE_CRAB_LATCH：使用蟹型协议，按页面粒度逐层 latch coupling，
+ *   只有当子节点 "safe" 时才释放祖先 latch，实现细粒度高并发
+ * - 注释 IX_USE_CRAB_LATCH：退化为整棵 B+ 树串行 —— 所有读/写都先抢
+ *   root_latch_，再走 *_without_lock 版本，等价于一把全局大锁
+ *
+ * 切换方式：直接注释/取消注释下一行宏，重新编译即可，无需改动调用方代码。
+ */
+#define IX_USE_CRAB_LATCH
+
+/**
  * @brief 索引操作的类型枚举
  */
 enum class Operation {
