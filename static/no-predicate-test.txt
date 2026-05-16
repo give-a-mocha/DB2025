@@ -3,100 +3,44 @@
 ============================================================
   [SELECT 点查询(PK)]
     请求数=200  错误数=0
-    avg=4.94ms  min=0.67ms  max=13.71ms
-    P50=4.56ms  P90=7.55ms  P99=12.85ms
-    吞吐量 ≈ 202.4 QPS
-
-  [SELECT 范围扫描(age)]
-    请求数=200  错误数=0
-    avg=5.00ms  min=1.49ms  max=14.47ms
-    P50=4.46ms  P90=8.01ms  P99=12.69ms
-    吞吐量 ≈ 200.2 QPS
-
-  [SELECT ORDER BY+LIMIT]
-    请求数=200  错误数=0
-    avg=4.47ms  min=1.43ms  max=10.06ms
-    P50=4.15ms  P90=7.26ms  P99=9.16ms
-    吞吐量 ≈ 223.9 QPS
-
-  [SELECT COUNT(*)]
-    请求数=200  错误数=0
-    avg=4.39ms  min=1.52ms  max=12.04ms
-    P50=4.03ms  P90=6.83ms  P99=11.53ms
-    吞吐量 ≈ 228.0 QPS
-
-  [SELECT SUM(amount)]
-    请求数=200  错误数=0
-    avg=4.21ms  min=2.02ms  max=11.43ms
-    P50=3.89ms  P90=6.38ms  P99=8.77ms
-    吞吐量 ≈ 237.3 QPS
-
-  [SELECT AVG(amount)]
-    请求数=200  错误数=0
-    avg=4.82ms  min=1.60ms  max=12.18ms
-    P50=4.50ms  P90=6.95ms  P99=11.68ms
-    吞吐量 ≈ 207.3 QPS
-
-  [SELECT GROUP BY]
-    请求数=200  错误数=0
-    avg=4.85ms  min=1.84ms  max=13.72ms
-    P50=4.35ms  P90=7.74ms  P99=12.09ms
-    吞吐量 ≈ 206.3 QPS
+    avg=4.40ms  min=1.74ms  max=12.84ms
+    P50=4.09ms  P90=6.59ms  P99=9.72ms
+    吞吐量 ≈ 227.0 QPS
 
   [JOIN 两表(orders+users)]
     请求数=200  错误数=0
-    avg=382.56ms  min=0.05ms  max=474.82ms
-    P50=415.76ms  P90=443.60ms  P99=471.79ms
-    吞吐量 ≈ 2.6 QPS
+    avg=330.37ms  min=0.05ms  max=428.76ms
+    P50=377.45ms  P90=402.23ms  P99=424.93ms
+    吞吐量 ≈ 3.0 QPS
 
   [JOIN 三表(items+orders+products)]
     请求数=200  错误数=0
-    avg=2092.40ms  min=0.05ms  max=2703.28ms
-    P50=2355.72ms  P90=2587.10ms  P99=2680.92ms
+    avg=2027.08ms  min=0.05ms  max=2491.87ms
+    P50=2196.42ms  P90=2331.88ms  P99=2435.83ms
     吞吐量 ≈ 0.5 QPS
+
+  [SELECT GROUP BY]
+    请求数=200  错误数=0
+    avg=6.13ms  min=2.74ms  max=16.94ms
+    P50=5.49ms  P90=9.77ms  P99=15.00ms
+    吞吐量 ≈ 163.3 QPS
 
   [JOIN+GROUP BY+HAVING]
     请求数=200  错误数=0
-    avg=364.20ms  min=0.04ms  max=727.44ms
-    P50=355.25ms  P90=647.13ms  P99=726.89ms
-    吞吐量 ≈ 2.7 QPS
-
-  [INSERT(users_insert)]
-    请求数=200  错误数=0
-    avg=4.69ms  min=1.16ms  max=15.31ms
-    P50=4.51ms  P90=7.65ms  P99=10.49ms
-    吞吐量 ≈ 213.1 QPS
-
-  [UPDATE(score by id)]
-    请求数=200  错误数=0
-    avg=4.59ms  min=1.14ms  max=17.48ms
-    P50=4.15ms  P90=7.95ms  P99=13.86ms
-    吞吐量 ≈ 217.8 QPS
-
-  [读写混合(join+range_update)]
-    请求数=200  错误数=0
-    avg=8.57ms  min=3.76ms  max=15.54ms
-    P50=8.33ms  P90=11.80ms  P99=15.49ms
-    吞吐量 ≈ 116.7 QPS
+    avg=385.45ms  min=0.04ms  max=668.22ms
+    P50=384.59ms  P90=593.01ms  P99=659.21ms
+    吞吐量 ≈ 2.6 QPS
 
 ============================================================
   场景                               P50(ms)   P90(ms)   P99(ms)      QPS
 ------------------------------------------------------------
-  SELECT 点查询(PK)                      4.56      7.55     12.85    202.4
-  SELECT 范围扫描(age)                    4.46      8.01     12.69    200.2
-  SELECT ORDER BY+LIMIT               4.15      7.26      9.16    223.9
-  SELECT COUNT(*)                     4.03      6.83     11.53    228.0
-  SELECT SUM(amount)                  3.89      6.38      8.77    237.3
-  SELECT AVG(amount)                  4.50      6.95     11.68    207.3
-  SELECT GROUP BY                     4.35      7.74     12.09    206.3
-  JOIN 两表(orders+users)             415.76    443.60    471.79      2.6
-  JOIN 三表(items+orders+products)    2355.72   2587.10   2680.92      0.5
-  JOIN+GROUP BY+HAVING              355.25    647.13    726.89      2.7
-  INSERT(users_insert)                4.51      7.65     10.49    213.1
-  UPDATE(score by id)                 4.15      7.95     13.86    217.8
-  读写混合(join+range_update)             8.33     11.80     15.49    116.7
+  SELECT 点查询(PK)                      4.09      6.59      9.72    227.0
+  JOIN 两表(orders+users)             377.45    402.23    424.93      3.0
+  JOIN 三表(items+orders+products)    2196.42   2331.88   2435.83      0.5
+  SELECT GROUP BY                     5.49      9.77     15.00    163.3
+  JOIN+GROUP BY+HAVING              384.59    593.01    659.21      2.6
 ============================================================
 
-总用时: 73.7s
+总用时: 69.6s
 
 备注：200表规模benchmark，4kb-page，在缓冲池占用相同总内存的情况下，无谓词下推优化比有谓词下推优化慢了约4倍，主要体现在多表联查上。分析原因可能是无谓词下推优化在执行计划中无法有效利用索引，导致全表扫描和大量数据页的读取，从而增加了响应时间。此外，无谓词下推优化会导致笛卡尔积操作中包含大量无效数据，进一步增加了计算和I/O的负担，尤其在多表联查中表现更为明显。

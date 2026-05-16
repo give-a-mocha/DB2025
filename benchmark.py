@@ -144,43 +144,7 @@ def make_scenarios(data_scale: int):
             "SELECT 点查询(PK)",
             lambda: f"SELECT id, name, age, score FROM bench_users WHERE id = {rand_id(ids)}",
         ),
-        (
-            "SELECT 范围扫描(age)",
-            lambda: (
-                lambda a=random.randint(18, 50):
-                f"SELECT id, name, age FROM bench_users WHERE age >= {a} AND age <= {a+5}"
-            )(),
-        ),
-        (
-            "SELECT ORDER BY+LIMIT",
-            lambda: "SELECT id, name, score FROM bench_users ORDER BY score LIMIT 10",
-        ),
-        (
-            "SELECT COUNT(*)",
-            lambda: (
-                lambda uid=rand_id(user_ids):
-                f"SELECT COUNT(*) FROM bench_orders WHERE user_id = {uid}"
-            )(),
-        ),
-        (
-            "SELECT SUM(amount)",
-            lambda: (
-                lambda uid=rand_id(user_ids):
-                f"SELECT SUM(amount) FROM bench_orders WHERE user_id = {uid}"
-            )(),
-        ),
-        (
-            "SELECT AVG(amount)",
-            lambda: (
-                lambda uid=rand_id(user_ids):
-                f"SELECT AVG(amount) FROM bench_orders WHERE user_id = {uid}"
-            )(),
-        ),
-        (
-            "SELECT GROUP BY",
-            lambda: "SELECT status, COUNT(*) FROM bench_orders GROUP BY status",
-        ),
-        (
+                (
             "JOIN 两表(orders+users)",
             lambda: (
                 lambda uid=rand_id(user_ids):
@@ -201,6 +165,42 @@ def make_scenarios(data_scale: int):
                 f"AND bench_orders.id = {oid}"
             )(),
         ),
+        # (
+        #     "SELECT 范围扫描(age)",
+        #     lambda: (
+        #         lambda a=random.randint(18, 50):
+        #         f"SELECT id, name, age FROM bench_users WHERE age >= {a} AND age <= {a+5}"
+        #     )(),
+        # ),
+        # (
+        #     "SELECT ORDER BY+LIMIT",
+        #     lambda: "SELECT id, name, score FROM bench_users ORDER BY score LIMIT 10",
+        # ),
+        # (
+        #     "SELECT COUNT(*)",
+        #     lambda: (
+        #         lambda uid=rand_id(user_ids):
+        #         f"SELECT COUNT(*) FROM bench_orders WHERE user_id = {uid}"
+        #     )(),
+        # ),
+        # (
+        #     "SELECT SUM(amount)",
+        #     lambda: (
+        #         lambda uid=rand_id(user_ids):
+        #         f"SELECT SUM(amount) FROM bench_orders WHERE user_id = {uid}"
+        #     )(),
+        # ),
+        # (
+        #     "SELECT AVG(amount)",
+        #     lambda: (
+        #         lambda uid=rand_id(user_ids):
+        #         f"SELECT AVG(amount) FROM bench_orders WHERE user_id = {uid}"
+        #     )(),
+        # ),
+        (
+            "SELECT GROUP BY",
+            lambda: "SELECT status, COUNT(*) FROM bench_orders GROUP BY status",
+        ),
         (
             "JOIN+GROUP BY+HAVING",
             lambda: (
@@ -211,36 +211,36 @@ def make_scenarios(data_scale: int):
                 "HAVING COUNT(*) >= 1"
             ),
         ),
-        (
-            "INSERT(users_insert)",
-            lambda: (
-                lambda nm="".join(random.choices(string.ascii_lowercase, k=6)),
-                    ag=random.randint(18, 60),
-                    sc=round(random.uniform(0, 100), 2):
-                f"INSERT INTO bench_users_insert VALUES "
-                f"({random.randint(1000000, 9999999)}, '{nm}', {ag}, {sc})"
-            )(),
-        ),
-        (
-            "UPDATE(score by id)",
-            lambda: (
-                lambda uid=rand_id(ids), sc=round(random.uniform(0, 100), 2):
-                f"UPDATE bench_users SET score = {sc} WHERE id = {uid}"
-            )(),
-        ),
-        (
-            "读写混合(join+range_update)",
-            lambda: (
-                lambda uid=rand_id(user_ids),
-                        iid=random.randint(1, max(1, data_scale * 5 - data_scale)),
-                        price=round(random.uniform(1, 200), 2): [
-                    f"UPDATE bench_order_items SET price = {price} WHERE id >= {iid} AND id <= {iid + data_scale}",
-                    f"SELECT * "
-                    f"FROM bench_users "
-                    f"WHERE id = {uid}"
-                ]
-            )(),
-        ),
+        # (
+        #     "INSERT(users_insert)",
+        #     lambda: (
+        #         lambda nm="".join(random.choices(string.ascii_lowercase, k=6)),
+        #             ag=random.randint(18, 60),
+        #             sc=round(random.uniform(0, 100), 2):
+        #         f"INSERT INTO bench_users_insert VALUES "
+        #         f"({random.randint(1000000, 9999999)}, '{nm}', {ag}, {sc})"
+        #     )(),
+        # ),
+        # (
+        #     "UPDATE(score by id)",
+        #     lambda: (
+        #         lambda uid=rand_id(ids), sc=round(random.uniform(0, 100), 2):
+        #         f"UPDATE bench_users SET score = {sc} WHERE id = {uid}"
+        #     )(),
+        # ),
+        # (
+        #     "读写混合(join+range_update)",
+        #     lambda: (
+        #         lambda uid=rand_id(user_ids),
+        #                 iid=random.randint(1, max(1, data_scale * 5 - data_scale)),
+        #                 price=round(random.uniform(1, 200), 2): [
+        #             f"UPDATE bench_order_items SET price = {price} WHERE id >= {iid} AND id <= {iid + data_scale}",
+        #             f"SELECT * "
+        #             f"FROM bench_users "
+        #             f"WHERE id = {uid}"
+        #         ]
+        #     )(),
+        # ),
     ]
     return scenarios
 
