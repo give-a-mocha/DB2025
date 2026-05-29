@@ -142,7 +142,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 // if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
                 //     txn_manager.abort(context_);
                 //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
-                //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                //     throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                //     AbortReason::UPGRADE_CONFLICT);
                 // }
 
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta,
@@ -155,7 +156,8 @@ class MvccUpdateExecutor : public AbstractExecutor {
                 // if (!lock_manager.lock_exclusive_on_record(context_->txn_, insert_rid, fh_->GetFd())) {
                 //     txn_manager.abort(context_);
                 //     lock_manager.wait_for_lock_release(LockDataId(fh_->GetFd(), insert_rid));
-                //     throw TransactionAbortException(context_->txn_->get_transaction_id(), AbortReason::UPGRADE_CONFLICT);
+                //     throw TransactionAbortException(context_->txn_->get_transaction_id(),
+                //     AbortReason::UPGRADE_CONFLICT);
                 // }
                 if (!txn_manager.AtomicUpdate(tab_.name, fh_, rid_, delete_meta, old_rec, insert_rid, insert_old_meta,
                                               nullptr, insert_new_meta, new_rec, context_->txn_)) {

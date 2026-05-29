@@ -11,9 +11,7 @@ See the Mulan PSL v2 for more details. */
 #include "lru_replacer.h"
 #include <cstring>
 
-LRUReplacer::LRUReplacer() {
-    std::fill(std::begin(is_pinned_), std::end(is_pinned_), true);
-}
+LRUReplacer::LRUReplacer() { std::fill(std::begin(is_pinned_), std::end(is_pinned_), true); }
 
 LRUReplacer::~LRUReplacer() = default;
 

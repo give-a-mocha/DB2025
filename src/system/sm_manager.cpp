@@ -408,9 +408,8 @@ void SmManager::drop_table(std::string tab_name, Context* context) {
  * @warning 应该在并发前建好
  */
 void SmManager::create_index(std::string tab_name, std::vector<std::string> col_names, Context* context) {
-    txn_id_t self_txn_id = (context != nullptr && context->txn_ != nullptr)
-                                ? context->txn_->get_transaction_id()
-                                : INVALID_TXN_ID;
+    txn_id_t self_txn_id =
+        (context != nullptr && context->txn_ != nullptr) ? context->txn_->get_transaction_id() : INVALID_TXN_ID;
     if (txn_manager.has_other_active_transactions(self_txn_id)) {
         throw InternalError("Cannot create index while other transactions are active");
     }
